@@ -114,13 +114,12 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
 
   let stockValue = 0;
   let goldValue = 0;
-  let lastUpdated: string | null = null;
+  let lastUpdatedDate: Date | null = null;
 
   if (latestPrices.length > 0) {
-    const maxDate = latestPrices.reduce((max, p) =>
+    lastUpdatedDate = latestPrices.reduce((max, p) =>
       p.fetchedAt > max ? p.fetchedAt : max, latestPrices[0].fetchedAt
     );
-    lastUpdated = maxDate.toISOString();
   }
 
   const holdingsWithValue = holdings.map((h) => {
@@ -152,7 +151,7 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
       totalValue: stockValue + goldValue,
       stockValue,
       goldValue,
-      lastUpdated,
+      lastUpdated: lastUpdatedDate,
       holdings: holdingsWithValue,
     })
   );

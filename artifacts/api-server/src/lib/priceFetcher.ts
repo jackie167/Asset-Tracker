@@ -1,5 +1,9 @@
+import * as cheerio from "cheerio";
 import { db, pricesTable, holdingsTable, snapshotsTable } from "@workspace/db";
-import { desc, eq, and, gte, inArray } from "drizzle-orm";
+import { desc, gte } from "drizzle-orm";
+
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 interface PriceData {
   type: "stock" | "gold";
@@ -9,55 +13,149 @@ interface PriceData {
   changePercent: number | null;
 }
 
-async function fetchStockPrice(symbol: string): Promise<PriceData | null> {
+/**
+ * Fetch a Vietnamese stock price using Yahoo Finance API (same backend as yfinance).
+ * Vietnamese stocks use the ".VN" suffix (e.g. VNM.VN, HPG.VN).
+ */
+async function fetchStockPriceYahoo(symbol: string): Promise<PriceData | null> {
+  const yahooSymbol = symbol.includes(".") ? symbol : `${symbol}.VN`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&range=1d`;
+
+  console.log(`[PriceFetcher] Fetching stock ${yahooSymbol} from Yahoo Finance...`);
+
   try {
-    const url = `https://iboard-query.ssi.com.vn/v2/stock/price?symbol=${symbol.toUpperCase()}`;
     const res = await fetch(url, {
       headers: {
+        "User-Agent": USER_AGENT,
         "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0"
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://finance.yahoo.com",
       },
-      signal: AbortSignal.timeout(10000)
+      signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json() as { data?: { lastPrice?: number; change?: number; changePercent?: number } };
-    const data = json?.data;
-    if (!data || data.lastPrice == null) return null;
+
+    if (!res.ok) {
+      console.error(`[PriceFetcher] Yahoo Finance HTTP ${res.status} for ${yahooSymbol}: ${res.statusText}`);
+      return null;
+    }
+
+    const json = await res.json() as {
+      chart?: {
+        result?: Array<{
+          meta?: {
+            regularMarketPrice?: number;
+            previousClose?: number;
+            currency?: string;
+          };
+        }>;
+        error?: { code: string; description: string } | null;
+      };
+    };
+
+    if (json.chart?.error) {
+      console.error(`[PriceFetcher] Yahoo Finance API error for ${yahooSymbol}: ${json.chart.error.code} - ${json.chart.error.description}`);
+      return null;
+    }
+
+    const meta = json.chart?.result?.[0]?.meta;
+    if (!meta || meta.regularMarketPrice == null) {
+      console.error(`[PriceFetcher] No price data returned for ${yahooSymbol}. Response: ${JSON.stringify(json).slice(0, 300)}`);
+      return null;
+    }
+
+    const price = meta.regularMarketPrice;
+    const prevClose = meta.previousClose ?? null;
+    const change = prevClose != null ? price - prevClose : null;
+    const changePercent = prevClose != null && prevClose !== 0 ? ((price - prevClose) / prevClose) * 100 : null;
+
+    const priceVND = price < 1000 ? price * 1000 : price;
+    const changeVND = change != null ? (price < 1000 ? change * 1000 : change) : null;
+
+    console.log(`[PriceFetcher] ✅ ${yahooSymbol}: ${priceVND.toLocaleString()} VND (${changePercent != null ? changePercent.toFixed(2) + "%" : "n/a"})`);
+
     return {
       type: "stock",
       symbol: symbol.toUpperCase(),
-      price: data.lastPrice * 1000,
-      change: data.change != null ? data.change * 1000 : null,
-      changePercent: data.changePercent != null ? data.changePercent : null,
+      price: priceVND,
+      change: changeVND,
+      changePercent,
     };
-  } catch {
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      if (err.name === "TimeoutError" || err.message.includes("timeout")) {
+        console.error(`[PriceFetcher] Timeout fetching ${yahooSymbol} from Yahoo Finance`);
+      } else if (err.message.includes("fetch")) {
+        console.error(`[PriceFetcher] Network error fetching ${yahooSymbol}: ${err.message}`);
+      } else {
+        console.error(`[PriceFetcher] Unexpected error for ${yahooSymbol}: ${err.message}`);
+      }
+    } else {
+      console.error(`[PriceFetcher] Unknown error for ${yahooSymbol}:`, err);
+    }
     return null;
   }
 }
 
-async function fetchGoldPrice(): Promise<PriceData[]> {
+interface SJCApiResponse {
+  success: boolean;
+  latestDate?: string;
+  data?: Array<{
+    Id: number;
+    TypeName: string;
+    BranchName: string;
+    Buy: string;
+    BuyValue: number;
+    Sell: string;
+    SellValue: number;
+  }>;
+}
+
+/**
+ * Fetch gold price from SJC's official JSON API.
+ * Primary: https://sjc.com.vn/GoldPrice/Services/PriceService.ashx
+ * Fallback: HTML scraping of sjc.com.vn with cheerio (BeautifulSoup equivalent).
+ */
+async function fetchGoldPriceSJC(): Promise<PriceData[]> {
+  const apiUrl = "https://sjc.com.vn/GoldPrice/Services/PriceService.ashx";
+  console.log(`[PriceFetcher] Fetching gold price from SJC JSON API: ${apiUrl}`);
+
   try {
-    const res = await fetch("https://sjc.com.vn/GoldPrice/Services/PriceService.ashx", {
+    const res = await fetch(apiUrl, {
       headers: {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://sjc.com.vn/",
       },
-      signal: AbortSignal.timeout(10000)
+      signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json() as { SJC?: { City?: string; Buy?: string; Sell?: string }[] };
-    const items = json?.SJC || [];
-    const hanoi = items.find((i) => i.City?.toLowerCase().includes("hà nội") || i.City?.toLowerCase().includes("ha noi") || i.City === "Hà Nội");
-    const entry = hanoi || items[0];
-    if (!entry || !entry.Buy) return [];
 
-    const parseVND = (s: string) => {
-      const n = parseFloat(s.replace(/[^0-9.]/g, ""));
-      return isNaN(n) ? 0 : n * 1000;
-    };
+    if (!res.ok) {
+      console.error(`[PriceFetcher] SJC API HTTP ${res.status}: ${res.statusText} — falling back to HTML scraping`);
+      return await fetchGoldPriceSJCHtmlFallback();
+    }
 
-    const buyPrice = parseVND(entry.Buy);
-    if (!buyPrice) return [];
+    const json = await res.json() as SJCApiResponse;
+
+    if (!json.success || !json.data || json.data.length === 0) {
+      console.error(`[PriceFetcher] SJC API returned unexpected format: ${JSON.stringify(json).slice(0, 200)}`);
+      return await fetchGoldPriceSJCHtmlFallback();
+    }
+
+    const luong1Entry = json.data.find((d) =>
+      d.TypeName.toLowerCase().includes("1l") ||
+      d.TypeName.toLowerCase().includes("1kg") ||
+      d.TypeName.toLowerCase().includes("10l") ||
+      (d.TypeName.toLowerCase().includes("sjc") && d.TypeName.toLowerCase().includes("lượng"))
+    ) ?? json.data[0];
+
+    const buyPrice = luong1Entry.BuyValue;
+    if (!buyPrice || buyPrice <= 0) {
+      console.error(`[PriceFetcher] SJC API: invalid BuyValue for ${luong1Entry.TypeName}: ${buyPrice}`);
+      return await fetchGoldPriceSJCHtmlFallback();
+    }
+
+    console.log(`[PriceFetcher] ✅ SJC Gold API (${json.latestDate}): ${luong1Entry.TypeName} Mua=${buyPrice.toLocaleString()} VND/lượng`);
 
     return [
       {
@@ -75,7 +173,81 @@ async function fetchGoldPrice(): Promise<PriceData[]> {
         changePercent: null,
       },
     ];
-  } catch {
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      if (err.name === "TimeoutError" || err.message.includes("timeout")) {
+        console.error(`[PriceFetcher] Timeout fetching gold price from SJC API`);
+      } else if (err.message.includes("ENOTFOUND") || err.message.includes("ECONNREFUSED")) {
+        console.error(`[PriceFetcher] Network/connection error for SJC API: ${err.message}`);
+      } else {
+        console.error(`[PriceFetcher] Error fetching SJC gold price: ${err.message}`);
+      }
+    } else {
+      console.error(`[PriceFetcher] Unknown error fetching SJC gold price:`, err);
+    }
+    return await fetchGoldPriceSJCHtmlFallback();
+  }
+}
+
+/**
+ * Fallback: Scrape sjc.com.vn HTML using cheerio (Node.js equivalent of BeautifulSoup).
+ * Uses User-Agent header to avoid being blocked.
+ */
+async function fetchGoldPriceSJCHtmlFallback(): Promise<PriceData[]> {
+  console.log(`[PriceFetcher] Falling back to HTML scraping of https://sjc.com.vn/`);
+  try {
+    const res = await fetch("https://sjc.com.vn/", {
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8",
+        "Referer": "https://sjc.com.vn/",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) {
+      console.error(`[PriceFetcher] SJC HTML fallback HTTP ${res.status}: ${res.statusText}`);
+      return [];
+    }
+
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    let buyPrice: number | null = null;
+
+    $("table tr").each((_i, row) => {
+      if (buyPrice) return false;
+      const cells = $(row).find("td");
+      if (cells.length < 2) return;
+      const rowText = $(row).text().toLowerCase();
+      if (
+        rowText.includes("1l") ||
+        rowText.includes("10l") ||
+        rowText.includes("1kg") ||
+        (rowText.includes("sjc") && rowText.includes("miếng"))
+      ) {
+        const buyCell = $(cells[1]).text().replace(/[^0-9]/g, "");
+        const num = parseInt(buyCell, 10);
+        if (!isNaN(num) && num > 50_000 && num < 300_000) {
+          buyPrice = num * 1_000_000;
+        } else if (!isNaN(num) && num > 50_000_000) {
+          buyPrice = num;
+        }
+      }
+    });
+
+    if (buyPrice != null) {
+      console.log(`[PriceFetcher] ✅ SJC Gold (HTML scrape): ${(buyPrice as number).toLocaleString()} VND/lượng`);
+      return [
+        { type: "gold", symbol: "SJC_1L", price: buyPrice as number, change: null, changePercent: null },
+        { type: "gold", symbol: "SJC_1C", price: (buyPrice as number) / 10, change: null, changePercent: null },
+      ];
+    }
+
+    console.error(`[PriceFetcher] HTML scrape: could not find gold price in ${html.length} bytes. Check SJC page structure.`);
+    return [];
+  } catch (err: unknown) {
+    console.error(`[PriceFetcher] SJC HTML fallback error:`, err instanceof Error ? err.message : err);
     return [];
   }
 }
@@ -83,25 +255,31 @@ async function fetchGoldPrice(): Promise<PriceData[]> {
 export async function fetchAndStorePrices(): Promise<{ updated: number; message: string }> {
   const holdings = await db.select().from(holdingsTable);
   if (!holdings.length) {
+    console.log("[PriceFetcher] No holdings found, skipping price fetch.");
     return { updated: 0, message: "No holdings to update" };
   }
 
-  const stockSymbols = [...new Set(holdings.filter(h => h.type === "stock").map(h => h.symbol.toUpperCase()))];
-  const hasGold = holdings.some(h => h.type === "gold");
+  const stockSymbols = [
+    ...new Set(holdings.filter((h) => h.type === "stock").map((h) => h.symbol.toUpperCase())),
+  ];
+  const hasGold = holdings.some((h) => h.type === "gold");
 
-  const pricePromises: Promise<PriceData | null>[] = stockSymbols.map(fetchStockPrice);
+  console.log(`[PriceFetcher] Starting fetch for ${stockSymbols.length} stock(s)${hasGold ? " + gold" : ""}`);
+
+  const stockPromises = stockSymbols.map(fetchStockPriceYahoo);
   const [stockResults, goldResults] = await Promise.all([
-    Promise.all(pricePromises),
-    hasGold ? fetchGoldPrice() : Promise.resolve([] as PriceData[])
+    Promise.all(stockPromises),
+    hasGold ? fetchGoldPriceSJC() : Promise.resolve([] as PriceData[]),
   ]);
 
   const prices: PriceData[] = [
     ...stockResults.filter((p): p is PriceData => p !== null),
-    ...goldResults
+    ...goldResults,
   ];
 
   if (!prices.length) {
-    return { updated: 0, message: "Could not fetch prices from sources" };
+    console.error("[PriceFetcher] No prices fetched successfully. Check logs above for details.");
+    return { updated: 0, message: "Could not fetch prices — check server logs for details" };
   }
 
   for (const p of prices) {
@@ -117,6 +295,7 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
 
   await savePortfolioSnapshot(holdings, prices);
 
+  console.log(`[PriceFetcher] Done. Updated ${prices.length} price(s).`);
   return { updated: prices.length, message: `Updated ${prices.length} price(s)` };
 }
 
@@ -150,17 +329,11 @@ async function savePortfolioSnapshot(
       goldValue: String(goldValue),
       snapshotAt: new Date(),
     });
+    console.log(`[PriceFetcher] Snapshot saved: total=${totalValue.toLocaleString()} VND`);
   }
 }
 
-export async function getLatestPrices(symbols?: string[]): Promise<typeof pricesTable.$inferSelect[]> {
-  const allSymbols = symbols && symbols.length > 0 ? symbols : undefined;
-
-  const subquery = await db
-    .selectDistinct({ symbol: pricesTable.symbol, maxId: pricesTable.id })
-    .from(pricesTable)
-    .as("latest");
-
+export async function getLatestPrices(): Promise<typeof pricesTable.$inferSelect[]> {
   const rows = await db
     .select()
     .from(pricesTable)
@@ -172,9 +345,7 @@ export async function getLatestPrices(symbols?: string[]): Promise<typeof prices
   for (const row of rows) {
     if (!seen.has(row.symbol)) {
       seen.add(row.symbol);
-      if (!allSymbols || allSymbols.includes(row.symbol)) {
-        result.push(row);
-      }
+      result.push(row);
     }
   }
   return result;
@@ -188,14 +359,15 @@ export function startPriceScheduler(): void {
   console.log("[PriceFetcher] Starting price scheduler (every 15 minutes)");
 
   fetchAndStorePrices()
-    .then((r) => console.log("[PriceFetcher] Initial fetch:", r.message))
-    .catch((e) => console.error("[PriceFetcher] Initial fetch error:", e));
+    .then((r) => console.log("[PriceFetcher] Initial fetch result:", r.message))
+    .catch((e) => console.error("[PriceFetcher] Initial fetch failed:", e));
 
   schedulerInterval = setInterval(
     () => {
+      console.log("[PriceFetcher] Running scheduled price fetch...");
       fetchAndStorePrices()
-        .then((r) => console.log("[PriceFetcher] Scheduled fetch:", r.message))
-        .catch((e) => console.error("[PriceFetcher] Scheduled fetch error:", e));
+        .then((r) => console.log("[PriceFetcher] Scheduled fetch result:", r.message))
+        .catch((e) => console.error("[PriceFetcher] Scheduled fetch failed:", e));
     },
     15 * 60 * 1000
   );
