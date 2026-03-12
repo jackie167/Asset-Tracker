@@ -80,6 +80,13 @@ export interface Snapshot {
   snapshotAt: string;
 }
 
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+  holdings: Holding[];
+}
+
 export type HoldingWithValueType =
   (typeof HoldingWithValueType)[keyof typeof HoldingWithValueType];
 
@@ -111,3 +118,7 @@ export interface PortfolioSummary {
   lastUpdated: string | null;
   holdings: HoldingWithValue[];
 }
+
+export type ImportHoldingsBody = {
+  file: Blob;
+};

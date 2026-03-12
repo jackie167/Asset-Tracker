@@ -21,6 +21,8 @@ import type {
   ErrorResponse,
   HealthStatus,
   Holding,
+  ImportHoldingsBody,
+  ImportResult,
   PortfolioSummary,
   Price,
   RefreshResult,
@@ -272,6 +274,94 @@ export const useCreateHolding = <
   TContext
 > => {
   return useMutation(getCreateHoldingMutationOptions(options));
+};
+
+/**
+ * @summary Import holdings from CSV or Excel file
+ */
+export const getImportHoldingsUrl = () => {
+  return `/api/holdings/import`;
+};
+
+export const importHoldings = async (
+  importHoldingsBody: ImportHoldingsBody,
+  options?: RequestInit,
+): Promise<ImportResult> => {
+  const formData = new FormData();
+  formData.append(`file`, importHoldingsBody.file);
+
+  return customFetch<ImportResult>(getImportHoldingsUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getImportHoldingsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importHoldings>>,
+    TError,
+    { data: BodyType<ImportHoldingsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importHoldings>>,
+  TError,
+  { data: BodyType<ImportHoldingsBody> },
+  TContext
+> => {
+  const mutationKey = ["importHoldings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importHoldings>>,
+    { data: BodyType<ImportHoldingsBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importHoldings(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportHoldingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importHoldings>>
+>;
+export type ImportHoldingsMutationBody = BodyType<ImportHoldingsBody>;
+export type ImportHoldingsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Import holdings from CSV or Excel file
+ */
+export const useImportHoldings = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importHoldings>>,
+    TError,
+    { data: BodyType<ImportHoldingsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importHoldings>>,
+  TError,
+  { data: BodyType<ImportHoldingsBody> },
+  TContext
+> => {
+  return useMutation(getImportHoldingsMutationOptions(options));
 };
 
 /**

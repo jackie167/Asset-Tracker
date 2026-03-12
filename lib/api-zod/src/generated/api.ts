@@ -38,6 +38,29 @@ export const CreateHoldingBody = zod.object({
 });
 
 /**
+ * @summary Import holdings from CSV or Excel file
+ */
+export const ImportHoldingsBody = zod.object({
+  file: zod.instanceof(File),
+});
+
+export const ImportHoldingsResponse = zod.object({
+  imported: zod.number(),
+  skipped: zod.number(),
+  errors: zod.array(zod.string()),
+  holdings: zod.array(
+    zod.object({
+      id: zod.number(),
+      type: zod.enum(["stock", "gold"]),
+      symbol: zod.string(),
+      quantity: zod.number(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    }),
+  ),
+});
+
+/**
  * @summary Update a holding
  */
 export const UpdateHoldingParams = zod.object({

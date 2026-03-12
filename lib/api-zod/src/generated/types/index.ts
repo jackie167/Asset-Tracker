@@ -14,6 +14,8 @@ export * from "./holding";
 export * from "./holdingType";
 export * from "./holdingWithValue";
 export * from "./holdingWithValueType";
+export * from "./importHoldingsBody";
+export * from "./importResult";
 export * from "./portfolioSummary";
 export * from "./price";
 export * from "./priceType";

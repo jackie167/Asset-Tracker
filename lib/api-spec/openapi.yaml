@@ -68,6 +68,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /holdings/import:
+    post:
+      operationId: importHoldings
+      tags: [holdings]
+      summary: Import holdings from CSV or Excel file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /holdings/{id}:
     put:
       operationId: updateHolding
@@ -303,6 +334,27 @@ components:
         - stockValue
         - goldValue
         - snapshotAt
+
+    ImportResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+        holdings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Holding"
+      required:
+        - imported
+        - skipped
+        - errors
+        - holdings
 
     HoldingWithValue:
       type: object

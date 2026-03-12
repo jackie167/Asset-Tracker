@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { getListHoldingsQueryKey, getGetPortfolioSummaryQueryKey, getListSnapshotsQueryKey } from "@workspace/api-client-react";
 import { format } from "date-fns";
 import {
   AreaChart,
@@ -10,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { usePortfolioData, usePortfolioMutations } from "@/hooks/use-portfolio";
+import ImportDialog from "@/components/ImportDialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -188,9 +191,17 @@ function ChangeChip({ change, changePercent }: { change: number | null | undefin
 export default function Dashboard() {
   const { summary, snapshots, isLoading } = usePortfolioData();
   const { createHolding, updateHolding, deleteHolding, refreshPrices } = usePortfolioMutations();
+  const queryClient = useQueryClient();
 
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editItem, setEditItem] = useState<HoldingItem | null>(null);
+
+  const handleImportSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
+  };
 
   const chartData = [...(snapshots || [])]
     .sort((a, b) => new Date(a.snapshotAt).getTime() - new Date(b.snapshotAt).getTime())
@@ -251,6 +262,14 @@ export default function Dashboard() {
             className="text-xs"
           >
             {refreshPrices.isPending ? "..." : "↻ Làm mới"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowImport(true)}
+            className="text-xs"
+          >
+            ↑ Import
           </Button>
           <Button size="sm" onClick={() => setShowAdd(true)} className="text-xs">
             + Thêm
@@ -370,6 +389,12 @@ export default function Dashboard() {
           </>
         )}
       </main>
+
+      <ImportDialog
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onSuccess={handleImportSuccess}
+      />
 
       <AddEditDialog
         open={showAdd}
