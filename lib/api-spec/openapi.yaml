@@ -1,15 +1,20 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Finance Tracker API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: holdings
+    description: Portfolio holdings management
+  - name: prices
+    description: Price data management
+  - name: snapshots
+    description: Portfolio value snapshots
 paths:
   /healthz:
     get:
@@ -24,6 +29,151 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /holdings:
+    get:
+      operationId: listHoldings
+      tags: [holdings]
+      summary: List all holdings
+      responses:
+        "200":
+          description: List of holdings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Holding"
+    post:
+      operationId: createHolding
+      tags: [holdings]
+      summary: Create a new holding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHoldingBody"
+      responses:
+        "201":
+          description: Created holding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holding"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /holdings/{id}:
+    put:
+      operationId: updateHolding
+      tags: [holdings]
+      summary: Update a holding
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateHoldingBody"
+      responses:
+        "200":
+          description: Updated holding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holding"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteHolding
+      tags: [holdings]
+      summary: Delete a holding
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /prices/latest:
+    get:
+      operationId: getLatestPrices
+      tags: [prices]
+      summary: Get latest prices for all tracked symbols
+      responses:
+        "200":
+          description: Latest prices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Price"
+
+  /prices/refresh:
+    post:
+      operationId: refreshPrices
+      tags: [prices]
+      summary: Trigger a price refresh
+      responses:
+        "200":
+          description: Prices refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResult"
+
+  /snapshots:
+    get:
+      operationId: listSnapshots
+      tags: [snapshots]
+      summary: Get portfolio value snapshots for the last 7 days
+      responses:
+        "200":
+          description: List of portfolio snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Snapshot"
+
+  /portfolio/summary:
+    get:
+      operationId: getPortfolioSummary
+      tags: [holdings]
+      summary: Get total portfolio value with current prices
+      responses:
+        "200":
+          description: Portfolio summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +184,175 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Holding:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [stock, gold]
+        symbol:
+          type: string
+        quantity:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - symbol
+        - quantity
+        - createdAt
+        - updatedAt
+
+    CreateHoldingBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [stock, gold]
+        symbol:
+          type: string
+        quantity:
+          type: number
+      required:
+        - type
+        - symbol
+        - quantity
+
+    UpdateHoldingBody:
+      type: object
+      properties:
+        quantity:
+          type: number
+      required:
+        - quantity
+
+    Price:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [stock, gold]
+        symbol:
+          type: string
+        price:
+          type: number
+        change:
+          type: ["number", "null"]
+        changePercent:
+          type: ["number", "null"]
+        fetchedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - symbol
+        - price
+        - change
+        - changePercent
+        - fetchedAt
+
+    RefreshResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        updated:
+          type: integer
+        message:
+          type: string
+      required:
+        - success
+        - updated
+        - message
+
+    Snapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+        totalValue:
+          type: number
+        stockValue:
+          type: number
+        goldValue:
+          type: number
+        snapshotAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - totalValue
+        - stockValue
+        - goldValue
+        - snapshotAt
+
+    HoldingWithValue:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [stock, gold]
+        symbol:
+          type: string
+        quantity:
+          type: number
+        currentPrice:
+          type: ["number", "null"]
+        currentValue:
+          type: ["number", "null"]
+        change:
+          type: ["number", "null"]
+        changePercent:
+          type: ["number", "null"]
+      required:
+        - id
+        - type
+        - symbol
+        - quantity
+        - currentPrice
+        - currentValue
+        - change
+        - changePercent
+
+    PortfolioSummary:
+      type: object
+      properties:
+        totalValue:
+          type: number
+        stockValue:
+          type: number
+        goldValue:
+          type: number
+        lastUpdated:
+          type: ["string", "null"]
+          format: date-time
+        holdings:
+          type: array
+          items:
+            $ref: "#/components/schemas/HoldingWithValue"
+      required:
+        - totalValue
+        - stockValue
+        - goldValue
+        - lastUpdated
+        - holdings
