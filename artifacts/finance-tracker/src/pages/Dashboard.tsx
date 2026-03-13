@@ -512,7 +512,7 @@ export default function Dashboard() {
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
                               <span className="text-xs text-muted-foreground">
-                                {h.quantity} × {formatVND(h.currentPrice)}
+                                {h.quantity.toLocaleString("vi-VN")} × {formatVND(h.currentPrice)}
                               </span>
                               <ChangeChip change={h.change} changePercent={h.changePercent} />
                             </div>
