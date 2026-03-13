@@ -262,18 +262,19 @@ function AllocationChart({ stockValue, goldValue, totalValue }: { stockValue: nu
           </ResponsiveContainer>
         </div>
 
-        <ul className="flex-1 flex flex-col gap-3">
+        <ul className="flex flex-col gap-4 justify-center">
           {data.map((entry, i) => (
-            <li key={entry.name} className="flex items-center gap-3">
+            <li key={entry.name} className="flex items-center gap-2.5">
               <span
                 className="inline-block w-3 h-3 rounded-full shrink-0"
                 style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
               />
-              <div className="flex-1 min-w-0">
+              <div>
                 <p className="text-sm font-medium leading-tight">{entry.name}</p>
-                <p className="text-xs text-muted-foreground">{entry.pct.toFixed(1)}%</p>
+                <p className="text-xs text-muted-foreground">
+                  {entry.pct.toFixed(1)}% · {formatVND(entry.value)}
+                </p>
               </div>
-              <span className="text-sm font-semibold tabular-nums">{formatVND(entry.value)}</span>
             </li>
           ))}
         </ul>
