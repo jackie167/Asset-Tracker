@@ -223,59 +223,61 @@ function AllocationChart({ stockValue, goldValue, totalValue }: { stockValue: nu
     );
   };
 
-  const renderLegend = () => (
-    <ul className="flex flex-wrap gap-x-3 gap-y-1.5 justify-center mt-3">
-      {data.map((entry, i) => (
-        <li key={entry.name} className="flex items-center gap-1.5 text-xs">
-          <span
-            className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-            style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
-          />
-          <span className="text-muted-foreground">{entry.name}</span>
-          <span className="font-medium">{formatVND(entry.value)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-
   return (
     <Card className="p-4">
-      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Phân bổ tài sản</p>
-      <div style={{ width: "100%", height: 200 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={52}
-              outerRadius={88}
-              paddingAngle={2}
-              dataKey="value"
-              labelLine={false}
-              label={renderCustomLabel}
-              isAnimationActive={false}
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
-              ))}
-            </Pie>
-            <Tooltip
-              formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
-                `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
-                props.payload?.name ?? "",
-              ]}
-              contentStyle={{
-                background: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Phân bổ tài sản</p>
+      <div className="flex items-center gap-4">
+        <div style={{ width: 180, height: 180, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={48}
+                outerRadius={82}
+                paddingAngle={2}
+                dataKey="value"
+                labelLine={false}
+                label={renderCustomLabel}
+                isAnimationActive={false}
+              >
+                {data.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
+                  `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
+                  props.payload?.name ?? "",
+                ]}
+                contentStyle={{
+                  background: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        <ul className="flex-1 flex flex-col gap-3">
+          {data.map((entry, i) => (
+            <li key={entry.name} className="flex items-center gap-3">
+              <span
+                className="inline-block w-3 h-3 rounded-full shrink-0"
+                style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium leading-tight">{entry.name}</p>
+                <p className="text-xs text-muted-foreground">{entry.pct.toFixed(1)}%</p>
+              </div>
+              <span className="text-sm font-semibold tabular-nums">{formatVND(entry.value)}</span>
+            </li>
+          ))}
+        </ul>
       </div>
-      {renderLegend()}
     </Card>
   );
 }
