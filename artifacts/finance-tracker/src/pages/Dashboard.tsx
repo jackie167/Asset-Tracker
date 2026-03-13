@@ -518,7 +518,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div className="text-right ml-3 shrink-0">
-                            <p className="text-sm font-semibold">{formatVND(h.currentValue)}</p>
+                            <p className="text-sm font-semibold tabular-nums">{formatVNDFull(h.currentValue)}</p>
                             <div className="flex items-center gap-1 justify-end mt-0.5">
                               <button
                                 onClick={() => setEditItem(h)}
