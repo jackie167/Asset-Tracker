@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { db, holdingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { ImportHoldingsResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -125,6 +126,7 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
         const [updated] = await db
           .update(holdingsTable)
           .set({ quantity: item.quantity, updatedAt: new Date() })
+          .where(eq(holdingsTable.id, existing.id))
           .returning();
         imported.push(updated);
         console.log(`[Import] Updated existing holding: ${item.type} ${item.symbol} qty=${item.quantity}`);
