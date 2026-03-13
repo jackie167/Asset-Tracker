@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListHoldingsQueryKey, getGetPortfolioSummaryQueryKey, getListSnapshotsQueryKey } from "@workspace/api-client-react";
 import { format } from "date-fns";
@@ -10,6 +10,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from "recharts";
 import { usePortfolioData, usePortfolioMutations } from "@/hooks/use-portfolio";
 import ImportDialog from "@/components/ImportDialog";
@@ -58,6 +62,19 @@ type HoldingItem = {
   changePercent?: number | null;
 };
 
+type SortOrder = "none" | "asc" | "desc";
+
+const PIE_COLORS = [
+  "hsl(217, 91%, 60%)",
+  "hsl(38, 92%, 60%)",
+  "hsl(142, 71%, 45%)",
+  "hsl(280, 65%, 60%)",
+  "hsl(0, 72%, 60%)",
+  "hsl(190, 80%, 50%)",
+  "hsl(330, 70%, 60%)",
+  "hsl(60, 80%, 55%)",
+];
+
 function AddEditDialog({
   open,
   onClose,
@@ -79,7 +96,6 @@ function AddEditDialog({
   });
 
   const watchType = form.watch("type");
-
   const handleSubmit = form.handleSubmit(onSubmit);
 
   const goldSymbols = [
@@ -188,6 +204,93 @@ function ChangeChip({ change, changePercent }: { change: number | null | undefin
   );
 }
 
+function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; totalValue: number }) {
+  const data = useMemo(() =>
+    holdings
+      .filter((h) => (h.currentValue ?? 0) > 0)
+      .map((h) => ({
+        name: h.symbol,
+        value: h.currentValue ?? 0,
+        pct: totalValue > 0 ? ((h.currentValue ?? 0) / totalValue) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value),
+    [holdings, totalValue]
+  );
+
+  if (data.length === 0) return null;
+
+  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, index }: {
+    cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; index: number;
+  }) => {
+    if (data[index].pct < 5) return null;
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (
+      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={600}>
+        {data[index].pct.toFixed(1)}%
+      </text>
+    );
+  };
+
+  const renderLegend = () => (
+    <ul className="flex flex-wrap gap-x-3 gap-y-1.5 justify-center mt-3">
+      {data.map((entry, i) => (
+        <li key={entry.name} className="flex items-center gap-1.5 text-xs">
+          <span
+            className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+            style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+          />
+          <span className="text-muted-foreground">{entry.name}</span>
+          <span className="font-medium">{formatVND(entry.value)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <Card className="p-4">
+      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Phân bổ tài sản</p>
+      <div style={{ width: "100%", height: 200 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={52}
+              outerRadius={88}
+              paddingAngle={2}
+              dataKey="value"
+              labelLine={false}
+              label={renderCustomLabel}
+              isAnimationActive={false}
+            >
+              {data.map((_, i) => (
+                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
+                `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
+                props.payload?.name ?? "",
+              ]}
+              contentStyle={{
+                background: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      {renderLegend()}
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const { summary, snapshots, isLoading } = usePortfolioData();
   const { createHolding, updateHolding, deleteHolding, refreshPrices } = usePortfolioMutations();
@@ -196,6 +299,8 @@ export default function Dashboard() {
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editItem, setEditItem] = useState<HoldingItem | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>("none");
+  const [holdingsCollapsed, setHoldingsCollapsed] = useState(false);
 
   const handleImportSuccess = () => {
     queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
@@ -223,6 +328,25 @@ export default function Dashboard() {
   const stockValue = summary?.stockValue ?? 0;
   const goldValue = summary?.goldValue ?? 0;
   const lastUpdated = summary?.lastUpdated;
+
+  const sortedHoldings = useMemo(() => {
+    if (sortOrder === "none") return holdings;
+    return [...holdings].sort((a, b) => {
+      const av = a.currentValue ?? 0;
+      const bv = b.currentValue ?? 0;
+      return sortOrder === "asc" ? av - bv : bv - av;
+    });
+  }, [holdings, sortOrder]);
+
+  const cycleSortOrder = () => {
+    setSortOrder((prev) => {
+      if (prev === "none") return "desc";
+      if (prev === "desc") return "asc";
+      return "none";
+    });
+  };
+
+  const sortLabel = sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
 
   const handleAdd = (data: HoldingForm) => {
     createHolding.mutate({ data }, { onSuccess: () => setShowAdd(false) });
@@ -299,6 +423,10 @@ export default function Dashboard() {
               </div>
             </Card>
 
+            {holdings.length > 0 && (
+              <AllocationChart holdings={holdings} totalValue={totalValue} />
+            )}
+
             {chartData.length > 0 && (
               <Card className="p-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Biến động 7 ngày</p>
@@ -337,53 +465,89 @@ export default function Dashboard() {
             )}
 
             <Card className="p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Danh mục</p>
-              {holdings.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground text-sm">Chưa có tài sản nào</p>
-                  <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowAdd(true)}>
-                    Thêm tài sản đầu tiên
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {holdings.map((h) => (
-                    <div key={h.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{h.symbol}</span>
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                            {h.type === "stock" ? "CP" : "Vàng"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-muted-foreground">
-                            {h.quantity} × {formatVND(h.currentPrice)}
-                          </span>
-                          <ChangeChip change={h.change} changePercent={h.changePercent} />
-                        </div>
-                      </div>
-                      <div className="text-right ml-3 shrink-0">
-                        <p className="text-sm font-semibold">{formatVND(h.currentValue)}</p>
-                        <div className="flex items-center gap-1 justify-end mt-0.5">
-                          <button
-                            onClick={() => setEditItem(h)}
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            Sửa
-                          </button>
-                          <span className="text-muted-foreground text-xs">·</span>
-                          <button
-                            onClick={() => handleDelete(h.id)}
-                            className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      </div>
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => setHoldingsCollapsed((v) => !v)}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
+                >
+                  <span
+                    className="inline-block transition-transform duration-200"
+                    style={{ transform: holdingsCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+                  >
+                    ▾
+                  </span>
+                  Danh mục
+                  {holdings.length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-normal">
+                      {holdings.length}
+                    </span>
+                  )}
+                </button>
+
+                {!holdingsCollapsed && holdings.length > 1 && (
+                  <button
+                    onClick={cycleSortOrder}
+                    className={`text-xs px-2 py-1 rounded border transition-colors ${
+                      sortOrder !== "none"
+                        ? "border-primary/60 text-primary bg-primary/5"
+                        : "border-border text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    {sortLabel}
+                  </button>
+                )}
+              </div>
+
+              {!holdingsCollapsed && (
+                <>
+                  {holdings.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground text-sm">Chưa có tài sản nào</p>
+                      <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowAdd(true)}>
+                        Thêm tài sản đầu tiên
+                      </Button>
                     </div>
-                  ))}
-                </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {sortedHoldings.map((h) => (
+                        <div key={h.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{h.symbol}</span>
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                {h.type === "stock" ? "CP" : "Vàng"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-muted-foreground">
+                                {h.quantity} × {formatVND(h.currentPrice)}
+                              </span>
+                              <ChangeChip change={h.change} changePercent={h.changePercent} />
+                            </div>
+                          </div>
+                          <div className="text-right ml-3 shrink-0">
+                            <p className="text-sm font-semibold">{formatVND(h.currentValue)}</p>
+                            <div className="flex items-center gap-1 justify-end mt-0.5">
+                              <button
+                                onClick={() => setEditItem(h)}
+                                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                Sửa
+                              </button>
+                              <span className="text-muted-foreground text-xs">·</span>
+                              <button
+                                onClick={() => handleDelete(h.id)}
+                                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </Card>
           </>
