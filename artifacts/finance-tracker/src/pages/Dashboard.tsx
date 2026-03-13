@@ -13,7 +13,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from "recharts";
 import { usePortfolioData, usePortfolioMutations } from "@/hooks/use-portfolio";
 import ImportDialog from "@/components/ImportDialog";
@@ -66,13 +65,7 @@ type SortOrder = "none" | "asc" | "desc";
 
 const PIE_COLORS = [
   "hsl(217, 91%, 60%)",
-  "hsl(38, 92%, 60%)",
-  "hsl(142, 71%, 45%)",
-  "hsl(280, 65%, 60%)",
-  "hsl(0, 72%, 60%)",
-  "hsl(190, 80%, 50%)",
-  "hsl(330, 70%, 60%)",
-  "hsl(60, 80%, 55%)",
+  "hsl(43, 96%, 56%)",
 ];
 
 function AddEditDialog({
@@ -204,18 +197,14 @@ function ChangeChip({ change, changePercent }: { change: number | null | undefin
   );
 }
 
-function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; totalValue: number }) {
-  const data = useMemo(() =>
-    holdings
-      .filter((h) => (h.currentValue ?? 0) > 0)
-      .map((h) => ({
-        name: h.symbol,
-        value: h.currentValue ?? 0,
-        pct: totalValue > 0 ? ((h.currentValue ?? 0) / totalValue) * 100 : 0,
-      }))
-      .sort((a, b) => b.value - a.value),
-    [holdings, totalValue]
-  );
+function AllocationChart({ stockValue, goldValue, totalValue }: { stockValue: number; goldValue: number; totalValue: number }) {
+  const data = useMemo(() => {
+    const items = [
+      { name: "📈 Cổ phiếu", value: stockValue, pct: totalValue > 0 ? (stockValue / totalValue) * 100 : 0 },
+      { name: "🥇 Vàng", value: goldValue, pct: totalValue > 0 ? (goldValue / totalValue) * 100 : 0 },
+    ].filter((d) => d.value > 0);
+    return items;
+  }, [stockValue, goldValue, totalValue]);
 
   if (data.length === 0) return null;
 
@@ -423,8 +412,8 @@ export default function Dashboard() {
               </div>
             </Card>
 
-            {holdings.length > 0 && (
-              <AllocationChart holdings={holdings} totalValue={totalValue} />
+            {(stockValue > 0 || goldValue > 0) && (
+              <AllocationChart stockValue={stockValue} goldValue={goldValue} totalValue={totalValue} />
             )}
 
             {chartData.length > 0 && (
