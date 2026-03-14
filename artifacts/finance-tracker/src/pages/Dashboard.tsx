@@ -43,7 +43,7 @@ function formatVNDFull(value: number | null | undefined): string {
 }
 
 const holdingSchema = z.object({
-  type: z.enum(["stock", "gold"]),
+  type: z.string().min(1, "Bắt buộc"),
   symbol: z.string().min(1, "Bắt buộc"),
   quantity: z.coerce.number().positive("Số lượng phải > 0"),
 });
@@ -66,7 +66,18 @@ type SortOrder = "none" | "asc" | "desc";
 const PIE_COLORS = [
   "hsl(217, 91%, 60%)",
   "hsl(43, 96%, 56%)",
+  "hsl(142, 71%, 45%)",
+  "hsl(280, 65%, 60%)",
+  "hsl(0, 72%, 60%)",
 ];
+
+type TypeMode = "stock" | "gold" | "other";
+
+function resolveMode(type: string): TypeMode {
+  if (type === "stock") return "stock";
+  if (type === "gold") return "gold";
+  return "other";
+}
 
 function AddEditDialog({
   open,
@@ -81,10 +92,13 @@ function AddEditDialog({
   onSubmit: (data: HoldingForm) => void;
   isLoading: boolean;
 }) {
+  const initialMode: TypeMode = initialData ? resolveMode(initialData.type) : "stock";
+  const [typeMode, setTypeMode] = useState<TypeMode>(initialMode);
+
   const form = useForm<HoldingForm>({
     resolver: zodResolver(holdingSchema),
     defaultValues: initialData
-      ? { type: initialData.type as "stock" | "gold", symbol: initialData.symbol, quantity: initialData.quantity }
+      ? { type: initialData.type, symbol: initialData.symbol, quantity: initialData.quantity }
       : { type: "stock", symbol: "", quantity: 0 },
   });
 
@@ -96,6 +110,19 @@ function AddEditDialog({
     { value: "SJC_1C", label: "Vàng SJC 1 chỉ" },
   ];
 
+  const selectMode = (mode: TypeMode) => {
+    if (!!initialData) return;
+    setTypeMode(mode);
+    if (mode === "stock") { form.setValue("type", "stock"); form.setValue("symbol", ""); }
+    else if (mode === "gold") { form.setValue("type", "gold"); form.setValue("symbol", "SJC_1L"); }
+    else { form.setValue("type", ""); form.setValue("symbol", ""); }
+  };
+
+  const btnClass = (active: boolean) =>
+    `flex-1 py-2 px-3 rounded-md text-sm font-medium border transition-colors ${
+      active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"
+    }`;
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="sm:max-w-md">
@@ -106,26 +133,33 @@ function AddEditDialog({
           <div>
             <label className="text-sm text-muted-foreground mb-1 block">Loại tài sản</label>
             <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={!!initialData}
-                onClick={() => { form.setValue("type", "stock"); form.setValue("symbol", ""); }}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium border transition-colors ${watchType === "stock" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
-              >
+              <button type="button" disabled={!!initialData} onClick={() => selectMode("stock")} className={btnClass(typeMode === "stock")}>
                 📈 Cổ phiếu
               </button>
-              <button
-                type="button"
-                disabled={!!initialData}
-                onClick={() => { form.setValue("type", "gold"); form.setValue("symbol", "SJC_1L"); }}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium border transition-colors ${watchType === "gold" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
-              >
+              <button type="button" disabled={!!initialData} onClick={() => selectMode("gold")} className={btnClass(typeMode === "gold")}>
                 🥇 Vàng
+              </button>
+              <button type="button" disabled={!!initialData} onClick={() => selectMode("other")} className={btnClass(typeMode === "other")}>
+                ＋ Khác
               </button>
             </div>
           </div>
 
-          {watchType === "stock" ? (
+          {typeMode === "other" && (
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">Tên loại tài sản</label>
+              <Input
+                {...form.register("type")}
+                placeholder="VD: Crypto, Bất động sản, Trái phiếu..."
+                disabled={!!initialData}
+              />
+              {form.formState.errors.type && (
+                <p className="text-xs text-destructive mt-1">{form.formState.errors.type.message}</p>
+              )}
+            </div>
+          )}
+
+          {typeMode === "stock" && (
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Mã cổ phiếu</label>
               <Input
@@ -139,7 +173,9 @@ function AddEditDialog({
                 <p className="text-xs text-destructive mt-1">{form.formState.errors.symbol.message}</p>
               )}
             </div>
-          ) : (
+          )}
+
+          {typeMode === "gold" && (
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Loại vàng</label>
               <div className="flex flex-col gap-2">
@@ -149,7 +185,7 @@ function AddEditDialog({
                     type="button"
                     disabled={!!initialData}
                     onClick={() => form.setValue("symbol", gs.value)}
-                    className={`py-2 px-3 rounded-md text-sm font-medium border transition-colors text-left ${form.watch("symbol") === gs.value ? "bg-primary/10 border-primary text-foreground" : "border-border text-muted-foreground hover:border-primary/50"}`}
+                    className={`py-2 px-3 rounded-md text-sm font-medium border transition-colors text-left ${watchType === "gold" && form.watch("symbol") === gs.value ? "bg-primary/10 border-primary text-foreground" : "border-border text-muted-foreground hover:border-primary/50"}`}
                   >
                     {gs.label}
                   </button>
@@ -158,9 +194,23 @@ function AddEditDialog({
             </div>
           )}
 
+          {typeMode === "other" && (
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">Tên / Mã tài sản</label>
+              <Input
+                {...form.register("symbol")}
+                placeholder="VD: BTC, Căn hộ Q7, VNINDEX..."
+                disabled={!!initialData}
+              />
+              {form.formState.errors.symbol && (
+                <p className="text-xs text-destructive mt-1">{form.formState.errors.symbol.message}</p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="text-sm text-muted-foreground mb-1 block">
-              {watchType === "stock" ? "Số lượng cổ phiếu" : "Số lượng (lượng/chỉ)"}
+              {typeMode === "stock" ? "Số lượng cổ phiếu" : typeMode === "gold" ? "Số lượng (lượng/chỉ)" : "Số lượng"}
             </label>
             <Input
               {...form.register("quantity")}
@@ -198,13 +248,15 @@ function ChangeChip({ change, changePercent }: { change: number | null | undefin
 }
 
 function AllocationChart({ stockValue, goldValue, totalValue }: { stockValue: number; goldValue: number; totalValue: number }) {
+  const otherValue = Math.max(0, totalValue - stockValue - goldValue);
   const data = useMemo(() => {
     const items = [
       { name: "📈 Cổ phiếu", value: stockValue, pct: totalValue > 0 ? (stockValue / totalValue) * 100 : 0 },
       { name: "🥇 Vàng", value: goldValue, pct: totalValue > 0 ? (goldValue / totalValue) * 100 : 0 },
+      { name: "📦 Khác", value: otherValue, pct: totalValue > 0 ? (otherValue / totalValue) * 100 : 0 },
     ].filter((d) => d.value > 0);
     return items;
-  }, [stockValue, goldValue, totalValue]);
+  }, [stockValue, goldValue, otherValue, totalValue]);
 
   if (data.length === 0) return null;
 
@@ -507,7 +559,7 @@ export default function Dashboard() {
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium">{h.symbol}</span>
                               <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                                {h.type === "stock" ? "CP" : "Vàng"}
+                                {h.type === "stock" ? "CP" : h.type === "gold" ? "Vàng" : h.type}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
