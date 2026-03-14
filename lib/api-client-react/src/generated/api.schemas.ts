@@ -13,32 +13,17 @@ export interface ErrorResponse {
   error: string;
 }
 
-export type HoldingType = (typeof HoldingType)[keyof typeof HoldingType];
-
-export const HoldingType = {
-  stock: "stock",
-  gold: "gold",
-} as const;
-
 export interface Holding {
   id: number;
-  type: HoldingType;
+  type: string;
   symbol: string;
   quantity: number;
   createdAt: string;
   updatedAt: string;
 }
 
-export type CreateHoldingBodyType =
-  (typeof CreateHoldingBodyType)[keyof typeof CreateHoldingBodyType];
-
-export const CreateHoldingBodyType = {
-  stock: "stock",
-  gold: "gold",
-} as const;
-
 export interface CreateHoldingBody {
-  type: CreateHoldingBodyType;
+  type: string;
   symbol: string;
   quantity: number;
 }
@@ -47,16 +32,9 @@ export interface UpdateHoldingBody {
   quantity: number;
 }
 
-export type PriceType = (typeof PriceType)[keyof typeof PriceType];
-
-export const PriceType = {
-  stock: "stock",
-  gold: "gold",
-} as const;
-
 export interface Price {
   id: number;
-  type: PriceType;
+  type: string;
   symbol: string;
   price: number;
   /** @nullable */
@@ -87,17 +65,9 @@ export interface ImportResult {
   holdings: Holding[];
 }
 
-export type HoldingWithValueType =
-  (typeof HoldingWithValueType)[keyof typeof HoldingWithValueType];
-
-export const HoldingWithValueType = {
-  stock: "stock",
-  gold: "gold",
-} as const;
-
 export interface HoldingWithValue {
   id: number;
-  type: HoldingWithValueType;
+  type: string;
   symbol: string;
   quantity: number;
   /** @nullable */

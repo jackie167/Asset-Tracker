@@ -5,11 +5,10 @@
  * Finance Tracker API
  * OpenAPI spec version: 0.1.0
  */
-import type { PriceType } from "./priceType";
 
 export interface Price {
   id: number;
-  type: PriceType;
+  type: string;
   symbol: string;
   price: number;
   /** @nullable */

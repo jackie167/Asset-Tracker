@@ -20,7 +20,7 @@ export const HealthCheckResponse = zod.object({
  */
 export const ListHoldingsResponseItem = zod.object({
   id: zod.number(),
-  type: zod.enum(["stock", "gold"]),
+  type: zod.string(),
   symbol: zod.string(),
   quantity: zod.number(),
   createdAt: zod.date(),
@@ -32,7 +32,7 @@ export const ListHoldingsResponse = zod.array(ListHoldingsResponseItem);
  * @summary Create a new holding
  */
 export const CreateHoldingBody = zod.object({
-  type: zod.enum(["stock", "gold"]),
+  type: zod.string(),
   symbol: zod.string(),
   quantity: zod.number(),
 });
@@ -51,7 +51,7 @@ export const ImportHoldingsResponse = zod.object({
   holdings: zod.array(
     zod.object({
       id: zod.number(),
-      type: zod.enum(["stock", "gold"]),
+      type: zod.string(),
       symbol: zod.string(),
       quantity: zod.number(),
       createdAt: zod.date(),
@@ -73,7 +73,7 @@ export const UpdateHoldingBody = zod.object({
 
 export const UpdateHoldingResponse = zod.object({
   id: zod.number(),
-  type: zod.enum(["stock", "gold"]),
+  type: zod.string(),
   symbol: zod.string(),
   quantity: zod.number(),
   createdAt: zod.date(),
@@ -92,7 +92,7 @@ export const DeleteHoldingParams = zod.object({
  */
 export const GetLatestPricesResponseItem = zod.object({
   id: zod.number(),
-  type: zod.enum(["stock", "gold"]),
+  type: zod.string(),
   symbol: zod.string(),
   price: zod.number(),
   change: zod.number().nullable(),
@@ -133,7 +133,7 @@ export const GetPortfolioSummaryResponse = zod.object({
   holdings: zod.array(
     zod.object({
       id: zod.number(),
-      type: zod.enum(["stock", "gold"]),
+      type: zod.string(),
       symbol: zod.string(),
       quantity: zod.number(),
       currentPrice: zod.number().nullable(),

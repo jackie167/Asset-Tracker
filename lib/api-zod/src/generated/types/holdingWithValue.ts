@@ -5,11 +5,10 @@
  * Finance Tracker API
  * OpenAPI spec version: 0.1.0
  */
-import type { HoldingWithValueType } from "./holdingWithValueType";
 
 export interface HoldingWithValue {
   id: number;
-  type: HoldingWithValueType;
+  type: string;
   symbol: string;
   quantity: number;
   /** @nullable */
