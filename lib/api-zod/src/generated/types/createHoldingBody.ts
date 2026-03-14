@@ -10,4 +10,5 @@ export interface CreateHoldingBody {
   type: string;
   symbol: string;
   quantity: number;
+  manualPrice?: number | null;
 }

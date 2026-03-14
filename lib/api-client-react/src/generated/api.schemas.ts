@@ -18,6 +18,7 @@ export interface Holding {
   type: string;
   symbol: string;
   quantity: number;
+  manualPrice?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -26,10 +27,12 @@ export interface CreateHoldingBody {
   type: string;
   symbol: string;
   quantity: number;
+  manualPrice?: number | null;
 }
 
 export interface UpdateHoldingBody {
   quantity: number;
+  manualPrice?: number | null;
 }
 
 export interface Price {

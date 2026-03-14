@@ -11,6 +11,7 @@ export interface Holding {
   type: string;
   symbol: string;
   quantity: number;
+  manualPrice?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

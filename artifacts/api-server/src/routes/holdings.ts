@@ -39,12 +39,14 @@ router.post("/holdings", async (req, res): Promise<void> => {
       type: parsed.data.type,
       symbol: parsed.data.symbol.toUpperCase(),
       quantity: String(parsed.data.quantity),
+      manualPrice: parsed.data.manualPrice != null ? String(parsed.data.manualPrice) : null,
     })
     .returning();
 
   res.status(201).json({
     ...holding,
     quantity: parseFloat(String(holding.quantity)),
+    manualPrice: holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null,
   });
 });
 

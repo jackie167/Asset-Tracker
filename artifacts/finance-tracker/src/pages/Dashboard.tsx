@@ -46,6 +46,7 @@ const holdingSchema = z.object({
   type: z.string().min(1, "Bắt buộc"),
   symbol: z.string().min(1, "Bắt buộc"),
   quantity: z.coerce.number().positive("Số lượng phải > 0"),
+  manualPrice: z.coerce.number().min(0).optional().nullable(),
 });
 
 type HoldingForm = z.infer<typeof holdingSchema>;

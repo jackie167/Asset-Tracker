@@ -7,6 +7,7 @@ export const holdingsTable = pgTable("holdings", {
   type: text("type").notNull(),
   symbol: text("symbol").notNull(),
   quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
+  manualPrice: numeric("manual_price", { precision: 18, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

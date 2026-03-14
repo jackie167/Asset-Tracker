@@ -23,6 +23,7 @@ export const ListHoldingsResponseItem = zod.object({
   type: zod.string(),
   symbol: zod.string(),
   quantity: zod.number(),
+  manualPrice: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -35,6 +36,7 @@ export const CreateHoldingBody = zod.object({
   type: zod.string(),
   symbol: zod.string(),
   quantity: zod.number(),
+  manualPrice: zod.number().nullish(),
 });
 
 /**
@@ -54,6 +56,7 @@ export const ImportHoldingsResponse = zod.object({
       type: zod.string(),
       symbol: zod.string(),
       quantity: zod.number(),
+      manualPrice: zod.number().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     }),
@@ -69,6 +72,7 @@ export const UpdateHoldingParams = zod.object({
 
 export const UpdateHoldingBody = zod.object({
   quantity: zod.number(),
+  manualPrice: zod.number().nullish(),
 });
 
 export const UpdateHoldingResponse = zod.object({
@@ -76,6 +80,7 @@ export const UpdateHoldingResponse = zod.object({
   type: zod.string(),
   symbol: zod.string(),
   quantity: zod.number(),
+  manualPrice: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });

@@ -8,4 +8,5 @@
 
 export interface UpdateHoldingBody {
   quantity: number;
+  manualPrice?: number | null;
 }
