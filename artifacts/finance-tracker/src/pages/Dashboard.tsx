@@ -30,16 +30,19 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+const VND_INT = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
+const VND_2 = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
+
 function formatVND(value: number | null | undefined): string {
   if (value == null) return "—";
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} tỷ`;
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)} tr`;
-  return value.toLocaleString("vi-VN") + " ₫";
+  if (value >= 1_000_000_000) return `${VND_2.format(value / 1_000_000_000)} tỷ`;
+  if (value >= 1_000_000) return `${VND_2.format(value / 1_000_000)} tr`;
+  return VND_INT.format(value) + " ₫";
 }
 
 function formatVNDFull(value: number | null | undefined): string {
   if (value == null) return "—";
-  return value.toLocaleString("vi-VN") + " ₫";
+  return VND_INT.format(value) + " ₫";
 }
 
 const holdingSchema = z.object({
