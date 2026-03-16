@@ -625,24 +625,24 @@ export default function Dashboard() {
                     <div>
                       {/* Header row */}
                       <div
-                        className="grid gap-x-2 text-[10px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border whitespace-nowrap"
-                        style={{ gridTemplateColumns: "1fr 44px 52px 68px 76px" }}
+                        className="grid gap-x-1 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
+                        style={{ gridTemplateColumns: "72px 42px 50px 64px 1fr" }}
                       >
                         <span>Tài sản</span>
                         <span className="text-center">Loại</span>
                         <span className="text-right">SL</span>
                         <span className="text-right">Giá</span>
-                        <span className="text-right">Tổng</span>
+                        <span className="text-right whitespace-nowrap">Tổng giá trị</span>
                       </div>
 
                       {sortedHoldings.map((h) => (
                         <div
                           key={h.id}
-                          className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
-                          style={{ gridTemplateColumns: "1fr 44px 52px 68px 76px" }}
+                          className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
+                          style={{ gridTemplateColumns: "72px 42px 50px 64px 1fr" }}
                         >
                           {/* Tài sản + actions */}
-                          <div className="min-w-0">
+                          <div className="overflow-hidden">
                             <p className="text-sm font-medium truncate">{h.symbol}</p>
                             <div className="flex items-center gap-1 mt-0.5">
                               <ChangeChip change={h.change} changePercent={h.changePercent} />
@@ -663,7 +663,7 @@ export default function Dashboard() {
                           </div>
 
                           {/* Loại */}
-                          <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate">
+                          <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate block">
                             {h.type === "stock" ? "CP" : h.type === "gold" ? "Vàng" : h.type}
                           </span>
 
@@ -677,9 +677,9 @@ export default function Dashboard() {
                             {formatVND(h.currentPrice)}
                           </span>
 
-                          {/* Tổng giá trị */}
-                          <span className="text-[11px] font-semibold text-right tabular-nums">
-                            {formatVND(h.currentValue)}
+                          {/* Tổng giá trị — full format */}
+                          <span className="text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
+                            {formatVNDFull(h.currentValue)}
                           </span>
                         </div>
                       ))}
