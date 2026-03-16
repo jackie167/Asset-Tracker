@@ -79,7 +79,11 @@ router.put("/holdings/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(UpdateHoldingResponse.parse({ ...holding, quantity: parseFloat(String(holding.quantity)) }));
+  res.json(UpdateHoldingResponse.parse({
+    ...holding,
+    quantity: parseFloat(String(holding.quantity)),
+    manualPrice: holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null,
+  }));
 });
 
 router.delete("/holdings/:id", async (req, res): Promise<void> => {
