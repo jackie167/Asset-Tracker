@@ -376,7 +376,7 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
               <div>
                 <p className="text-sm font-medium leading-tight">{entry.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {entry.pct.toFixed(1)}% · {formatVND(entry.value)}
+                  {entry.pct.toFixed(1)}% · {formatVNDFull(entry.value)}
                 </p>
               </div>
             </li>
