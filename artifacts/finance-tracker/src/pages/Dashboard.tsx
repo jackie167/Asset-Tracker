@@ -284,16 +284,31 @@ function ChangeChip({ change, changePercent }: { change: number | null | undefin
   );
 }
 
-function AllocationChart({ stockValue, goldValue, totalValue }: { stockValue: number; goldValue: number; totalValue: number }) {
-  const otherValue = Math.max(0, totalValue - stockValue - goldValue);
+function typeLabel(type: string) {
+  if (type === "stock") return "📈 Cổ phiếu";
+  if (type === "gold") return "🥇 Vàng";
+  const name = type.charAt(0).toUpperCase() + type.slice(1);
+  return `💼 ${name}`;
+}
+
+function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; totalValue: number }) {
   const data = useMemo(() => {
-    const items = [
-      { name: "📈 Cổ phiếu", value: stockValue, pct: totalValue > 0 ? (stockValue / totalValue) * 100 : 0 },
-      { name: "🥇 Vàng", value: goldValue, pct: totalValue > 0 ? (goldValue / totalValue) * 100 : 0 },
-      { name: "📦 Khác", value: otherValue, pct: totalValue > 0 ? (otherValue / totalValue) * 100 : 0 },
-    ].filter((d) => d.value > 0);
-    return items;
-  }, [stockValue, goldValue, otherValue, totalValue]);
+    const typeMap = new Map<string, number>();
+    for (const h of (holdings ?? [])) {
+      if (h.currentValue == null || h.currentValue <= 0) continue;
+      typeMap.set(h.type, (typeMap.get(h.type) ?? 0) + h.currentValue);
+    }
+    const entries = Array.from(typeMap.entries()).sort(([a], [b]) => {
+      if (a === "stock") return -1; if (b === "stock") return 1;
+      if (a === "gold") return -1; if (b === "gold") return 1;
+      return a.localeCompare(b);
+    });
+    return entries.map(([type, value]) => ({
+      name: typeLabel(type),
+      value,
+      pct: totalValue > 0 ? (value / totalValue) * 100 : 0,
+    }));
+  }, [holdings, totalValue]);
 
   if (data.length === 0) return null;
 
@@ -406,8 +421,6 @@ export default function Dashboard() {
 
   const holdings: HoldingItem[] = summary?.holdings ?? [];
   const totalValue = summary?.totalValue ?? 0;
-  const stockValue = summary?.stockValue ?? 0;
-  const goldValue = summary?.goldValue ?? 0;
   const lastUpdated = summary?.lastUpdated;
 
   const sortedHoldings = useMemo(() => {
@@ -495,20 +508,33 @@ export default function Dashboard() {
             <Card className="p-4 space-y-3">
               <p className="text-xs text-muted-foreground uppercase tracking-widest">Tổng tài sản</p>
               <p className="text-3xl font-bold tracking-tight">{formatVNDFull(totalValue)}</p>
-              <div className="flex gap-4 pt-1">
-                <div>
-                  <p className="text-xs text-muted-foreground">📈 Cổ phiếu</p>
-                  <p className="text-sm font-medium">{formatVND(stockValue)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">🥇 Vàng</p>
-                  <p className="text-sm font-medium">{formatVND(goldValue)}</p>
-                </div>
-              </div>
+              {(() => {
+                const typeMap = new Map<string, number>();
+                for (const h of holdings) {
+                  if (h.currentValue == null || h.currentValue <= 0) continue;
+                  typeMap.set(h.type, (typeMap.get(h.type) ?? 0) + h.currentValue);
+                }
+                const entries = Array.from(typeMap.entries()).sort(([a], [b]) => {
+                  if (a === "stock") return -1; if (b === "stock") return 1;
+                  if (a === "gold") return -1; if (b === "gold") return 1;
+                  return a.localeCompare(b);
+                });
+                if (entries.length === 0) return null;
+                return (
+                  <div className="flex gap-4 pt-1 flex-wrap">
+                    {entries.map(([type, value]) => (
+                      <div key={type}>
+                        <p className="text-xs text-muted-foreground">{typeLabel(type)}</p>
+                        <p className="text-sm font-medium">{formatVND(value)}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </Card>
 
-            {(stockValue > 0 || goldValue > 0) && (
-              <AllocationChart stockValue={stockValue} goldValue={goldValue} totalValue={totalValue} />
+            {totalValue > 0 && (
+              <AllocationChart holdings={holdings} totalValue={totalValue} />
             )}
 
             {chartData.length > 0 && (

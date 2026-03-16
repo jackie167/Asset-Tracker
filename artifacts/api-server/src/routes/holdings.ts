@@ -21,6 +21,7 @@ router.get("/holdings", async (_req, res): Promise<void> => {
       holdings.map((h) => ({
         ...h,
         quantity: parseFloat(String(h.quantity)),
+        manualPrice: h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null,
       }))
     )
   );
