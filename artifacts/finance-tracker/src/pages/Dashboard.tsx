@@ -528,6 +528,7 @@ export default function Dashboard() {
   const [editItem, setEditItem] = useState<HoldingItem | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("none");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState(false);
+  const [filterType, setFilterType] = useState<string>("all");
 
   const handleImportSuccess = () => {
     queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
@@ -593,6 +594,26 @@ export default function Dashboard() {
   };
 
   const sortLabel = sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
+
+  // Unique types from holdings for filter menu
+  const availableTypes = useMemo(() => {
+    const types = [...new Set(holdings.map((h) => h.type.toLowerCase()))];
+    return types.sort((a, b) => {
+      if (a === "stock") return -1; if (b === "stock") return 1;
+      if (a === "gold") return -1; if (b === "gold") return 1;
+      if (a === "crypto") return -1; if (b === "crypto") return 1;
+      return a.localeCompare(b);
+    });
+  }, [holdings]);
+
+  // Apply type filter on top of sorted list
+  const filteredHoldings = useMemo(() =>
+    filterType === "all" ? sortedHoldings : sortedHoldings.filter((h) => h.type.toLowerCase() === filterType),
+  [sortedHoldings, filterType]);
+
+  const filteredTotal = useMemo(() =>
+    filteredHoldings.reduce((sum, h) => sum + (h.currentValue ?? 0), 0),
+  [filteredHoldings]);
 
   const handleAdd = (data: HoldingForm) => {
     createHolding.mutate({ data }, { onSuccess: () => setShowAdd(false) });
@@ -756,16 +777,35 @@ export default function Dashboard() {
                 </button>
 
                 {!holdingsCollapsed && holdings.length > 1 && (
-                  <button
-                    onClick={cycleSortOrder}
-                    className={`text-xs px-2 py-1 rounded border transition-colors ${
-                      sortOrder !== "none"
-                        ? "border-primary/60 text-primary bg-primary/5"
-                        : "border-border text-muted-foreground hover:border-primary/40"
-                    }`}
-                  >
-                    {sortLabel}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Type filter */}
+                    {availableTypes.length > 1 && (
+                      <Select value={filterType} onValueChange={(v) => setFilterType(v)}>
+                        <SelectTrigger className="h-7 text-xs px-2 border-border gap-1 w-auto min-w-[80px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Tất cả</SelectItem>
+                          {availableTypes.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t === "stock" ? "📈 Cổ phiếu" : t === "gold" ? "🥇 Vàng" : t === "crypto" ? "🪙 Crypto" : `💼 ${t.charAt(0).toUpperCase() + t.slice(1)}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {/* Sort */}
+                    <button
+                      onClick={cycleSortOrder}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${
+                        sortOrder !== "none"
+                          ? "border-primary/60 text-primary bg-primary/5"
+                          : "border-border text-muted-foreground hover:border-primary/40"
+                      }`}
+                    >
+                      {sortLabel}
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -792,7 +832,13 @@ export default function Dashboard() {
                         <span className="text-right whitespace-nowrap">Tổng giá trị</span>
                       </div>
 
-                      {sortedHoldings.map((h) => (
+                      {filteredHoldings.length === 0 && filterType !== "all" && (
+                        <p className="text-sm text-muted-foreground text-center py-6">
+                          Không có tài sản nào thuộc loại này.
+                        </p>
+                      )}
+
+                      {filteredHoldings.map((h) => (
                         <div
                           key={h.id}
                           className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
@@ -840,6 +886,21 @@ export default function Dashboard() {
                           </span>
                         </div>
                       ))}
+
+                      {/* Subtotal row */}
+                      {filteredHoldings.length > 0 && (
+                        <div
+                          className="grid gap-x-1 items-center pt-2.5 mt-0.5"
+                          style={{ gridTemplateColumns: "96px 42px 50px 64px 1fr" }}
+                        >
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider col-span-4">
+                            {filterType === "all" ? "Tổng danh mục" : `Tổng ${filterType === "stock" ? "cổ phiếu" : filterType === "gold" ? "vàng" : filterType === "crypto" ? "crypto" : filterType}`}
+                          </span>
+                          <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
+                            {formatVNDFull(filteredTotal)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
