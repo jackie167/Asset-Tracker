@@ -110,23 +110,33 @@ function AddEditDialog({
   initialData,
   onSubmit,
   isLoading,
+  allHoldings = [],
 }: {
   open: boolean;
   onClose: () => void;
   initialData?: HoldingItem | null;
   onSubmit: (data: HoldingForm) => void;
   isLoading: boolean;
+  allHoldings?: HoldingItem[];
 }) {
   const initialMode: TypeMode = initialData ? resolveMode(initialData.type) : "stock";
   const [typeMode, setTypeMode] = useState<TypeMode>(initialMode);
 
   const [customTypes, setCustomTypes] = useState<string[]>(() => {
-    const stored = loadCustomTypes();
-    if (initialData && resolveMode(initialData.type) === "other") {
-      const t = initialData.type.toLowerCase();
-      return stored.includes(t) ? stored : [t, ...stored];
-    }
-    return stored;
+    const stored = loadCustomTypes().map((t) => t.toLowerCase());
+    // Collect custom types from existing holdings (not stock/gold)
+    const fromHoldings = allHoldings
+      .map((h) => h.type.toLowerCase())
+      .filter((t) => t !== "stock" && t !== "gold");
+    // Also include current editItem type
+    const fromEdit =
+      initialData && resolveMode(initialData.type) === "other"
+        ? [initialData.type.toLowerCase()]
+        : [];
+    // Merge all sources and deduplicate with Set
+    const merged = [...new Set([...stored, ...fromHoldings, ...fromEdit])];
+    saveCustomTypes(merged);
+    return merged;
   });
 
   const [showNewInput, setShowNewInput] = useState(false);
@@ -197,11 +207,14 @@ function AddEditDialog({
   const handleConfirmNewType = () => {
     const trimmed = newTypeName.trim().toLowerCase();
     if (!trimmed) return;
-    const updated = customTypes.includes(trimmed) ? customTypes : [...customTypes, trimmed];
+    // Check if already exists (case-insensitive) — if so just select it, don't duplicate
+    const existing = customTypes.find((t) => t.toLowerCase() === trimmed);
+    const finalType = existing ?? trimmed;
+    const updated = existing ? customTypes : [...customTypes, trimmed];
     setCustomTypes(updated);
     saveCustomTypes(updated);
     setTypeMode("other");
-    form.setValue("type", trimmed);
+    form.setValue("type", finalType);
     form.setValue("symbol", "");
     setShowNewInput(false);
     setNewTypeName("");
@@ -834,6 +847,7 @@ export default function Dashboard() {
         onClose={() => setShowAdd(false)}
         onSubmit={handleAdd}
         isLoading={createHolding.isPending}
+        allHoldings={holdings}
       />
 
       {editItem && (
@@ -843,6 +857,7 @@ export default function Dashboard() {
           initialData={editItem}
           onSubmit={handleEdit}
           isLoading={updateHolding.isPending}
+          allHoldings={holdings}
         />
       )}
     </div>
