@@ -334,60 +334,75 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
 
   return (
     <Card className="p-4">
-      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Phân bổ tài sản</p>
-      <div className="flex items-center gap-4">
-        <div style={{ width: 180, height: 180, flexShrink: 0 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={48}
-                outerRadius={82}
-                paddingAngle={2}
-                dataKey="value"
-                labelLine={false}
-                label={renderCustomLabel}
-                isAnimationActive={false}
-              >
-                {data.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
-                  `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
-                  props.payload?.name ?? "",
-                ]}
-                contentStyle={{
-                  background: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">Phân bổ tài sản</p>
 
-        <ul className="flex flex-col gap-4 justify-center">
-          {data.map((entry, i) => (
-            <li key={entry.name} className="flex items-center gap-2.5">
-              <span
-                className="inline-block w-3 h-3 rounded-full shrink-0"
-                style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
-              />
-              <div>
-                <p className="text-sm font-medium leading-tight">{entry.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {entry.pct.toFixed(1)}% · {formatVNDFull(entry.value)}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
+      {/* Pie chart */}
+      <div style={{ height: 160 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={44}
+              outerRadius={72}
+              paddingAngle={2}
+              dataKey="value"
+              labelLine={false}
+              label={renderCustomLabel}
+              isAnimationActive={false}
+            >
+              {data.map((_, i) => (
+                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
+                `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
+                props.payload?.name ?? "",
+              ]}
+              contentStyle={{
+                background: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
       </div>
+
+      {/* Table below pie */}
+      <div
+        className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
+        style={{ gridTemplateColumns: "1fr 52px 1fr" }}
+      >
+        <span>Loại tài sản</span>
+        <span className="text-center">Tỷ lệ</span>
+        <span className="text-right">Giá trị</span>
+      </div>
+
+      {data.map((entry, i) => (
+        <div
+          key={entry.name}
+          className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
+          style={{ gridTemplateColumns: "1fr 52px 1fr" }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+            />
+            <span className="text-sm font-medium truncate">{entry.name}</span>
+          </div>
+          <span className="text-[11px] text-center tabular-nums font-medium">
+            {entry.pct.toFixed(1)}%
+          </span>
+          <span className="text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
+            {formatVNDFull(entry.value)}
+          </span>
+        </div>
+      ))}
     </Card>
   );
 }
