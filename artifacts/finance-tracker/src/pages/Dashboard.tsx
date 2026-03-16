@@ -526,7 +526,7 @@ export default function Dashboard() {
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editItem, setEditItem] = useState<HoldingItem | null>(null);
-  const [sortOrder, setSortOrder] = useState<SortOrder>("none");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState(false);
   const [filterType, setFilterType] = useState<string>("all");
 
@@ -823,12 +823,13 @@ export default function Dashboard() {
                       {/* Header row */}
                       <div
                         className="grid gap-x-1 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
-                        style={{ gridTemplateColumns: "96px 42px 50px 64px 1fr" }}
+                        style={{ gridTemplateColumns: "96px 42px 50px 64px 36px 1fr" }}
                       >
                         <span>Tài sản</span>
                         <span className="text-center">Loại</span>
                         <span className="text-right">SL</span>
                         <span className="text-right">Giá</span>
+                        <span className="text-right">%</span>
                         <span className="text-right whitespace-nowrap">Tổng giá trị</span>
                       </div>
 
@@ -842,7 +843,7 @@ export default function Dashboard() {
                         <div
                           key={h.id}
                           className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
-                          style={{ gridTemplateColumns: "96px 42px 50px 64px 1fr" }}
+                          style={{ gridTemplateColumns: "96px 42px 50px 64px 36px 1fr" }}
                         >
                           {/* Tài sản + actions */}
                           <div className="overflow-hidden">
@@ -880,6 +881,13 @@ export default function Dashboard() {
                             {formatVND(h.currentPrice)}
                           </span>
 
+                          {/* Tỷ trọng % so với tổng danh mục */}
+                          <span className="text-[10px] text-right tabular-nums text-muted-foreground">
+                            {totalValue > 0 && h.currentValue != null
+                              ? `${((h.currentValue / totalValue) * 100).toFixed(1)}%`
+                              : "—"}
+                          </span>
+
                           {/* Tổng giá trị — full format */}
                           <span className="text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
                             {formatVNDFull(h.currentValue)}
@@ -891,9 +899,9 @@ export default function Dashboard() {
                       {filteredHoldings.length > 0 && (
                         <div
                           className="grid gap-x-1 items-center pt-2.5 mt-0.5"
-                          style={{ gridTemplateColumns: "96px 42px 50px 64px 1fr" }}
+                          style={{ gridTemplateColumns: "96px 42px 50px 64px 36px 1fr" }}
                         >
-                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider col-span-4">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider col-span-5">
                             {filterType === "all" ? "Tổng danh mục" : `Tổng ${filterType === "stock" ? "cổ phiếu" : filterType === "gold" ? "vàng" : filterType === "crypto" ? "crypto" : filterType}`}
                           </span>
                           <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
