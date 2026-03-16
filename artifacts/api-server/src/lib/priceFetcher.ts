@@ -6,11 +6,101 @@ const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 interface PriceData {
-  type: "stock" | "gold";
+  type: string;
   symbol: string;
   price: number;
   change: number | null;
   changePercent: number | null;
+}
+
+const COINGECKO_ID_MAP: Record<string, string> = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  BNB: "binancecoin",
+  SOL: "solana",
+  XRP: "ripple",
+  USDT: "tether",
+  USDC: "usd-coin",
+  ADA: "cardano",
+  AVAX: "avalanche-2",
+  DOGE: "dogecoin",
+  TRX: "tron",
+  SHIB: "shiba-inu",
+  DOT: "polkadot",
+  MATIC: "matic-network",
+  LTC: "litecoin",
+  ATOM: "cosmos",
+  LINK: "chainlink",
+  UNI: "uniswap",
+  BCH: "bitcoin-cash",
+  FIL: "filecoin",
+  NEAR: "near",
+  APT: "aptos",
+  ARB: "arbitrum",
+  OP: "optimism",
+  SUI: "sui",
+  INJ: "injective-protocol",
+  PEPE: "pepe",
+  TON: "the-open-network",
+  MNT: "mantle",
+  SEI: "sei-network",
+  BONK: "bonk",
+  WIF: "dogwifcoin",
+  JUP: "jupiter",
+  RENDER: "render-token",
+  WLD: "worldcoin-wld",
+  HBAR: "hedera-hashgraph",
+  VET: "vechain",
+  ICP: "internet-computer",
+  GRT: "the-graph",
+  AAVE: "aave",
+};
+
+async function fetchCryptoPricesCoinGecko(symbols: string[]): Promise<PriceData[]> {
+  const upper = symbols.map((s) => s.toUpperCase()).filter((s) => COINGECKO_ID_MAP[s]);
+  if (upper.length === 0) return [];
+
+  const idList = upper.map((s) => COINGECKO_ID_MAP[s]).join(",");
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${idList}&vs_currencies=vnd&include_24hr_change=true`;
+
+  console.log(`[PriceFetcher] Fetching crypto prices from CoinGecko: ${upper.join(", ")}`);
+
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) {
+      console.error(`[PriceFetcher] CoinGecko HTTP ${res.status}: ${res.statusText}`);
+      return [];
+    }
+
+    const json = await res.json() as Record<string, { vnd?: number; vnd_24h_change?: number }>;
+    const results: PriceData[] = [];
+
+    for (const sym of upper) {
+      const id = COINGECKO_ID_MAP[sym];
+      const data = json[id];
+      if (!data?.vnd) {
+        console.warn(`[PriceFetcher] CoinGecko: no VND price for ${sym} (id: ${id})`);
+        continue;
+      }
+      console.log(`[PriceFetcher] ✅ ${sym}: ${data.vnd.toLocaleString()} VND/coin (${data.vnd_24h_change?.toFixed(2) ?? "n/a"}% 24h)`);
+      results.push({
+        type: "crypto",
+        symbol: sym,
+        price: data.vnd,
+        change: null,
+        changePercent: data.vnd_24h_change ?? null,
+      });
+    }
+
+    return results;
+  } catch (err: unknown) {
+    console.error(`[PriceFetcher] CoinGecko error:`, err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 /**
@@ -264,17 +354,33 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
   ];
   const hasGold = holdings.some((h) => h.type === "gold");
 
-  console.log(`[PriceFetcher] Starting fetch for ${stockSymbols.length} stock(s)${hasGold ? " + gold" : ""}`);
+  // Detect crypto: non-stock/gold holdings whose symbol is in the CoinGecko map
+  const cryptoSymbols = [
+    ...new Set(
+      holdings
+        .filter((h) => h.type !== "stock" && h.type !== "gold")
+        .map((h) => h.symbol.toUpperCase())
+        .filter((s) => COINGECKO_ID_MAP[s])
+    ),
+  ];
+
+  console.log(
+    `[PriceFetcher] Starting fetch for ${stockSymbols.length} stock(s)` +
+    `${hasGold ? " + gold" : ""}` +
+    `${cryptoSymbols.length ? ` + crypto (${cryptoSymbols.join(", ")})` : ""}`
+  );
 
   const stockPromises = stockSymbols.map(fetchStockPriceYahoo);
-  const [stockResults, goldResults] = await Promise.all([
+  const [stockResults, goldResults, cryptoResults] = await Promise.all([
     Promise.all(stockPromises),
     hasGold ? fetchGoldPriceSJC() : Promise.resolve([] as PriceData[]),
+    cryptoSymbols.length ? fetchCryptoPricesCoinGecko(cryptoSymbols) : Promise.resolve([] as PriceData[]),
   ]);
 
   const prices: PriceData[] = [
     ...stockResults.filter((p): p is PriceData => p !== null),
     ...goldResults,
+    ...cryptoResults,
   ];
 
   if (!prices.length) {
@@ -310,18 +416,20 @@ async function savePortfolioSnapshot(
 
   let stockValue = 0;
   let goldValue = 0;
+  let otherValue = 0;
 
   for (const h of holdings) {
     const qty = parseFloat(String(h.quantity));
     const sym = h.symbol.toUpperCase();
-    const price = priceMap.get(sym);
+    const price = priceMap.get(sym) ?? (h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null);
     if (price == null) continue;
     const val = qty * price;
     if (h.type === "stock") stockValue += val;
-    else goldValue += val;
+    else if (h.type === "gold") goldValue += val;
+    else otherValue += val;
   }
 
-  const totalValue = stockValue + goldValue;
+  const totalValue = stockValue + goldValue + otherValue;
   if (totalValue > 0) {
     await db.insert(snapshotsTable).values({
       totalValue: String(totalValue),
