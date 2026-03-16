@@ -622,41 +622,65 @@ export default function Dashboard() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div>
+                      {/* Header row */}
+                      <div
+                        className="grid gap-x-2 text-[10px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border whitespace-nowrap"
+                        style={{ gridTemplateColumns: "1fr 44px 52px 68px 76px" }}
+                      >
+                        <span>Tài sản</span>
+                        <span className="text-center">Loại</span>
+                        <span className="text-right">SL</span>
+                        <span className="text-right">Giá</span>
+                        <span className="text-right">Tổng</span>
+                      </div>
+
                       {sortedHoldings.map((h) => (
-                        <div key={h.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{h.symbol}</span>
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                                {h.type === "stock" ? "CP" : h.type === "gold" ? "Vàng" : h.type}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs text-muted-foreground">
-                                {h.quantity.toLocaleString("vi-VN")} × {formatVND(h.currentPrice)}
-                              </span>
+                        <div
+                          key={h.id}
+                          className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
+                          style={{ gridTemplateColumns: "1fr 44px 52px 68px 76px" }}
+                        >
+                          {/* Tài sản + actions */}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{h.symbol}</p>
+                            <div className="flex items-center gap-1 mt-0.5">
                               <ChangeChip change={h.change} changePercent={h.changePercent} />
-                            </div>
-                          </div>
-                          <div className="text-right ml-3 shrink-0">
-                            <p className="text-sm font-semibold tabular-nums">{formatVNDFull(h.currentValue)}</p>
-                            <div className="flex items-center gap-1 justify-end mt-0.5">
                               <button
                                 onClick={() => setEditItem(h)}
-                                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                               >
                                 Sửa
                               </button>
-                              <span className="text-muted-foreground text-xs">·</span>
+                              <span className="text-[10px] text-muted-foreground">·</span>
                               <button
                                 onClick={() => handleDelete(h.id)}
-                                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                                className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
                               >
                                 Xóa
                               </button>
                             </div>
                           </div>
+
+                          {/* Loại */}
+                          <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate">
+                            {h.type === "stock" ? "CP" : h.type === "gold" ? "Vàng" : h.type}
+                          </span>
+
+                          {/* Số lượng */}
+                          <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                            {h.quantity.toLocaleString("vi-VN")}
+                          </span>
+
+                          {/* Giá */}
+                          <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                            {formatVND(h.currentPrice)}
+                          </span>
+
+                          {/* Tổng giá trị */}
+                          <span className="text-[11px] font-semibold text-right tabular-nums">
+                            {formatVND(h.currentValue)}
+                          </span>
                         </div>
                       ))}
                     </div>
