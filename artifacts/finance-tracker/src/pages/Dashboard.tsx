@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListHoldingsQueryKey, getGetPortfolioSummaryQueryKey, getListSnapshotsQueryKey } from "@workspace/api-client-react";
 import { format } from "date-fns";
@@ -19,6 +19,13 @@ import ImportDialog from "@/components/ImportDialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -76,6 +83,19 @@ const PIE_COLORS = [
   "hsl(0, 72%, 60%)",
 ];
 
+const CUSTOM_TYPES_KEY = "custom_asset_types";
+
+function loadCustomTypes(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_TYPES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveCustomTypes(types: string[]): void {
+  localStorage.setItem(CUSTOM_TYPES_KEY, JSON.stringify(types));
+}
+
 type TypeMode = "stock" | "gold" | "other";
 
 function resolveMode(type: string): TypeMode {
@@ -100,6 +120,23 @@ function AddEditDialog({
   const initialMode: TypeMode = initialData ? resolveMode(initialData.type) : "stock";
   const [typeMode, setTypeMode] = useState<TypeMode>(initialMode);
 
+  const [customTypes, setCustomTypes] = useState<string[]>(() => {
+    const stored = loadCustomTypes();
+    if (initialData && resolveMode(initialData.type) === "other") {
+      const t = initialData.type.toLowerCase();
+      return stored.includes(t) ? stored : [t, ...stored];
+    }
+    return stored;
+  });
+
+  const [showNewInput, setShowNewInput] = useState(false);
+  const [newTypeName, setNewTypeName] = useState("");
+  const newTypeInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showNewInput) newTypeInputRef.current?.focus();
+  }, [showNewInput]);
+
   const initialTotalValue = initialData?.currentValue
     ? String(Math.round(initialData.currentValue))
     : "";
@@ -112,8 +149,8 @@ function AddEditDialog({
       : { type: "stock", symbol: "", quantity: 0, manualPrice: null },
   });
 
-  const watchType = form.watch("type");
   const watchQty = form.watch("quantity");
+  const watchSymbol = form.watch("symbol");
 
   const handleSubmit = form.handleSubmit((data) => {
     const raw = totalValueStr.replace(/\./g, "").replace(",", ".");
@@ -131,62 +168,110 @@ function AddEditDialog({
     { value: "SJC_1C", label: "Vàng SJC 1 chỉ" },
   ];
 
-  const selectMode = (mode: TypeMode) => {
-    if (!!initialData) return;
-    setTypeMode(mode);
-    if (mode === "stock") { form.setValue("type", "stock"); form.setValue("symbol", ""); }
-    else if (mode === "gold") { form.setValue("type", "gold"); form.setValue("symbol", "SJC_1L"); }
-    else { form.setValue("type", ""); form.setValue("symbol", ""); }
+  const selectValue =
+    typeMode === "stock" ? "stock"
+    : typeMode === "gold" ? "gold"
+    : form.getValues("type") || "";
+
+  const handleTypeSelect = (value: string) => {
+    if (value === "__add_new__") {
+      setShowNewInput(true);
+      return;
+    }
+    setShowNewInput(false);
+    if (value === "stock") {
+      setTypeMode("stock");
+      form.setValue("type", "stock");
+      form.setValue("symbol", "");
+    } else if (value === "gold") {
+      setTypeMode("gold");
+      form.setValue("type", "gold");
+      form.setValue("symbol", "SJC_1L");
+    } else {
+      setTypeMode("other");
+      form.setValue("type", value);
+      form.setValue("symbol", "");
+    }
   };
 
-  const btnClass = (active: boolean) =>
-    `flex-1 py-2 px-3 rounded-md text-sm font-medium border transition-colors ${
-      active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"
-    }`;
+  const handleConfirmNewType = () => {
+    const trimmed = newTypeName.trim().toLowerCase();
+    if (!trimmed) return;
+    const updated = customTypes.includes(trimmed) ? customTypes : [...customTypes, trimmed];
+    setCustomTypes(updated);
+    saveCustomTypes(updated);
+    setTypeMode("other");
+    form.setValue("type", trimmed);
+    form.setValue("symbol", "");
+    setShowNewInput(false);
+    setNewTypeName("");
+  };
+
+  const typeLabel2 = (t: string) => {
+    const name = t.charAt(0).toUpperCase() + t.slice(1);
+    return `💼 ${name}`;
+  };
+
+  const isEditing = !!initialData;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{initialData ? "Sửa tài sản" : "Thêm tài sản"}</DialogTitle>
+          <DialogTitle>{isEditing ? "Sửa tài sản" : "Thêm tài sản"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+
+          {/* Loại tài sản — Select dropdown */}
           <div>
-            <label className="text-sm text-muted-foreground mb-1 block">Loại tài sản</label>
-            <div className="flex gap-2">
-              <button type="button" disabled={!!initialData} onClick={() => selectMode("stock")} className={btnClass(typeMode === "stock")}>
-                📈 Cổ phiếu
-              </button>
-              <button type="button" disabled={!!initialData} onClick={() => selectMode("gold")} className={btnClass(typeMode === "gold")}>
-                🥇 Vàng
-              </button>
-              <button type="button" disabled={!!initialData} onClick={() => selectMode("other")} className={btnClass(typeMode === "other")}>
-                ＋ Khác
-              </button>
-            </div>
+            <label className="text-sm text-muted-foreground mb-1.5 block">Loại tài sản</label>
+            <Select value={selectValue} onValueChange={handleTypeSelect} disabled={isEditing}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Chọn loại tài sản..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="stock">📈 Cổ phiếu</SelectItem>
+                <SelectItem value="gold">🥇 Vàng</SelectItem>
+                {customTypes.map((t) => (
+                  <SelectItem key={t} value={t}>{typeLabel2(t)}</SelectItem>
+                ))}
+                {!isEditing && (
+                  <SelectItem value="__add_new__" className="text-primary">
+                    ➕ Thêm loại mới...
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+
+            {/* Inline input for new type */}
+            {showNewInput && (
+              <div className="flex gap-2 mt-2">
+                <Input
+                  ref={newTypeInputRef}
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                  placeholder="VD: Crypto, Bất động sản, Trái phiếu..."
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleConfirmNewType(); } }}
+                  className="flex-1"
+                />
+                <Button type="button" size="sm" onClick={handleConfirmNewType} disabled={!newTypeName.trim()}>
+                  Lưu
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => { setShowNewInput(false); setNewTypeName(""); }}>
+                  ✕
+                </Button>
+              </div>
+            )}
           </div>
 
-          {typeMode === "other" && (
-            <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Tên loại tài sản</label>
-              <Input
-                {...form.register("type")}
-                placeholder="VD: Crypto, Bất động sản, Trái phiếu..."
-                disabled={!!initialData}
-              />
-              {form.formState.errors.type && (
-                <p className="text-xs text-destructive mt-1">{form.formState.errors.type.message}</p>
-              )}
-            </div>
-          )}
-
+          {/* Mã cổ phiếu */}
           {typeMode === "stock" && (
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Mã cổ phiếu</label>
               <Input
                 {...form.register("symbol")}
                 placeholder="VD: VNM, HPG, VIC"
-                disabled={!!initialData}
+                disabled={isEditing}
                 className="uppercase"
                 onChange={(e) => form.setValue("symbol", e.target.value.toUpperCase())}
               />
@@ -196,6 +281,7 @@ function AddEditDialog({
             </div>
           )}
 
+          {/* Chọn loại vàng */}
           {typeMode === "gold" && (
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Loại vàng</label>
@@ -204,9 +290,9 @@ function AddEditDialog({
                   <button
                     key={gs.value}
                     type="button"
-                    disabled={!!initialData}
+                    disabled={isEditing}
                     onClick={() => form.setValue("symbol", gs.value)}
-                    className={`py-2 px-3 rounded-md text-sm font-medium border transition-colors text-left ${watchType === "gold" && form.watch("symbol") === gs.value ? "bg-primary/10 border-primary text-foreground" : "border-border text-muted-foreground hover:border-primary/50"}`}
+                    className={`py-2 px-3 rounded-md text-sm font-medium border transition-colors text-left ${watchSymbol === gs.value ? "bg-primary/10 border-primary text-foreground" : "border-border text-muted-foreground hover:border-primary/50"}`}
                   >
                     {gs.label}
                   </button>
@@ -215,13 +301,14 @@ function AddEditDialog({
             </div>
           )}
 
+          {/* Tên / Mã tài sản cho loại khác */}
           {typeMode === "other" && (
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Tên / Mã tài sản</label>
               <Input
                 {...form.register("symbol")}
-                placeholder="VD: BTC, Căn hộ Q7, VNINDEX..."
-                disabled={!!initialData}
+                placeholder="VD: BTC, ETH, Căn hộ Q7..."
+                disabled={isEditing}
               />
               {form.formState.errors.symbol && (
                 <p className="text-xs text-destructive mt-1">{form.formState.errors.symbol.message}</p>
@@ -231,9 +318,7 @@ function AddEditDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm text-muted-foreground mb-1 block">
-                {typeMode === "stock" ? "Số lượng CP" : typeMode === "gold" ? "Số lượng" : "Số lượng"}
-              </label>
+              <label className="text-sm text-muted-foreground mb-1 block">Số lượng</label>
               <Input
                 {...form.register("quantity")}
                 type="number"
@@ -270,7 +355,7 @@ function AddEditDialog({
               Hủy
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Đang lưu..." : initialData ? "Cập nhật" : "Thêm"}
+              {isLoading ? "Đang lưu..." : isEditing ? "Cập nhật" : "Thêm"}
             </Button>
           </DialogFooter>
         </form>
