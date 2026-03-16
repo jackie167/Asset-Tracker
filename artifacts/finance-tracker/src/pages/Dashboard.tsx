@@ -122,19 +122,22 @@ function AddEditDialog({
   const initialMode: TypeMode = initialData ? resolveMode(initialData.type) : "stock";
   const [typeMode, setTypeMode] = useState<TypeMode>(initialMode);
 
+  const BUILTIN_TYPES = ["stock", "gold", "crypto"];
+
   const [customTypes, setCustomTypes] = useState<string[]>(() => {
     const stored = loadCustomTypes().map((t) => t.toLowerCase());
-    // Collect custom types from existing holdings (not stock/gold)
+    // Collect custom types from existing holdings (exclude all built-ins)
     const fromHoldings = allHoldings
       .map((h) => h.type.toLowerCase())
-      .filter((t) => t !== "stock" && t !== "gold");
-    // Also include current editItem type
+      .filter((t) => !BUILTIN_TYPES.includes(t));
+    // Also include current editItem type if it's truly custom
     const fromEdit =
-      initialData && resolveMode(initialData.type) === "other"
+      initialData && !BUILTIN_TYPES.includes(initialData.type.toLowerCase())
         ? [initialData.type.toLowerCase()]
         : [];
-    // Merge all sources and deduplicate with Set
-    const merged = [...new Set([...stored, ...fromHoldings, ...fromEdit])];
+    // Merge all sources, exclude built-ins, deduplicate with Set
+    const merged = [...new Set([...stored, ...fromHoldings, ...fromEdit])]
+      .filter((t) => !BUILTIN_TYPES.includes(t));
     saveCustomTypes(merged);
     return merged;
   });
@@ -207,7 +210,14 @@ function AddEditDialog({
   const handleConfirmNewType = () => {
     const trimmed = newTypeName.trim().toLowerCase();
     if (!trimmed) return;
-    // Check if already exists (case-insensitive) — if so just select it, don't duplicate
+    // If user typed a built-in type name, just select it directly
+    if (BUILTIN_TYPES.includes(trimmed)) {
+      handleTypeSelect(trimmed);
+      setShowNewInput(false);
+      setNewTypeName("");
+      return;
+    }
+    // Check if already exists in customTypes (case-insensitive) — if so just select it, don't duplicate
     const existing = customTypes.find((t) => t.toLowerCase() === trimmed);
     const finalType = existing ?? trimmed;
     const updated = existing ? customTypes : [...customTypes, trimmed];
@@ -245,7 +255,8 @@ function AddEditDialog({
               <SelectContent>
                 <SelectItem value="stock">📈 Cổ phiếu</SelectItem>
                 <SelectItem value="gold">🥇 Vàng</SelectItem>
-                {customTypes.map((t) => (
+                <SelectItem value="crypto">🪙 Crypto</SelectItem>
+                {customTypes.filter((t) => t !== "crypto").map((t) => (
                   <SelectItem key={t} value={t}>{typeLabel2(t)}</SelectItem>
                 ))}
                 {!isEditing && (
@@ -399,7 +410,8 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
     const typeMap = new Map<string, number>();
     for (const h of (holdings ?? [])) {
       if (h.currentValue == null || h.currentValue <= 0) continue;
-      typeMap.set(h.type, (typeMap.get(h.type) ?? 0) + h.currentValue);
+      const t = h.type.toLowerCase(); // normalize case to avoid duplicates
+      typeMap.set(t, (typeMap.get(t) ?? 0) + h.currentValue);
     }
     const entries = Array.from(typeMap.entries()).sort(([a], [b]) => {
       if (a === "stock") return -1; if (b === "stock") return 1;
@@ -407,6 +419,7 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
       return a.localeCompare(b);
     });
     return entries.map(([type, value]) => ({
+      type,                          // raw normalized key
       name: typeLabel(type),
       value,
       pct: totalValue > 0 ? (value / totalValue) * 100 : 0,
@@ -482,7 +495,7 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
 
       {data.map((entry, i) => (
         <div
-          key={entry.name}
+          key={entry.type}
           className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
           style={{ gridTemplateColumns: "1fr 52px 1fr" }}
         >
