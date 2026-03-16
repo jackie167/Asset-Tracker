@@ -783,7 +783,7 @@ export default function Dashboard() {
                       {/* Header row */}
                       <div
                         className="grid gap-x-1 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
-                        style={{ gridTemplateColumns: "72px 42px 50px 64px 1fr" }}
+                        style={{ gridTemplateColumns: "96px 42px 50px 64px 1fr" }}
                       >
                         <span>Tài sản</span>
                         <span className="text-center">Loại</span>
@@ -796,7 +796,7 @@ export default function Dashboard() {
                         <div
                           key={h.id}
                           className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
-                          style={{ gridTemplateColumns: "72px 42px 50px 64px 1fr" }}
+                          style={{ gridTemplateColumns: "96px 42px 50px 64px 1fr" }}
                         >
                           {/* Tài sản + actions */}
                           <div className="overflow-hidden">
