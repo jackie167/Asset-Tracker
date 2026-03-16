@@ -145,6 +145,7 @@ export const GetPortfolioSummaryResponse = zod.object({
       currentValue: zod.number().nullable(),
       change: zod.number().nullable(),
       changePercent: zod.number().nullable(),
+      manualPrice: zod.number().nullable(),
     }),
   ),
 });

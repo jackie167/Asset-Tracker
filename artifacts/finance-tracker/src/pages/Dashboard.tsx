@@ -63,6 +63,7 @@ type HoldingItem = {
   currentValue?: number | null;
   change?: number | null;
   changePercent?: number | null;
+  manualPrice?: number | null;
 };
 
 type SortOrder = "none" | "asc" | "desc";
@@ -408,6 +409,27 @@ export default function Dashboard() {
     queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
   };
 
+  const handleExportCSV = () => {
+    if (!holdings.length) return;
+    const header = ["symbol", "type", "quantity", "manualPrice"];
+    const rows = holdings.map((h) => [
+      h.symbol,
+      h.type,
+      h.quantity,
+      h.manualPrice ?? "",
+    ]);
+    const csv = [header, ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `danh-muc-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const chartData = [...(snapshots || [])]
     .sort((a, b) => new Date(a.snapshotAt).getTime() - new Date(b.snapshotAt).getTime())
     .reduce((acc: { date: string; totalValue: number; stockValue: number; goldValue: number }[], s) => {
@@ -487,6 +509,15 @@ export default function Dashboard() {
             className="text-xs"
           >
             {refreshPrices.isPending ? "..." : "↻ Làm mới"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            disabled={!holdings.length}
+            className="text-xs"
+          >
+            ↓ Export
           </Button>
           <Button
             variant="outline"

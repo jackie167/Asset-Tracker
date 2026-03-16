@@ -157,6 +157,7 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
       currentValue,
       change: priceData?.change ?? null,
       changePercent: priceData?.changePercent ?? null,
+      manualPrice: manualUnitPrice,
     };
   });
 
