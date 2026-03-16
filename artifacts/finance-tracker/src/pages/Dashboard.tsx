@@ -564,6 +564,21 @@ export default function Dashboard() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState(false);
   const [filterType, setFilterType] = useState<string>("all");
+  const [showQtyCol, setShowQtyCol] = useState<boolean>(() =>
+    localStorage.getItem("col_sl") !== "0"
+  );
+  const [showPriceCol, setShowPriceCol] = useState<boolean>(() =>
+    localStorage.getItem("col_gia") !== "0"
+  );
+
+  const colTemplate = [
+    "96px",                          // Tài sản
+    "42px",                          // Loại
+    showQtyCol ? "50px" : null,      // SL
+    showPriceCol ? "64px" : null,    // Giá
+    "36px",                          // %
+    "1fr",                           // Tổng giá trị
+  ].filter(Boolean).join(" ");
 
   const handleImportSuccess = () => {
     queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
@@ -811,8 +826,27 @@ export default function Dashboard() {
                   )}
                 </button>
 
-                {!holdingsCollapsed && holdings.length > 1 && (
-                  <div className="flex items-center gap-2">
+                {!holdingsCollapsed && holdings.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {/* Column visibility toggles */}
+                    {[
+                      { label: "SL", active: showQtyCol, onToggle: () => { const v = !showQtyCol; setShowQtyCol(v); localStorage.setItem("col_sl", v ? "1" : "0"); } },
+                      { label: "Giá", active: showPriceCol, onToggle: () => { const v = !showPriceCol; setShowPriceCol(v); localStorage.setItem("col_gia", v ? "1" : "0"); } },
+                    ].map(({ label, active, onToggle }) => (
+                      <button
+                        key={label}
+                        onClick={onToggle}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${
+                          active
+                            ? "border-border text-muted-foreground hover:border-primary/40"
+                            : "border-dashed border-border/50 text-muted-foreground/40 line-through"
+                        }`}
+                        title={active ? `Ẩn cột ${label}` : `Hiện cột ${label}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+
                     {/* Type filter */}
                     {availableTypes.length > 1 && (
                       <Select value={filterType} onValueChange={(v) => setFilterType(v)}>
@@ -830,16 +864,18 @@ export default function Dashboard() {
                       </Select>
                     )}
                     {/* Sort */}
-                    <button
-                      onClick={cycleSortOrder}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${
-                        sortOrder !== "none"
-                          ? "border-primary/60 text-primary bg-primary/5"
-                          : "border-border text-muted-foreground hover:border-primary/40"
-                      }`}
-                    >
-                      {sortLabel}
-                    </button>
+                    {holdings.length > 1 && (
+                      <button
+                        onClick={cycleSortOrder}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${
+                          sortOrder !== "none"
+                            ? "border-primary/60 text-primary bg-primary/5"
+                            : "border-border text-muted-foreground hover:border-primary/40"
+                        }`}
+                      >
+                        {sortLabel}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -858,12 +894,12 @@ export default function Dashboard() {
                       {/* Header row */}
                       <div
                         className="grid gap-x-1 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
-                        style={{ gridTemplateColumns: "96px 42px 50px 64px 36px 1fr" }}
+                        style={{ gridTemplateColumns: colTemplate }}
                       >
                         <span>Tài sản</span>
                         <span className="text-center">Loại</span>
-                        <span className="text-right">SL</span>
-                        <span className="text-right">Giá</span>
+                        {showQtyCol && <span className="text-right">SL</span>}
+                        {showPriceCol && <span className="text-right">Giá</span>}
                         <span className="text-right">%</span>
                         <span className="text-right whitespace-nowrap">Tổng giá trị</span>
                       </div>
@@ -878,7 +914,7 @@ export default function Dashboard() {
                         <div
                           key={h.id}
                           className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
-                          style={{ gridTemplateColumns: "96px 42px 50px 64px 36px 1fr" }}
+                          style={{ gridTemplateColumns: colTemplate }}
                         >
                           {/* Tài sản + actions */}
                           <div className="overflow-hidden">
@@ -906,15 +942,19 @@ export default function Dashboard() {
                             {h.type === "stock" ? "CP" : h.type === "gold" ? "Vàng" : h.type}
                           </span>
 
-                          {/* Số lượng */}
-                          <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                            {h.quantity.toLocaleString("vi-VN")}
-                          </span>
+                          {/* Số lượng — ẩn/hiện */}
+                          {showQtyCol && (
+                            <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                              {h.quantity.toLocaleString("vi-VN")}
+                            </span>
+                          )}
 
-                          {/* Giá */}
-                          <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                            {formatVND(h.currentPrice)}
-                          </span>
+                          {/* Giá — ẩn/hiện */}
+                          {showPriceCol && (
+                            <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                              {formatVND(h.currentPrice)}
+                            </span>
+                          )}
 
                           {/* Tỷ trọng % so với tổng danh mục */}
                           <span className="text-[10px] text-right tabular-nums text-muted-foreground">
@@ -934,9 +974,12 @@ export default function Dashboard() {
                       {filteredHoldings.length > 0 && (
                         <div
                           className="grid gap-x-1 items-center pt-2.5 mt-0.5"
-                          style={{ gridTemplateColumns: "96px 42px 50px 64px 36px 1fr" }}
+                          style={{ gridTemplateColumns: colTemplate }}
                         >
-                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider col-span-5">
+                          <span
+                            className="text-[10px] text-muted-foreground uppercase tracking-wider"
+                            style={{ gridColumn: `1 / ${3 + (showQtyCol ? 1 : 0) + (showPriceCol ? 1 : 0) + 1}` }}
+                          >
                             {filterType === "all" ? "Tổng danh mục" : `Tổng ${filterType === "stock" ? "cổ phiếu" : filterType === "gold" ? "vàng" : filterType === "crypto" ? "crypto" : filterType}`}
                           </span>
                           <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
