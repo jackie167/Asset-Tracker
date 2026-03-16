@@ -233,7 +233,8 @@ function AddEditDialog({
               <Input
                 {...form.register("quantity")}
                 type="number"
-                step="0.000001"
+                step="any"
+                min="0"
                 placeholder="0"
               />
               {form.formState.errors.quantity && (
