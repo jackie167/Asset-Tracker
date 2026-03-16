@@ -66,7 +66,11 @@ router.put("/holdings/:id", async (req, res): Promise<void> => {
 
   const [holding] = await db
     .update(holdingsTable)
-    .set({ quantity: String(parsed.data.quantity), updatedAt: new Date() })
+    .set({
+      quantity: String(parsed.data.quantity),
+      manualPrice: parsed.data.manualPrice != null ? String(parsed.data.manualPrice) : null,
+      updatedAt: new Date(),
+    })
     .where(eq(holdingsTable.id, params.data.id))
     .returning();
 
@@ -116,6 +120,7 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
 
   let stockValue = 0;
   let goldValue = 0;
+  let otherValue = 0;
   let lastUpdatedDate: Date | null = null;
 
   if (latestPrices.length > 0) {
@@ -128,12 +133,14 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
     const qty = parseFloat(String(h.quantity));
     const sym = h.symbol.toUpperCase();
     const priceData = priceMap.get(sym);
-    const currentPrice = priceData?.price ?? null;
+    const manualUnitPrice = h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null;
+    const currentPrice = priceData?.price ?? manualUnitPrice;
     const currentValue = currentPrice != null ? qty * currentPrice : null;
 
     if (currentValue != null) {
       if (h.type === "stock") stockValue += currentValue;
-      else goldValue += currentValue;
+      else if (h.type === "gold") goldValue += currentValue;
+      else otherValue += currentValue;
     }
 
     return {
@@ -150,7 +157,7 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
 
   res.json(
     GetPortfolioSummaryResponse.parse({
-      totalValue: stockValue + goldValue,
+      totalValue: stockValue + goldValue + otherValue,
       stockValue,
       goldValue,
       lastUpdated: lastUpdatedDate,

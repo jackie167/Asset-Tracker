@@ -96,15 +96,31 @@ function AddEditDialog({
   const initialMode: TypeMode = initialData ? resolveMode(initialData.type) : "stock";
   const [typeMode, setTypeMode] = useState<TypeMode>(initialMode);
 
+  const initialTotalValue = initialData?.currentValue
+    ? String(Math.round(initialData.currentValue))
+    : "";
+  const [totalValueStr, setTotalValueStr] = useState(initialTotalValue);
+
   const form = useForm<HoldingForm>({
     resolver: zodResolver(holdingSchema),
     defaultValues: initialData
-      ? { type: initialData.type, symbol: initialData.symbol, quantity: initialData.quantity }
-      : { type: "stock", symbol: "", quantity: 0 },
+      ? { type: initialData.type, symbol: initialData.symbol, quantity: initialData.quantity, manualPrice: null }
+      : { type: "stock", symbol: "", quantity: 0, manualPrice: null },
   });
 
   const watchType = form.watch("type");
-  const handleSubmit = form.handleSubmit(onSubmit);
+  const watchQty = form.watch("quantity");
+
+  const handleSubmit = form.handleSubmit((data) => {
+    const raw = totalValueStr.replace(/\./g, "").replace(",", ".");
+    const totalVal = parseFloat(raw);
+    if (!isNaN(totalVal) && totalVal > 0 && data.quantity > 0) {
+      data.manualPrice = totalVal / data.quantity;
+    } else {
+      data.manualPrice = null;
+    }
+    onSubmit(data);
+  });
 
   const goldSymbols = [
     { value: "SJC_1L", label: "Vàng SJC 1 lượng" },
@@ -209,19 +225,39 @@ function AddEditDialog({
             </div>
           )}
 
-          <div>
-            <label className="text-sm text-muted-foreground mb-1 block">
-              {typeMode === "stock" ? "Số lượng cổ phiếu" : typeMode === "gold" ? "Số lượng (lượng/chỉ)" : "Số lượng"}
-            </label>
-            <Input
-              {...form.register("quantity")}
-              type="number"
-              step="0.000001"
-              placeholder="0"
-            />
-            {form.formState.errors.quantity && (
-              <p className="text-xs text-destructive mt-1">{form.formState.errors.quantity.message}</p>
-            )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">
+                {typeMode === "stock" ? "Số lượng CP" : typeMode === "gold" ? "Số lượng" : "Số lượng"}
+              </label>
+              <Input
+                {...form.register("quantity")}
+                type="number"
+                step="0.000001"
+                placeholder="0"
+              />
+              {form.formState.errors.quantity && (
+                <p className="text-xs text-destructive mt-1">{form.formState.errors.quantity.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">
+                Giá trị tổng (₫)
+                {watchQty > 0 && totalValueStr && (
+                  <span className="ml-1 text-xs text-primary/70">
+                    = {formatVND(parseFloat(totalValueStr.replace(/\./g, "").replace(",", ".")) / watchQty)}/đv
+                  </span>
+                )}
+              </label>
+              <Input
+                value={totalValueStr}
+                onChange={(e) => setTotalValueStr(e.target.value)}
+                type="number"
+                step="1000"
+                placeholder="Tuỳ chọn"
+              />
+            </div>
           </div>
 
           <DialogFooter className="gap-2">
