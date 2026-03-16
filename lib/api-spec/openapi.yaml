@@ -271,12 +271,15 @@ components:
     UpdateHoldingBody:
       type: object
       properties:
+        type:
+          type: string
         quantity:
           type: number
         manualPrice:
           type: number
           nullable: true
       required:
+        - type
         - quantity
 
     Price:

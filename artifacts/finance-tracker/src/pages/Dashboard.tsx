@@ -195,15 +195,21 @@ function AddEditDialog({
     if (value === "stock") {
       setTypeMode("stock");
       form.setValue("type", "stock");
-      form.setValue("symbol", "");
+      if (!isEditing) form.setValue("symbol", "");
     } else if (value === "gold") {
       setTypeMode("gold");
       form.setValue("type", "gold");
-      form.setValue("symbol", "SJC_1L");
+      // In edit mode, only change symbol if it's not already a gold symbol
+      const curSym = form.getValues("symbol");
+      if (!isEditing) {
+        form.setValue("symbol", "SJC_1L");
+      } else if (!["SJC_1L", "SJC_1C"].includes(curSym)) {
+        form.setValue("symbol", "SJC_1L");
+      }
     } else {
       setTypeMode("other");
       form.setValue("type", value);
-      form.setValue("symbol", "");
+      if (!isEditing) form.setValue("symbol", "");
     }
   };
 
@@ -248,7 +254,7 @@ function AddEditDialog({
           {/* Loại tài sản — Select dropdown */}
           <div>
             <label className="text-sm text-muted-foreground mb-1.5 block">Loại tài sản</label>
-            <Select value={selectValue} onValueChange={handleTypeSelect} disabled={isEditing}>
+            <Select value={selectValue} onValueChange={handleTypeSelect}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Chọn loại tài sản..." />
               </SelectTrigger>
@@ -267,6 +273,36 @@ function AddEditDialog({
               </SelectContent>
             </Select>
 
+            {/* Custom types management — chips with delete button (Add mode only) */}
+            {!isEditing && customTypes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {customTypes.map((t) => (
+                  <span
+                    key={t}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border"
+                  >
+                    {typeLabel2(t)}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = customTypes.filter((x) => x !== t);
+                        setCustomTypes(updated);
+                        saveCustomTypes(updated);
+                        // If currently selected type is deleted, reset to stock
+                        if (form.getValues("type") === t) {
+                          handleTypeSelect("stock");
+                        }
+                      }}
+                      className="text-destructive hover:text-destructive/80 font-bold leading-none ml-0.5"
+                      title={`Xóa loại "${t}"`}
+                    >
+                      −
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             {/* Inline input for new type */}
             {showNewInput && (
               <div className="flex gap-2 mt-2">
@@ -274,7 +310,7 @@ function AddEditDialog({
                   ref={newTypeInputRef}
                   value={newTypeName}
                   onChange={(e) => setNewTypeName(e.target.value)}
-                  placeholder="VD: Crypto, Bất động sản, Trái phiếu..."
+                  placeholder="VD: Bất động sản, Trái phiếu..."
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleConfirmNewType(); } }}
                   className="flex-1"
                 />
@@ -314,7 +350,6 @@ function AddEditDialog({
                   <button
                     key={gs.value}
                     type="button"
-                    disabled={isEditing}
                     onClick={() => form.setValue("symbol", gs.value)}
                     className={`py-2 px-3 rounded-md text-sm font-medium border transition-colors text-left ${watchSymbol === gs.value ? "bg-primary/10 border-primary text-foreground" : "border-border text-muted-foreground hover:border-primary/50"}`}
                   >
@@ -622,7 +657,7 @@ export default function Dashboard() {
   const handleEdit = (data: HoldingForm) => {
     if (!editItem) return;
     updateHolding.mutate(
-      { id: editItem.id, data: { quantity: data.quantity, manualPrice: data.manualPrice ?? null } },
+      { id: editItem.id, data: { type: data.type, quantity: data.quantity, manualPrice: data.manualPrice ?? null } },
       { onSuccess: () => setEditItem(null) }
     );
   };

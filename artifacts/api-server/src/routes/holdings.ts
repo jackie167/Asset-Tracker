@@ -68,6 +68,7 @@ router.put("/holdings/:id", async (req, res): Promise<void> => {
   const [holding] = await db
     .update(holdingsTable)
     .set({
+      type: parsed.data.type,
       quantity: String(parsed.data.quantity),
       manualPrice: parsed.data.manualPrice != null ? String(parsed.data.manualPrice) : null,
       updatedAt: new Date(),

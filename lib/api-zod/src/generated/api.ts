@@ -71,6 +71,7 @@ export const UpdateHoldingParams = zod.object({
 });
 
 export const UpdateHoldingBody = zod.object({
+  type: zod.string(),
   quantity: zod.number(),
   manualPrice: zod.number().nullish(),
 });

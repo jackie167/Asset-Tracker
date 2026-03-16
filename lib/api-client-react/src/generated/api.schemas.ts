@@ -31,6 +31,7 @@ export interface CreateHoldingBody {
 }
 
 export interface UpdateHoldingBody {
+  type: string;
   quantity: number;
   manualPrice?: number | null;
 }
