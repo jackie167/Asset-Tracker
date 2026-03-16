@@ -435,7 +435,10 @@ export default function Dashboard() {
 
   const handleEdit = (data: HoldingForm) => {
     if (!editItem) return;
-    updateHolding.mutate({ id: editItem.id, data: { quantity: data.quantity } }, { onSuccess: () => setEditItem(null) });
+    updateHolding.mutate(
+      { id: editItem.id, data: { quantity: data.quantity, manualPrice: data.manualPrice ?? null } },
+      { onSuccess: () => setEditItem(null) }
+    );
   };
 
   const handleDelete = (id: number) => {
