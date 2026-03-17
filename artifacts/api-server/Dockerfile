@@ -4,9 +4,6 @@ WORKDIR /app
 
 COPY . .
 
-RUN corepack enable
-RUN corepack prepare pnpm@latest --activate
+RUN npm install
 
-RUN pnpm install
-
-CMD ["pnpm", "start"]
+CMD ["npm", "start"]
