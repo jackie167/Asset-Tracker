@@ -46,8 +46,49 @@ function inferType(symbol: string): string {
 function parseVNNumber(v: string | number | undefined | null): number | undefined {
   if (v == null || v === "") return undefined;
   if (typeof v === "number") return isNaN(v) ? undefined : v;
-  const cleaned = String(v).replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-  const n = parseFloat(cleaned);
+  const s = String(v).trim().replace(/\s/g, "");
+  if (!s) return undefined;
+
+  // Both dot and comma present → dot=thousand sep, comma=decimal (e.g. "1.000,50")
+  if (s.includes(",") && s.includes(".")) {
+    const n = parseFloat(s.replace(/\./g, "").replace(",", "."));
+    return isNaN(n) ? undefined : n;
+  }
+
+  // Only comma (no dot) → comma is decimal separator (e.g. "0,091" VN style)
+  if (s.includes(",")) {
+    const n = parseFloat(s.replace(",", "."));
+    return isNaN(n) ? undefined : n;
+  }
+
+  // Only dot(s):
+  if (s.includes(".")) {
+    const parts = s.split(".");
+    const dotCount = parts.length - 1;
+
+    // Multiple dots → all are thousand separators (e.g. "1.000.000")
+    if (dotCount > 1) {
+      const n = parseFloat(parts.join(""));
+      return isNaN(n) ? undefined : n;
+    }
+
+    // Single dot: check if it's a thousand separator or decimal point
+    const afterDot = parts[1];
+    const beforeDot = parts[0];
+    // Thousand separator: non-zero integer part + exactly 3 digits after dot (e.g. "1.000", "83.700")
+    // Decimal: starts with "0" (e.g. "0.091"), or afterDot ≠ 3 digits
+    if (beforeDot !== "0" && afterDot.length === 3) {
+      // Likely VN thousand separator (e.g. "83.700" = 83700)
+      const n = parseFloat(beforeDot + afterDot);
+      return isNaN(n) ? undefined : n;
+    }
+
+    // Otherwise treat as decimal (e.g. "0.0913", "3.9", "1.5")
+    return parseFloat(s);
+  }
+
+  // No dot, no comma → plain integer
+  const n = parseFloat(s);
   return isNaN(n) ? undefined : n;
 }
 
