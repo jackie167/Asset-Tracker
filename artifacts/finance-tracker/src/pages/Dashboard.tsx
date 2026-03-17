@@ -604,12 +604,12 @@ export default function Dashboard() {
 
   const handleExportCSV = () => {
     if (!holdings.length) return;
-    const header = ["symbol", "type", "quantity", "manualPrice"];
+    const header = ["symbol", "type", "quantity", "current_price"];
     const rows = holdings.map((h) => [
       h.symbol,
       h.type,
       h.quantity,
-      h.manualPrice ?? "",
+      h.currentPrice ?? "",
     ]);
     const csv = [header, ...rows]
       .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
