@@ -548,7 +548,7 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
               <YAxis hide />
               <Tooltip
                 formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
-                  `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
+                  `${formatVND(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
                   props.payload?.name ?? "",
                 ]}
                 contentStyle={{
@@ -574,34 +574,36 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
         );
       })()}
 
-      {/* Table — same order as bars */}
-      <div
-        className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
-        style={{ gridTemplateColumns: "1fr 52px 1fr" }}
-      >
-        <span>Loại tài sản</span>
-        <span className="text-center">Tỷ lệ</span>
-        <span className="text-right">Giá trị</span>
+      {/* Table — compact, centered */}
+      <div className="flex justify-center mt-1">
+      <table style={{ borderCollapse: "collapse", display: "inline-table" }}>
+        <thead>
+          <tr className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            <th className="py-1.5 pr-6 text-left font-normal border-b border-border">Loại tài sản</th>
+            <th className="py-1.5 px-4 text-center font-normal border-b border-border">Tỷ lệ</th>
+            <th className="py-1.5 pl-6 text-right font-normal border-b border-border">Giá trị</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((entry, idx) => (
+            <tr key={entry.type} className={idx < data.length - 1 ? "border-b border-border" : ""}>
+              <td className="py-2.5 pr-6">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
+                  <span className="text-sm font-medium whitespace-nowrap">{entry.name}</span>
+                </div>
+              </td>
+              <td className="py-2.5 px-4 text-[11px] text-center tabular-nums font-medium">
+                {entry.pct.toFixed(1)}%
+              </td>
+              <td className="py-2.5 pl-6 text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
+                {formatVND(entry.value)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       </div>
-
-      {data.map((entry) => (
-        <div
-          key={entry.type}
-          className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
-          style={{ gridTemplateColumns: "1fr 52px 1fr" }}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
-            <span className="text-sm font-medium truncate">{entry.name}</span>
-          </div>
-          <span className="text-[11px] text-center tabular-nums font-medium">
-            {entry.pct.toFixed(1)}%
-          </span>
-          <span className="text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
-            {formatVNDFull(entry.value)}
-          </span>
-        </div>
-      ))}
     </Card>
   );
 }
