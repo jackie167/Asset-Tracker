@@ -390,21 +390,15 @@ function AddEditDialog({
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Số lượng</label>
               <Input
-                {...form.register("quantity")}
+                {...form.register("quantity", { valueAsNumber: true })}
                 type="number"
                 step="any"
                 min="0"
                 placeholder="Nhập số lượng"
                 onFocus={(e) => {
-                  if (parseFloat(e.target.value) === 0) e.target.value = "";
-                }}
-                onBlur={(e) => {
-                  if (e.target.value === "") form.setValue("quantity", 0);
-                }}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/^0+(?=\d)/, "");
-                  e.target.value = raw;
-                  form.setValue("quantity", raw === "" ? 0 : parseFloat(raw), { shouldValidate: true });
+                  if (e.target.value === "0") {
+                    e.target.value = "";
+                  }
                 }}
               />
               {form.formState.errors.quantity && (
