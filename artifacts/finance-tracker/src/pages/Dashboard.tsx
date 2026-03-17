@@ -162,6 +162,15 @@ function AddEditDialog({
       : { type: "stock", symbol: "", quantity: 0, manualPrice: null },
   });
 
+  // Reset form mỗi khi dialog Thêm mới được mở (không áp dụng cho Edit)
+  useEffect(() => {
+    if (open && !initialData) {
+      form.reset({ type: "stock", symbol: "", quantity: 0, manualPrice: null });
+      setTotalValueStr("");
+      setTypeMode("stock");
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const watchQty = form.watch("quantity");
   const watchSymbol = form.watch("symbol");
 
@@ -368,6 +377,8 @@ function AddEditDialog({
                 {...form.register("symbol")}
                 placeholder="VD: BTC, ETH, Căn hộ Q7..."
                 disabled={isEditing}
+                className="uppercase"
+                onChange={(e) => form.setValue("symbol", e.target.value.toUpperCase())}
               />
               {form.formState.errors.symbol && (
                 <p className="text-xs text-destructive mt-1">{form.formState.errors.symbol.message}</p>
@@ -383,7 +394,18 @@ function AddEditDialog({
                 type="number"
                 step="any"
                 min="0"
-                placeholder="0"
+                placeholder="Nhập số lượng"
+                onFocus={(e) => {
+                  if (parseFloat(e.target.value) === 0) e.target.value = "";
+                }}
+                onBlur={(e) => {
+                  if (e.target.value === "") form.setValue("quantity", 0);
+                }}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/^0+(?=\d)/, "");
+                  e.target.value = raw;
+                  form.setValue("quantity", raw === "" ? 0 : parseFloat(raw), { shouldValidate: true });
+                }}
               />
               {form.formState.errors.quantity && (
                 <p className="text-xs text-destructive mt-1">{form.formState.errors.quantity.message}</p>
