@@ -524,43 +524,55 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
         </div>
       </div>
 
-      {/* Bar chart */}
-      <div style={{ height: 160 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 18, right: 4, left: 4, bottom: 0 }} barCategoryGap="28%">
-            <XAxis
-              dataKey="name"
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis hide />
-            <Tooltip
-              formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
-                `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
-                props.payload?.name ?? "",
-              ]}
-              contentStyle={{
-                background: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-            />
-            <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-              <LabelList
-                dataKey="pct"
-                position="top"
-                style={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
-                formatter={(v: number) => `${v.toFixed(1)}%`}
+      {/* Bar chart — fixed width per bar, centered */}
+      {(() => {
+        const BAR_W = 48;
+        const BAR_GAP = 28;
+        const chartW = data.length * (BAR_W + BAR_GAP) + 40;
+        return (
+          <div style={{ height: 160 }} className="flex justify-center overflow-x-auto">
+            <BarChart
+              width={chartW}
+              height={160}
+              data={data}
+              barSize={BAR_W}
+              barCategoryGap={BAR_GAP}
+              margin={{ top: 18, right: 20, left: 20, bottom: 0 }}
+            >
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                axisLine={false}
+                tickLine={false}
               />
-              {data.map((entry, i) => (
-                <Cell key={i} fill={entry.color} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+              <YAxis hide />
+              <Tooltip
+                formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
+                  `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
+                  props.payload?.name ?? "",
+                ]}
+                contentStyle={{
+                  background: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+              />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                <LabelList
+                  dataKey="pct"
+                  position="top"
+                  style={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                  formatter={(v: number) => `${v.toFixed(1)}%`}
+                />
+                {data.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </div>
+        );
+      })()}
 
       {/* Table — same order as bars */}
       <div
