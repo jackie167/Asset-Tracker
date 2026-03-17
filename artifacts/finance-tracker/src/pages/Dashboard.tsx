@@ -5,14 +5,15 @@ import { format } from "date-fns";
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  LabelList,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
 import { usePortfolioData, usePortfolioMutations } from "@/hooks/use-portfolio";
 import ImportDialog from "@/components/ImportDialog";
@@ -472,67 +473,68 @@ function typeLabel(type: string) {
 }
 
 function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; totalValue: number }) {
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+
   const data = useMemo(() => {
     const typeMap = new Map<string, number>();
     for (const h of (holdings ?? [])) {
       if (h.currentValue == null || h.currentValue <= 0) continue;
-      const t = h.type.toLowerCase(); // normalize case to avoid duplicates
+      const t = h.type.toLowerCase();
       typeMap.set(t, (typeMap.get(t) ?? 0) + h.currentValue);
     }
-    const entries = Array.from(typeMap.entries()).sort(([a], [b]) => {
-      if (a === "stock") return -1; if (b === "stock") return 1;
-      if (a === "gold") return -1; if (b === "gold") return 1;
-      return a.localeCompare(b);
-    });
-    return entries.map(([type, value]) => ({
-      type,                          // raw normalized key
+    const entries = Array.from(typeMap.entries());
+    entries.sort(([, a], [, b]) => sortDir === "desc" ? b - a : a - b);
+    return entries.map(([type, value], i) => ({
+      type,
       name: typeLabel(type),
       value,
       pct: totalValue > 0 ? (value / totalValue) * 100 : 0,
+      color: PIE_COLORS[i % PIE_COLORS.length],
     }));
-  }, [holdings, totalValue]);
+  }, [holdings, totalValue, sortDir]);
 
   if (data.length === 0) return null;
 
-  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, index }: {
-    cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; index: number;
-  }) => {
-    if (data[index].pct < 5) return null;
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-    return (
-      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={600}>
-        {data[index].pct.toFixed(1)}%
-      </text>
-    );
-  };
-
   return (
     <Card className="p-4">
-      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">Phân bổ tài sản</p>
+      {/* Header + sort buttons */}
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs text-muted-foreground uppercase tracking-widest">Phân bổ tài sản</p>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setSortDir("desc")}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+              sortDir === "desc"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border text-muted-foreground hover:border-primary/50"
+            }`}
+          >
+            Cao → Thấp
+          </button>
+          <button
+            onClick={() => setSortDir("asc")}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+              sortDir === "asc"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border text-muted-foreground hover:border-primary/50"
+            }`}
+          >
+            Thấp → Cao
+          </button>
+        </div>
+      </div>
 
-      {/* Pie chart */}
+      {/* Bar chart */}
       <div style={{ height: 160 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={44}
-              outerRadius={72}
-              paddingAngle={2}
-              dataKey="value"
-              labelLine={false}
-              label={renderCustomLabel}
-              isAnimationActive={false}
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
-              ))}
-            </Pie>
+          <BarChart data={data} margin={{ top: 18, right: 4, left: 4, bottom: 0 }} barCategoryGap="28%">
+            <XAxis
+              dataKey="name"
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis hide />
             <Tooltip
               formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
                 `${formatVNDFull(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
@@ -545,11 +547,22 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
                 fontSize: 12,
               }}
             />
-          </PieChart>
+            <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+              <LabelList
+                dataKey="pct"
+                position="top"
+                style={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                formatter={(v: number) => `${v.toFixed(1)}%`}
+              />
+              {data.map((entry, i) => (
+                <Cell key={i} fill={entry.color} />
+              ))}
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Table below pie */}
+      {/* Table — same order as bars */}
       <div
         className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
         style={{ gridTemplateColumns: "1fr 52px 1fr" }}
@@ -559,17 +572,14 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
         <span className="text-right">Giá trị</span>
       </div>
 
-      {data.map((entry, i) => (
+      {data.map((entry) => (
         <div
           key={entry.type}
           className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
           style={{ gridTemplateColumns: "1fr 52px 1fr" }}
         >
           <div className="flex items-center gap-2 min-w-0">
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
-            />
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
             <span className="text-sm font-medium truncate">{entry.name}</span>
           </div>
           <span className="text-[11px] text-center tabular-nums font-medium">
