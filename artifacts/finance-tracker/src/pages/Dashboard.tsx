@@ -604,13 +604,14 @@ export default function Dashboard() {
 
   const handleExportCSV = () => {
     if (!holdings.length) return;
+    const fmtNum = (v: number) => v.toLocaleString("vi-VN");
     const header = ["symbol", "type", "quantity", "current_price", "total_value"];
     const rows = holdings.map((h) => [
       h.symbol,
       h.type,
-      h.quantity,
-      h.currentPrice ?? "",
-      h.currentValue ?? "",
+      h.quantity != null ? fmtNum(h.quantity) : "",
+      h.currentPrice != null ? fmtNum(h.currentPrice) : "",
+      h.currentValue != null ? fmtNum(Math.round(h.currentValue)) : "",
     ]);
     const csv = [header, ...rows]
       .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
