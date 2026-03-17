@@ -118,19 +118,24 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
     }
 
     const { symbol, type, quantity, totalValue } = normalized;
-    const manualPrice = totalValue != null ? String(totalValue / quantity) : null;
 
     try {
       const existing = bySymbol.get(symbol);
 
       if (existing) {
-        // REPLACE quantity; update manualPrice only if total_value was provided
+        // Only update manualPrice if this holding ALREADY uses manual price
+        // (prevents export→import from overwriting online-priced assets)
+        const isManualAsset = existing.manualPrice != null;
+        const newManualPrice = (isManualAsset && totalValue != null)
+          ? String(totalValue / quantity)
+          : undefined;
+
         const updateData: Partial<typeof holdingsTable.$inferInsert> & { updatedAt: Date } = {
           quantity: String(quantity),
           updatedAt: new Date(),
         };
-        if (totalValue != null) {
-          updateData.manualPrice = manualPrice;
+        if (newManualPrice !== undefined) {
+          updateData.manualPrice = newManualPrice;
         }
 
         const [updated] = await db
@@ -139,10 +144,15 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
           .where(eq(holdingsTable.id, existing.id))
           .returning();
         imported.push(updated);
-        console.log(`[Import] Updated ${existing.type} ${symbol}: qty=${quantity}${totalValue != null ? ` totalValue=${totalValue}` : ""}`);
+        console.log(`[Import] Updated ${existing.type} ${symbol}: qty=${quantity}${newManualPrice !== undefined ? ` manualPrice=${newManualPrice}` : ""}`);
       } else {
-        // New holding — need a type; use provided or infer
+        // New holding — use provided type or infer; set manualPrice only for custom (non-online) types
         const resolvedType = type || inferType(symbol);
+        const ONLINE_TYPES = ["stock", "gold", "crypto"];
+        const isOnlineType = ONLINE_TYPES.includes(resolvedType);
+        const newManualPrice = (!isOnlineType && totalValue != null)
+          ? String(totalValue / quantity)
+          : null;
 
         const [created] = await db
           .insert(holdingsTable)
@@ -150,11 +160,11 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
             type: resolvedType,
             symbol,
             quantity: String(quantity),
-            manualPrice: totalValue != null ? manualPrice : null,
+            manualPrice: newManualPrice,
           })
           .returning();
         imported.push(created);
-        console.log(`[Import] Created ${resolvedType} ${symbol}: qty=${quantity}${totalValue != null ? ` totalValue=${totalValue}` : ""}`);
+        console.log(`[Import] Created ${resolvedType} ${symbol}: qty=${quantity}${newManualPrice ? ` manualPrice=${newManualPrice}` : ""}`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -170,7 +180,11 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
       imported: imported.length,
       skipped,
       errors,
-      holdings: imported.map((h) => ({ ...h, quantity: parseFloat(String(h.quantity)) })),
+      holdings: imported.map((h) => ({
+        ...h,
+        quantity: parseFloat(String(h.quantity)),
+        manualPrice: h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null,
+      })),
     })
   );
 });
