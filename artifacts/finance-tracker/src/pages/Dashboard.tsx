@@ -111,8 +111,8 @@ function AddEditDialog({
 
   const BUILTIN_TYPES = ["stock", "gold", "crypto"];
 
-  const [customTypes, setCustomTypes] = useState<string[]>(() => {
-    // Derive from DB-backed holdings (cross-device) + current edit item type
+  // Base custom types from DB (reactive — updates when allHoldings loads/changes)
+  const baseCustomTypes = useMemo(() => {
     const fromHoldings = allHoldings
       .map((h) => h.type.toLowerCase())
       .filter((t) => !BUILTIN_TYPES.includes(t));
@@ -121,7 +121,25 @@ function AddEditDialog({
         ? [initialData.type.toLowerCase()]
         : [];
     return [...new Set([...fromHoldings, ...fromEdit])];
-  });
+  }, [allHoldings, initialData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Types added in this session (not yet saved to DB)
+  const [extraTypes, setExtraTypes] = useState<string[]>([]);
+
+  // Combined final list
+  const customTypes = useMemo(
+    () => [...new Set([...baseCustomTypes, ...extraTypes])],
+    [baseCustomTypes, extraTypes]
+  );
+
+  const setCustomTypes = (updater: string[] | ((prev: string[]) => string[])) => {
+    // Only manage the extra (session) types; base comes from DB
+    setExtraTypes((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      // Remove any that already exist in baseCustomTypes (no need to duplicate)
+      return next.filter((t) => !baseCustomTypes.includes(t));
+    });
+  };
 
   const [showNewInput, setShowNewInput] = useState(false);
   const [newTypeName, setNewTypeName] = useState("");
@@ -278,13 +296,12 @@ function AddEditDialog({
                   >
                     {typeLabel2(t)}
                   </button>
-                  {/* Delete button — chỉ hiện ở Add mode */}
-                  {!isEditing && (
+                  {/* Delete button — chỉ hiện cho loại mới thêm trong session, không phải từ DB */}
+                  {!isEditing && extraTypes.includes(t) && (
                     <button
                       type="button"
                       onClick={() => {
-                        const updated = customTypes.filter((x) => x !== t);
-                        setCustomTypes(updated);
+                        setExtraTypes((prev) => prev.filter((x) => x !== t));
                         if (form.getValues("type") === t) handleTypeSelect("stock");
                       }}
                       className={`px-1.5 py-1.5 rounded-r-md text-sm border-y border-r transition-colors text-destructive hover:bg-destructive/10 ${
