@@ -83,19 +83,6 @@ const PIE_COLORS = [
   "hsl(0, 72%, 60%)",
 ];
 
-const CUSTOM_TYPES_KEY = "custom_asset_types";
-
-function loadCustomTypes(): string[] {
-  try {
-    const raw = localStorage.getItem(CUSTOM_TYPES_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-function saveCustomTypes(types: string[]): void {
-  localStorage.setItem(CUSTOM_TYPES_KEY, JSON.stringify(types));
-}
-
 type TypeMode = "stock" | "gold" | "other";
 
 function resolveMode(type: string): TypeMode {
@@ -125,21 +112,15 @@ function AddEditDialog({
   const BUILTIN_TYPES = ["stock", "gold", "crypto"];
 
   const [customTypes, setCustomTypes] = useState<string[]>(() => {
-    const stored = loadCustomTypes().map((t) => t.toLowerCase());
-    // Collect custom types from existing holdings (exclude all built-ins)
+    // Derive from DB-backed holdings (cross-device) + current edit item type
     const fromHoldings = allHoldings
       .map((h) => h.type.toLowerCase())
       .filter((t) => !BUILTIN_TYPES.includes(t));
-    // Also include current editItem type if it's truly custom
     const fromEdit =
       initialData && !BUILTIN_TYPES.includes(initialData.type.toLowerCase())
         ? [initialData.type.toLowerCase()]
         : [];
-    // Merge all sources, exclude built-ins, deduplicate with Set
-    const merged = [...new Set([...stored, ...fromHoldings, ...fromEdit])]
-      .filter((t) => !BUILTIN_TYPES.includes(t));
-    saveCustomTypes(merged);
-    return merged;
+    return [...new Set([...fromHoldings, ...fromEdit])];
   });
 
   const [showNewInput, setShowNewInput] = useState(false);
@@ -237,7 +218,6 @@ function AddEditDialog({
     const finalType = existing ?? trimmed;
     const updated = existing ? customTypes : [...customTypes, trimmed];
     setCustomTypes(updated);
-    saveCustomTypes(updated);
     setTypeMode("other");
     form.setValue("type", finalType);
     form.setValue("symbol", "");
@@ -305,7 +285,6 @@ function AddEditDialog({
                       onClick={() => {
                         const updated = customTypes.filter((x) => x !== t);
                         setCustomTypes(updated);
-                        saveCustomTypes(updated);
                         if (form.getValues("type") === t) handleTypeSelect("stock");
                       }}
                       className={`px-1.5 py-1.5 rounded-r-md text-sm border-y border-r transition-colors text-destructive hover:bg-destructive/10 ${
