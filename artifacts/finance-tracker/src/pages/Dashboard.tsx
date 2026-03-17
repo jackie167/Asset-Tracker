@@ -260,57 +260,76 @@ function AddEditDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
 
-          {/* Loại tài sản — Select dropdown */}
+          {/* Loại tài sản — button group (tương thích mọi thiết bị) */}
           <div>
             <label className="text-sm text-muted-foreground mb-1.5 block">Loại tài sản</label>
-            <Select value={selectValue} onValueChange={handleTypeSelect}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Chọn loại tài sản..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="stock">📈 Cổ phiếu</SelectItem>
-                <SelectItem value="gold">🥇 Vàng</SelectItem>
-                <SelectItem value="crypto">🪙 Crypto</SelectItem>
-                {customTypes.filter((t) => t !== "crypto").map((t) => (
-                  <SelectItem key={t} value={t}>{typeLabel2(t)}</SelectItem>
-                ))}
-                {!isEditing && (
-                  <SelectItem value="__add_new__" className="text-primary">
-                    ➕ Thêm loại mới...
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-1.5">
+              {/* Built-in types */}
+              {[
+                { value: "stock", label: "📈 Cổ phiếu" },
+                { value: "gold",  label: "🥇 Vàng" },
+                { value: "crypto", label: "🪙 Crypto" },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => handleTypeSelect(value)}
+                  className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
+                    selectValue === value
+                      ? "bg-primary/10 border-primary text-foreground font-medium"
+                      : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
 
-            {/* Custom types management — chips with delete button (Add mode only) */}
-            {!isEditing && customTypes.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {customTypes.map((t) => (
-                  <span
-                    key={t}
-                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border"
+              {/* Custom type buttons */}
+              {customTypes.filter((t) => t !== "crypto").map((t) => (
+                <span key={t} className="inline-flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => handleTypeSelect(t)}
+                    className={`px-3 py-1.5 rounded-l-md text-sm border-y border-l transition-colors ${
+                      selectValue === t
+                        ? "bg-primary/10 border-primary text-foreground font-medium"
+                        : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                    }`}
                   >
                     {typeLabel2(t)}
+                  </button>
+                  {/* Delete button — chỉ hiện ở Add mode */}
+                  {!isEditing && (
                     <button
                       type="button"
                       onClick={() => {
                         const updated = customTypes.filter((x) => x !== t);
                         setCustomTypes(updated);
                         saveCustomTypes(updated);
-                        // If currently selected type is deleted, reset to stock
-                        if (form.getValues("type") === t) {
-                          handleTypeSelect("stock");
-                        }
+                        if (form.getValues("type") === t) handleTypeSelect("stock");
                       }}
-                      className="text-destructive hover:text-destructive/80 font-bold leading-none ml-0.5"
+                      className={`px-1.5 py-1.5 rounded-r-md text-sm border-y border-r transition-colors text-destructive hover:bg-destructive/10 ${
+                        selectValue === t ? "border-primary" : "border-border"
+                      }`}
                       title={`Xóa loại "${t}"`}
                     >
-                      −
+                      ×
                     </button>
-                  </span>
-                ))}
-              </div>
-            )}
+                  )}
+                </span>
+              ))}
+
+              {/* Thêm loại mới — chỉ hiện ở Add mode */}
+              {!isEditing && !showNewInput && (
+                <button
+                  type="button"
+                  onClick={() => setShowNewInput(true)}
+                  className="px-3 py-1.5 rounded-md text-sm border border-dashed border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                >
+                  + Thêm
+                </button>
+              )}
+            </div>
 
             {/* Inline input for new type */}
             {showNewInput && (
