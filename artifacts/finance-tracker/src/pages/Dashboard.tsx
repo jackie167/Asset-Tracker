@@ -797,29 +797,6 @@ export default function Dashboard() {
             <Card className="p-4 space-y-3">
               <p className="text-xs text-muted-foreground uppercase tracking-widest">Tổng tài sản</p>
               <p className="text-3xl font-bold tracking-tight">{formatVNDFull(totalValue)}</p>
-              {(() => {
-                const typeMap = new Map<string, number>();
-                for (const h of holdings) {
-                  if (h.currentValue == null || h.currentValue <= 0) continue;
-                  typeMap.set(h.type, (typeMap.get(h.type) ?? 0) + h.currentValue);
-                }
-                const entries = Array.from(typeMap.entries()).sort(([a], [b]) => {
-                  if (a === "stock") return -1; if (b === "stock") return 1;
-                  if (a === "gold") return -1; if (b === "gold") return 1;
-                  return a.localeCompare(b);
-                });
-                if (entries.length === 0) return null;
-                return (
-                  <div className="flex gap-4 pt-1 flex-wrap">
-                    {entries.map(([type, value]) => (
-                      <div key={type}>
-                        <p className="text-xs text-muted-foreground">{typeLabel(type)}</p>
-                        <p className="text-sm font-medium">{formatVND(value)}</p>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
             </Card>
 
             {totalValue > 0 && (
