@@ -9,4 +9,6 @@ RUN corepack prepare pnpm@latest --activate
 
 RUN pnpm install
 
+WORKDIR /app/api-server
+
 CMD ["pnpm", "dev"]
