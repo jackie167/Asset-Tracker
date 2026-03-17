@@ -54,6 +54,7 @@ const COINGECKO_ID_MAP: Record<string, string> = {
   ICP: "internet-computer",
   GRT: "the-graph",
   AAVE: "aave",
+  PAXG: "pax-gold",
 };
 
 async function fetchCryptoPricesCoinGecko(symbols: string[]): Promise<PriceData[]> {
