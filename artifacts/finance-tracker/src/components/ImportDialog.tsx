@@ -22,11 +22,11 @@ interface ImportDialogProps {
 
 function downloadTemplate() {
   const csv = [
-    "type,symbol,quantity",
-    "stock,VNM,1000",
-    "stock,HPG,500",
-    "gold,SJC_1L,2",
-    "gold,SJC_1C,5",
+    "symbol,quantity,total_value",
+    "HPG,5400,",
+    "SJC_1L,10.8,",
+    "BTC,0.091,",
+    "VESAF,1000,15000000",
   ].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -110,17 +110,31 @@ export default function ImportDialog({ open, onClose, onSuccess }: ImportDialogP
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
-          <div className="rounded-md bg-muted/40 border border-border p-3 text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">Định dạng file hỗ trợ: CSV, XLS, XLSX</p>
-            <p>File cần có 3 cột: <code className="bg-muted px-1 rounded">type</code>, <code className="bg-muted px-1 rounded">symbol</code>, <code className="bg-muted px-1 rounded">quantity</code></p>
-            <ul className="mt-1 space-y-0.5 pl-3 list-disc">
-              <li><code className="bg-muted px-1 rounded">type</code>: <code>stock</code> hoặc <code>gold</code></li>
-              <li><code className="bg-muted px-1 rounded">symbol</code>: Mã cổ phiếu (VNM, HPG...) hoặc SJC_1L / SJC_1C</li>
-              <li><code className="bg-muted px-1 rounded">quantity</code>: Số lượng (số dương)</li>
+          <div className="rounded-md bg-muted/40 border border-border p-3 text-xs text-muted-foreground space-y-1.5">
+            <p className="font-medium text-foreground">Định dạng file: CSV, XLS, XLSX</p>
+            <p>File cần có các cột sau:</p>
+            <ul className="space-y-1 pl-3 list-disc">
+              <li>
+                <code className="bg-muted px-1 rounded">symbol</code>
+                {" "}— mã tài sản (HPG, SJC_1L, BTC...)
+              </li>
+              <li>
+                <code className="bg-muted px-1 rounded">quantity</code>
+                {" "}— số lượng <span className="text-foreground font-medium">(bắt buộc, thay thế số lượng hiện tại)</span>
+              </li>
+              <li>
+                <code className="bg-muted px-1 rounded">total_value</code>
+                {" "}— giá trị tổng bằng VND, <span className="italic">để trống nếu tài sản đã có giá online</span>
+              </li>
             </ul>
+            <div className="pt-0.5 space-y-0.5 text-[10px]">
+              <p>• Tài sản đã có trên app → cập nhật số lượng (và giá trị nếu có)</p>
+              <p>• Tài sản chưa có → tạo mới với loại được tự nhận diện</p>
+              <p>• File export có thể dùng lại để import</p>
+            </div>
             <button
               onClick={downloadTemplate}
-              className="mt-2 text-primary hover:underline font-medium inline-flex items-center gap-1"
+              className="mt-1 text-primary hover:underline font-medium inline-flex items-center gap-1"
             >
               ↓ Tải file mẫu CSV
             </button>
@@ -165,7 +179,7 @@ export default function ImportDialog({ open, onClose, onSuccess }: ImportDialogP
           {result && (
             <div className="rounded-md border border-border p-3 space-y-2">
               <div className="flex gap-4 text-sm">
-                <span className="text-green-400 font-medium">✅ {result.imported} đã import</span>
+                <span className="text-green-400 font-medium">✅ {result.imported} đã cập nhật</span>
                 {result.skipped > 0 && (
                   <span className="text-muted-foreground">⊘ {result.skipped} bỏ qua</span>
                 )}

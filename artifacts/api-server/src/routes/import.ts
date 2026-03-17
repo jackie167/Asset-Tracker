@@ -27,41 +27,50 @@ const upload = multer({
 });
 
 interface RawRow {
-  type?: string;
-  loai?: string;
   symbol?: string;
-  "ma co phieu"?: string;
-  "ma vang"?: string;
+  type?: string;
   quantity?: string | number;
-  "so luong"?: string | number;
+  total_value?: string | number;
+  current_price?: string | number;
   [key: string]: unknown;
 }
 
-function normalizeRow(raw: RawRow): { type: string; symbol: string; quantity: number } | null {
-  const normalize = (v: unknown) => String(v ?? "").trim().toLowerCase();
+function inferType(symbol: string): string {
+  const s = symbol.toUpperCase();
+  if (s.startsWith("SJC")) return "gold";
+  const CRYPTO = ["BTC","ETH","XRP","BNB","SOL","ADA","DOT","AVAX","LINK","MATIC","DOGE","USDT","USDC","PAXG","DAI","LTC","BCH","ATOM","UNI","AAVE"];
+  if (CRYPTO.includes(s)) return "crypto";
+  return "stock";
+}
 
-  const typeRaw = normalize(raw.type ?? raw.loai ?? "");
-  const symbolRaw = String(
-    raw.symbol ?? raw["ma co phieu"] ?? raw["ma vang"] ?? ""
-  ).trim().toUpperCase();
-  const quantityRaw = raw.quantity ?? raw["so luong"];
-  const quantity = typeof quantityRaw === "number"
-    ? quantityRaw
-    : parseFloat(String(quantityRaw ?? "").replace(/,/g, "."));
+function parseVNNumber(v: string | number | undefined | null): number | undefined {
+  if (v == null || v === "") return undefined;
+  if (typeof v === "number") return isNaN(v) ? undefined : v;
+  const cleaned = String(v).replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? undefined : n;
+}
 
-  if (!symbolRaw) return null;
-  if (isNaN(quantity) || quantity <= 0) return null;
+interface NormalizedRow {
+  symbol: string;
+  type?: string;
+  quantity: number;
+  totalValue?: number;
+}
 
-  let type = "stock";
-  if (typeRaw.includes("gold") || typeRaw.includes("vàng") || typeRaw.includes("vang") || symbolRaw.startsWith("SJC")) {
-    type = "gold";
-  } else if (typeRaw.includes("stock") || typeRaw.includes("co phieu") || typeRaw.includes("cổ phiếu") || typeRaw === "cp") {
-    type = "stock";
-  } else if (!typeRaw && (symbolRaw.startsWith("SJC"))) {
-    type = "gold";
-  }
+function normalizeRow(raw: RawRow): NormalizedRow | null {
+  const symbol = String(raw.symbol ?? "").trim().toUpperCase();
+  if (!symbol) return null;
 
-  return { type, symbol: symbolRaw, quantity };
+  const quantity = parseVNNumber(raw.quantity);
+  if (quantity == null || quantity <= 0) return null;
+
+  const typeRaw = String(raw.type ?? "").trim().toLowerCase();
+  const type = typeRaw || undefined;
+
+  const totalValue = parseVNNumber(raw.total_value);
+
+  return { symbol, type, quantity, totalValue: totalValue && totalValue > 0 ? totalValue : undefined };
 }
 
 router.post("/holdings/import", upload.single("file"), async (req, res): Promise<void> => {
@@ -92,55 +101,64 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
     return;
   }
 
+  // Load all existing holdings once
+  const existingHoldings = await db.select().from(holdingsTable);
+  const bySymbol = new Map(existingHoldings.map((h) => [h.symbol.toUpperCase(), h]));
+
   const errors: string[] = [];
-  const toInsert: { type: string; symbol: string; quantity: string }[] = [];
+  const imported: typeof holdingsTable.$inferSelect[] = [];
+  let skipped = 0;
 
   for (let i = 0; i < rows.length; i++) {
     const normalized = normalizeRow(rows[i]);
     if (!normalized) {
-      errors.push(`Row ${i + 2}: missing or invalid data — ${JSON.stringify(rows[i])}`);
+      errors.push(`Dòng ${i + 2}: thiếu hoặc sai dữ liệu — ${JSON.stringify(rows[i])}`);
+      skipped++;
       continue;
     }
 
-    const { type, symbol, quantity } = normalized;
+    const { symbol, type, quantity, totalValue } = normalized;
+    const manualPrice = totalValue != null ? String(totalValue / quantity) : null;
 
-    if (!["stock", "gold"].includes(type)) {
-      errors.push(`Row ${i + 2}: unknown type "${type}" for symbol ${symbol}`);
-      continue;
-    }
-
-    toInsert.push({ type, symbol, quantity: String(quantity) });
-  }
-
-  const imported: typeof holdingsTable.$inferSelect[] = [];
-  let skipped = rows.length - toInsert.length;
-
-  for (const item of toInsert) {
     try {
-      const existing = await db
-        .select()
-        .from(holdingsTable)
-        .then((all) => all.find((h) => h.symbol === item.symbol && h.type === item.type));
+      const existing = bySymbol.get(symbol);
 
       if (existing) {
+        // REPLACE quantity; update manualPrice only if total_value was provided
+        const updateData: Partial<typeof holdingsTable.$inferInsert> & { updatedAt: Date } = {
+          quantity: String(quantity),
+          updatedAt: new Date(),
+        };
+        if (totalValue != null) {
+          updateData.manualPrice = manualPrice;
+        }
+
         const [updated] = await db
           .update(holdingsTable)
-          .set({ quantity: item.quantity, updatedAt: new Date() })
+          .set(updateData)
           .where(eq(holdingsTable.id, existing.id))
           .returning();
         imported.push(updated);
-        console.log(`[Import] Updated existing holding: ${item.type} ${item.symbol} qty=${item.quantity}`);
+        console.log(`[Import] Updated ${existing.type} ${symbol}: qty=${quantity}${totalValue != null ? ` totalValue=${totalValue}` : ""}`);
       } else {
+        // New holding — need a type; use provided or infer
+        const resolvedType = type || inferType(symbol);
+
         const [created] = await db
           .insert(holdingsTable)
-          .values({ type: item.type, symbol: item.symbol, quantity: item.quantity })
+          .values({
+            type: resolvedType,
+            symbol,
+            quantity: String(quantity),
+            manualPrice: totalValue != null ? manualPrice : null,
+          })
           .returning();
         imported.push(created);
-        console.log(`[Import] Created new holding: ${item.type} ${item.symbol} qty=${item.quantity}`);
+        console.log(`[Import] Created ${resolvedType} ${symbol}: qty=${quantity}${totalValue != null ? ` totalValue=${totalValue}` : ""}`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`${item.symbol}: DB error — ${msg}`);
+      errors.push(`${symbol}: lỗi DB — ${msg}`);
       skipped++;
     }
   }
