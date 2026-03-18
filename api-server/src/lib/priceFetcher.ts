@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-//import { db, pricesTable, holdingsTable, snapshotsTable } from "@workspace/db";
+import { db, pricesTable, holdingsTable, snapshotsTable } from "../../../lib/db/src/index.ts";
 import { desc, gte } from "drizzle-orm";
 
 const USER_AGENT =
