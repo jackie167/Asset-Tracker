@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db, snapshotsTable } from "@workspace/db";
+import { db, snapshotsTable } from "../../lib/db/src/index.ts";
 import { desc, gte } from "drizzle-orm";
-import { ListSnapshotsResponse } from "@workspace/api-zod";
+import { ListSnapshotsResponse } from "../../lib/api-zod/src/index.ts";
 
 const router: IRouter = Router();
 
