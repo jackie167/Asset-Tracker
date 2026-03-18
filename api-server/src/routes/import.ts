@@ -96,7 +96,6 @@ interface NormalizedRow {
   symbol: string;
   type?: string;
   quantity: number;
-  totalValue?: number;
 }
 
 function normalizeRow(raw: RawRow): NormalizedRow | null {
@@ -108,10 +107,7 @@ function normalizeRow(raw: RawRow): NormalizedRow | null {
 
   const typeRaw = String(raw.type ?? "").trim().toLowerCase();
   const type = typeRaw || undefined;
-
-  const totalValue = parseVNNumber(raw.total_value);
-
-  return { symbol, type, quantity, totalValue: totalValue && totalValue > 0 ? totalValue : undefined };
+  return { symbol, type, quantity };
 }
 
 router.post("/holdings/import", upload.single("file"), async (req, res): Promise<void> => {
@@ -125,7 +121,21 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
   let rows: RawRow[] = [];
 
   try {
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const isCsv = req.file.originalname.toLowerCase().endsWith(".csv")
+      || req.file.mimetype.includes("csv")
+      || req.file.mimetype === "text/plain";
+
+    let workbook: XLSX.WorkBook;
+    if (isCsv) {
+      const text = req.file.buffer.toString("utf8");
+      const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+      const commaCount = (firstLine.match(/,/g) || []).length;
+      const semicolonCount = (firstLine.match(/;/g) || []).length;
+      const separator = semicolonCount >= commaCount ? ";" : ",";
+      workbook = XLSX.read(text, { type: "string", FS: separator });
+    } else {
+      workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    }
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     rows = XLSX.utils.sheet_to_json<RawRow>(sheet, { defval: "" });
@@ -158,26 +168,16 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
       continue;
     }
 
-    const { symbol, type, quantity, totalValue } = normalized;
+    const { symbol, type, quantity } = normalized;
 
     try {
       const existing = bySymbol.get(symbol);
 
       if (existing) {
-        // Only update manualPrice if this holding ALREADY uses manual price
-        // (prevents export→import from overwriting online-priced assets)
-        const isManualAsset = existing.manualPrice != null;
-        const newManualPrice = (isManualAsset && totalValue != null)
-          ? String(totalValue / quantity)
-          : undefined;
-
         const updateData: Partial<typeof holdingsTable.$inferInsert> & { updatedAt: Date } = {
           quantity: String(quantity),
           updatedAt: new Date(),
         };
-        if (newManualPrice !== undefined) {
-          updateData.manualPrice = newManualPrice;
-        }
 
         const [updated] = await db
           .update(holdingsTable)
@@ -185,15 +185,10 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
           .where(eq(holdingsTable.id, existing.id))
           .returning();
         imported.push(updated);
-        console.log(`[Import] Updated ${existing.type} ${symbol}: qty=${quantity}${newManualPrice !== undefined ? ` manualPrice=${newManualPrice}` : ""}`);
+        console.log(`[Import] Updated ${existing.type} ${symbol}: qty=${quantity}`);
       } else {
-        // New holding — use provided type or infer; set manualPrice only for custom (non-online) types
+        // New holding — use provided type or infer; do NOT import total/manual price
         const resolvedType = type || inferType(symbol);
-        const ONLINE_TYPES = ["stock", "gold", "crypto"];
-        const isOnlineType = ONLINE_TYPES.includes(resolvedType);
-        const newManualPrice = (!isOnlineType && totalValue != null)
-          ? String(totalValue / quantity)
-          : null;
 
         const [created] = await db
           .insert(holdingsTable)
@@ -201,11 +196,11 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
             type: resolvedType,
             symbol,
             quantity: String(quantity),
-            manualPrice: newManualPrice,
+            manualPrice: null,
           })
           .returning();
         imported.push(created);
-        console.log(`[Import] Created ${resolvedType} ${symbol}: qty=${quantity}${newManualPrice ? ` manualPrice=${newManualPrice}` : ""}`);
+        console.log(`[Import] Created ${resolvedType} ${symbol}: qty=${quantity}`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
