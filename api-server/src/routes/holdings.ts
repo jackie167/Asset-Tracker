@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, holdingsTable, pricesTable } from "../../lib/db/src/index.ts";
+import { db, holdingsTable, pricesTable } from "../../../lib/db/src/index.ts";
 import {
   ListHoldingsResponse,
   CreateHoldingBody,
@@ -9,7 +9,7 @@ import {
   UpdateHoldingResponse,
   DeleteHoldingParams,
   GetPortfolioSummaryResponse,
-} from "../../lib/api-zod/src/index.ts";
+} from "../../../lib/api-zod/src/index.ts";
 import { getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
