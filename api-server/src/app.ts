@@ -12,9 +12,6 @@ app.get("/ping-test", (_req, res) => {
   res.send("ping ok");
 });
 
-app.get("/", (_req, res) => {
-  res.send("Server is running");
-});
 
 app.use(cors());
 app.use(express.json());
@@ -41,8 +38,10 @@ const clientDistCandidates = [
   path.resolve(process.cwd(), "../finance-tracker/dist/public"),
   path.resolve(process.cwd(), "artifacts/finance-tracker/dist/public"),
   path.resolve(process.cwd(), "finance-tracker/dist/public"),
+  path.resolve(process.cwd(), "..", "artifacts", "finance-tracker", "dist", "public"),
   path.resolve(__dirname, "..", "..", "finance-tracker", "dist", "public"),
   path.resolve(__dirname, "..", "..", "..", "finance-tracker", "dist", "public"),
+  path.resolve(__dirname, "..", "..", "..", "artifacts", "finance-tracker", "dist", "public"),
 ];
 
 console.log("cwd =", process.cwd());
@@ -62,13 +61,19 @@ if (clientDist) {
 
   app.use((req, res, next) => {
     if (req.path.startsWith("/api")) return next();
-    if (req.path === "/") return next();
     console.log("SPA fallback for:", req.path);
     res.sendFile(path.join(clientDist, "index.html"));
   });
 } else {
   console.log("No frontend build found");
 }
+
+app.get("/", (_req, res) => {
+  if (clientDist) {
+    return res.sendFile(path.join(clientDist, "index.html"));
+  }
+  return res.send("Server is running");
+});
 
 //startPriceScheduler();
 
