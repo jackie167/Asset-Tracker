@@ -618,7 +618,9 @@ export default function Dashboard() {
   const [showImport, setShowImport] = useState(false);
   const [editItem, setEditItem] = useState<HoldingItem | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-  const [holdingsCollapsed, setHoldingsCollapsed] = useState(false);
+  const [holdingsCollapsed, setHoldingsCollapsed] = useState<boolean>(() =>
+    localStorage.getItem("holdings_collapsed") !== "0"
+  );
   const [filterType, setFilterType] = useState<string>("all");
   const [hideValues, setHideValues] = useState<boolean>(() =>
     localStorage.getItem("hide_values") === "1"
@@ -707,6 +709,12 @@ export default function Dashboard() {
   const sortLabel = sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
+
+  const toggleHoldingsCollapsed = () => {
+    const next = !holdingsCollapsed;
+    setHoldingsCollapsed(next);
+    localStorage.setItem("holdings_collapsed", next ? "1" : "0");
+  };
 
   // Unique types from holdings for filter menu
   const availableTypes = useMemo(() => {
@@ -866,23 +874,33 @@ export default function Dashboard() {
 
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <button
-                  onClick={() => setHoldingsCollapsed((v) => !v)}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
-                >
-                  <span
-                    className="inline-block transition-transform duration-200"
-                    style={{ transform: holdingsCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleHoldingsCollapsed}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
                   >
-                    ▾
-                  </span>
-                  Danh mục
-                  {holdings.length > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-normal">
-                      {holdings.length}
+                    <span
+                      className="inline-block transition-transform duration-200"
+                      style={{ transform: holdingsCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+                    >
+                      ▾
                     </span>
-                  )}
-                </button>
+                    Danh mục
+                    {holdings.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-normal">
+                        {holdings.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleHoldingsCollapsed}
+                    className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={holdingsCollapsed ? "Hiện danh mục" : "Ẩn danh mục"}
+                  >
+                    {holdingsCollapsed ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
 
                 {!holdingsCollapsed && holdings.length > 0 && (
                   <div className="flex items-center gap-2 flex-wrap justify-end">
