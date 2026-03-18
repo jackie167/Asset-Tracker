@@ -460,24 +460,56 @@ export async function getLatestPrices(): Promise<typeof pricesTable.$inferSelect
   return result;
 }
 
-let schedulerInterval: ReturnType<typeof setInterval> | null = null;
+let schedulerTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function getNextRunTime(now: Date): Date {
+  const next = new Date(now);
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const second = now.getSeconds();
+  const ms = now.getMilliseconds();
+
+  const todayAt = (h: number) => {
+    const d = new Date(now);
+    d.setHours(h, 0, 0, 0);
+    return d;
+  };
+
+  if (hour < 10 || (hour === 10 && minute === 0 && second === 0 && ms === 0)) {
+    return todayAt(10);
+  }
+  if (hour < 17 || (hour === 17 && minute === 0 && second === 0 && ms === 0)) {
+    return todayAt(17);
+  }
+
+  next.setDate(now.getDate() + 1);
+  next.setHours(10, 0, 0, 0);
+  return next;
+}
 
 export function startPriceScheduler(): void {
-  if (schedulerInterval) return;
+  if (schedulerTimeout) return;
 
-  console.log("[PriceFetcher] Starting price scheduler (every 15 minutes)");
+  console.log("[PriceFetcher] Starting price scheduler (10:00 and 17:00 daily)");
 
-  fetchAndStorePrices()
-    .then((r) => console.log("[PriceFetcher] Initial fetch result:", r.message))
-    .catch((e) => console.error("[PriceFetcher] Initial fetch failed:", e));
+  const scheduleNext = () => {
+    const now = new Date();
+    const nextRun = getNextRunTime(now);
+    const delayMs = Math.max(0, nextRun.getTime() - now.getTime());
 
-  schedulerInterval = setInterval(
-    () => {
+    console.log(`[PriceFetcher] Next scheduled fetch at ${nextRun.toISOString()}`);
+
+    schedulerTimeout = setTimeout(() => {
       console.log("[PriceFetcher] Running scheduled price fetch...");
       fetchAndStorePrices()
         .then((r) => console.log("[PriceFetcher] Scheduled fetch result:", r.message))
-        .catch((e) => console.error("[PriceFetcher] Scheduled fetch failed:", e));
-    },
-    15 * 60 * 1000
-  );
+        .catch((e) => console.error("[PriceFetcher] Scheduled fetch failed:", e))
+        .finally(() => {
+          schedulerTimeout = null;
+          scheduleNext();
+        });
+    }, delayMs);
+  };
+
+  scheduleNext();
 }
