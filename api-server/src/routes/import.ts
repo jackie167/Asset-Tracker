@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { db, holdingsTable } from "@workspace/db";
+import { db, holdingsTable } from "../../lib/db/src/index.ts";
 import { eq } from "drizzle-orm";
-import { ImportHoldingsResponse } from "@workspace/api-zod";
+import { ImportHoldingsResponse } from "../../lib/api-zod/src/index.ts";
 
 const router: IRouter = Router();
 

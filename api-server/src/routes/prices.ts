@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   GetLatestPricesResponse,
   RefreshPricesResponse,
-} from "@workspace/api-zod";
+} from "../../lib/api-zod/src/index.ts";
 import { fetchAndStorePrices, getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
