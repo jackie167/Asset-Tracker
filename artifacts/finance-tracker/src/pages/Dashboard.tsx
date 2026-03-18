@@ -720,7 +720,7 @@ export default function Dashboard() {
     setExcelLoading(true);
     try {
       const res = await fetch("/api/excel/sheets");
-      const data = await res.json();
+      const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể tải danh sách sheet.");
       const sheets = Array.isArray(data?.sheets) ? data.sheets : [];
       setExcelSheets(sheets);
@@ -740,7 +740,7 @@ export default function Dashboard() {
     setExcelLoading(true);
     try {
       const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(name)}`);
-      const data = await res.json();
+      const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể tải dữ liệu sheet.");
       setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
     } catch (err) {
@@ -793,25 +793,13 @@ export default function Dashboard() {
     deleteHolding.mutate({ id });
   };
 
-  const handleExcelUpload = async (file: File) => {
-    setExcelError(null);
-    setExcelLoading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/excel/upload", { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Không thể tải file Excel.");
-      const sheets = Array.isArray(data?.sheets) ? data.sheets : [];
-      setExcelSheets(sheets);
-      if (sheets.length) {
-        setExcelSheet(sheets[0]);
-      }
-    } catch (err) {
-      setExcelError(err instanceof Error ? err.message : "Không thể tải file Excel.");
-    } finally {
-      setExcelLoading(false);
+  const readJsonSafe = async (res: Response) => {
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const text = await res.text();
+      throw new Error(text?.slice(0, 120) || "Phản hồi không hợp lệ.");
     }
+    return res.json();
   };
 
   useEffect(() => {
@@ -1146,18 +1134,6 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground uppercase tracking-widest">Excel Sheets</p>
                   <p className="text-xs text-muted-foreground">Chọn sheet để xem dạng bảng</p>
                 </div>
-                <label className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground cursor-pointer">
-                  Tải file
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleExcelUpload(file);
-                    }}
-                  />
-                </label>
               </div>
 
               {excelError && (

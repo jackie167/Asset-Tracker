@@ -13,6 +13,7 @@ const upload = multer({
 
 const STORAGE_DIR = path.resolve(process.cwd(), "api-server", "data");
 const STORAGE_FILE = path.join(STORAGE_DIR, "excel-source.xlsx");
+const DEFAULT_SOURCE = path.resolve(process.cwd(), "api-server", "data", "excel-source.xlsx");
 
 function ensureStorageDir(): void {
   if (!fs.existsSync(STORAGE_DIR)) {
@@ -21,10 +22,11 @@ function ensureStorageDir(): void {
 }
 
 function loadWorkbook(): XLSX.WorkBook {
-  if (!fs.existsSync(STORAGE_FILE)) {
-    throw new Error("No Excel file uploaded");
+  const candidate = fs.existsSync(STORAGE_FILE) ? STORAGE_FILE : DEFAULT_SOURCE;
+  if (!fs.existsSync(candidate)) {
+    throw new Error("No Excel file available");
   }
-  return XLSX.readFile(STORAGE_FILE, { cellDates: true });
+  return XLSX.readFile(candidate, { cellDates: true });
 }
 
 router.post("/excel/upload", upload.single("file"), (req, res) => {
