@@ -7,9 +7,10 @@ COPY . .
 RUN corepack enable
 RUN corepack prepare pnpm@latest --activate
 
-RUN if [ -f package.json ]; then pnpm install; \
-    elif [ -f api-server/package.json ]; then cd api-server && pnpm install; \
+# Prefer api-server if it exists; otherwise fall back to repo root.
+RUN if [ -f api-server/package.json ]; then cd api-server && pnpm install; \
     elif [ -f artifacts/api-server/package.json ]; then cd artifacts/api-server && pnpm install; \
+    elif [ -f package.json ]; then pnpm install; \
     else echo "No package.json found in /app, /app/api-server, or /app/artifacts/api-server" && exit 1; \
     fi
 
