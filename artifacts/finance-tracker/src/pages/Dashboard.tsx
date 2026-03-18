@@ -625,6 +625,11 @@ export default function Dashboard() {
   const [hideValues, setHideValues] = useState<boolean>(() =>
     localStorage.getItem("hide_values") === "1"
   );
+  const [excelSheets, setExcelSheets] = useState<string[]>([]);
+  const [excelSheet, setExcelSheet] = useState<string>("");
+  const [excelRows, setExcelRows] = useState<Array<Array<string | number>>>([]);
+  const [excelLoading, setExcelLoading] = useState(false);
+  const [excelError, setExcelError] = useState<string | null>(null);
   const [showQtyCol, setShowQtyCol] = useState<boolean>(() =>
     localStorage.getItem("col_sl") !== "0"
   );
@@ -710,6 +715,41 @@ export default function Dashboard() {
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
 
+  const loadExcelSheets = async () => {
+    setExcelError(null);
+    setExcelLoading(true);
+    try {
+      const res = await fetch("/api/excel/sheets");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Không thể tải danh sách sheet.");
+      const sheets = Array.isArray(data?.sheets) ? data.sheets : [];
+      setExcelSheets(sheets);
+      if (sheets.length && !excelSheet) {
+        setExcelSheet(sheets[0]);
+      }
+    } catch (err) {
+      setExcelError(err instanceof Error ? err.message : "Không thể tải danh sách sheet.");
+    } finally {
+      setExcelLoading(false);
+    }
+  };
+
+  const loadExcelSheet = async (name: string) => {
+    if (!name) return;
+    setExcelError(null);
+    setExcelLoading(true);
+    try {
+      const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(name)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Không thể tải dữ liệu sheet.");
+      setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
+    } catch (err) {
+      setExcelError(err instanceof Error ? err.message : "Không thể tải dữ liệu sheet.");
+    } finally {
+      setExcelLoading(false);
+    }
+  };
+
   const toggleHoldingsCollapsed = () => {
     const next = !holdingsCollapsed;
     setHoldingsCollapsed(next);
@@ -752,6 +792,37 @@ export default function Dashboard() {
     if (!confirm("Xóa tài sản này?")) return;
     deleteHolding.mutate({ id });
   };
+
+  const handleExcelUpload = async (file: File) => {
+    setExcelError(null);
+    setExcelLoading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/excel/upload", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Không thể tải file Excel.");
+      const sheets = Array.isArray(data?.sheets) ? data.sheets : [];
+      setExcelSheets(sheets);
+      if (sheets.length) {
+        setExcelSheet(sheets[0]);
+      }
+    } catch (err) {
+      setExcelError(err instanceof Error ? err.message : "Không thể tải file Excel.");
+    } finally {
+      setExcelLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadExcelSheets();
+  }, []);
+
+  useEffect(() => {
+    if (excelSheet) {
+      loadExcelSheet(excelSheet);
+    }
+  }, [excelSheet]);
 
   const handleRefresh = () => {
     refreshPrices.mutate({});
@@ -1066,6 +1137,71 @@ export default function Dashboard() {
                     </div>
                   )}
                 </>
+              )}
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-widest">Excel Sheets</p>
+                  <p className="text-xs text-muted-foreground">Chọn sheet để xem dạng bảng</p>
+                </div>
+                <label className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground cursor-pointer">
+                  Tải file
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleExcelUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              {excelError && (
+                <p className="text-xs text-destructive mb-2">{excelError}</p>
+              )}
+
+              {excelSheets.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap mb-3">
+                  {excelSheets.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setExcelSheet(s)}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${
+                        excelSheet === s
+                          ? "border-primary/60 text-primary bg-primary/5"
+                          : "border-border text-muted-foreground hover:border-primary/40"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {excelLoading ? (
+                <p className="text-xs text-muted-foreground">Đang tải dữ liệu...</p>
+              ) : excelRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Chưa có dữ liệu sheet.</p>
+              ) : (
+                <div className="overflow-auto border border-border rounded-lg">
+                  <table className="min-w-full text-xs">
+                    <tbody>
+                      {excelRows.slice(0, 200).map((row, idx) => (
+                        <tr key={idx} className={idx === 0 ? "bg-muted/50 font-semibold" : ""}>
+                          {row.map((cell, cidx) => (
+                            <td key={cidx} className="px-2 py-1 border-b border-border whitespace-nowrap">
+                              {cell === null || cell === undefined || cell === "" ? "—" : String(cell)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
           </>
