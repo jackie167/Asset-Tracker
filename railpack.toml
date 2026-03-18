@@ -1,0 +1,5 @@
+[build]
+command = "pnpm -C api-server build"
+
+[start]
+command = "pnpm -C api-server start"
