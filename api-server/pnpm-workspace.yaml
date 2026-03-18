@@ -1,6 +1,7 @@
 packages:
   - .
-  - ../lib/*
+  - ../lib/db
+  - ../lib/api-zod
 
 catalog:
   '@types/node': ^25.3.3
