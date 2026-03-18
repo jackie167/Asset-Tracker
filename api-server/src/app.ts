@@ -3,7 +3,7 @@ import cors from "cors";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import router from "./routes";
+import router from "./routes/index.js";
 import { startPriceScheduler } from "./lib/priceFetcher.js";
 
 const app: Express = express();
@@ -12,9 +12,25 @@ app.get("/ping-test", (_req, res) => {
   res.send("ping ok");
 });
 
+app.get("/", (_req, res) => {
+  res.send("Server is running");
+});
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use((req, _res, next) => {
+  const startedAt = Date.now();
+  const { method, originalUrl } = req;
+  const done = () => {
+    const durationMs = Date.now() - startedAt;
+    console.log(`${method} ${originalUrl} ${durationMs}ms`);
+  };
+  _res.on("finish", done);
+  _res.on("close", done);
+  next();
+});
 
 app.use("/api", router);
 
@@ -44,13 +60,9 @@ if (clientDist) {
 
   app.use(express.static(clientDist));
 
-  app.get("/", (_req, res) => {
-    console.log("GET / -> index.html");
-    res.sendFile(path.join(clientDist, "index.html"));
-  });
-
   app.use((req, res, next) => {
     if (req.path.startsWith("/api")) return next();
+    if (req.path === "/") return next();
     console.log("SPA fallback for:", req.path);
     res.sendFile(path.join(clientDist, "index.html"));
   });
@@ -58,6 +70,6 @@ if (clientDist) {
   console.log("No frontend build found");
 }
 
-startPriceScheduler();
+//startPriceScheduler();
 
-export default app;
+export { app };

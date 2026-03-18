@@ -1,4 +1,4 @@
-import app from "./app";
+import { app } from './app.js';
 
 const rawPort = process.env["PORT"] || "4000";
 const port = Number(rawPort);

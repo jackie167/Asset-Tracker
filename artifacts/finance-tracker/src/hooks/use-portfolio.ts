@@ -1,6 +1,5 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
-  useListHoldings,
   useCreateHolding,
   useUpdateHolding,
   useDeleteHolding,
@@ -9,17 +8,30 @@ import {
   useListSnapshots,
   getListHoldingsQueryKey,
   getGetPortfolioSummaryQueryKey,
-  getListSnapshotsQueryKey
+  getListSnapshotsQueryKey,
+  type Holding
 } from "@workspace/api-client-react";
 import { useToast } from "./use-toast";
 
+async function fetchHoldings(): Promise<Holding[]> {
+  const res = await fetch("/api/holdings");
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export function usePortfolioData() {
-  const holdingsQuery = useListHoldings();
+  const holdingsQuery = useQuery({
+    queryKey: getListHoldingsQueryKey(),
+    queryFn: fetchHoldings,
+  });
   const summaryQuery = useGetPortfolioSummary();
   const snapshotsQuery = useListSnapshots();
 
   const isLoading = holdingsQuery.isLoading || summaryQuery.isLoading || snapshotsQuery.isLoading;
   const isError = holdingsQuery.isError || summaryQuery.isError || snapshotsQuery.isError;
+  const error = holdingsQuery.error || summaryQuery.error || snapshotsQuery.error;
 
   return {
     holdings: holdingsQuery.data || [],
@@ -27,6 +39,7 @@ export function usePortfolioData() {
     snapshots: snapshotsQuery.data || [],
     isLoading,
     isError,
+    error,
   };
 }
 

@@ -609,7 +609,7 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
 }
 
 export default function Dashboard() {
-  const { summary, snapshots, isLoading } = usePortfolioData();
+  const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData();
   const { createHolding, updateHolding, deleteHolding, refreshPrices } = usePortfolioMutations();
   const queryClient = useQueryClient();
 
@@ -679,7 +679,7 @@ export default function Dashboard() {
       return acc;
     }, []);
 
-  const holdings: HoldingItem[] = summary?.holdings ?? [];
+  const holdings: HoldingItem[] = (summary?.holdings ?? holdingsFromApi) as HoldingItem[];
   const totalValue = summary?.totalValue ?? 0;
   const lastUpdated = summary?.lastUpdated;
 
@@ -788,7 +788,11 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-        {isLoading ? (
+        {isError ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+            {error instanceof Error ? error.message : "Không thể tải dữ liệu."}
+          </div>
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
             Đang tải...
           </div>
