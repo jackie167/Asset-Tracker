@@ -37,6 +37,7 @@ import {
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Eye, EyeOff } from "lucide-react";
 
 const VND_INT = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
 const VND_2 = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
@@ -619,6 +620,9 @@ export default function Dashboard() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState(false);
   const [filterType, setFilterType] = useState<string>("all");
+  const [hideValues, setHideValues] = useState<boolean>(() =>
+    localStorage.getItem("hide_values") === "1"
+  );
   const [showQtyCol, setShowQtyCol] = useState<boolean>(() =>
     localStorage.getItem("col_sl") !== "0"
   );
@@ -701,6 +705,8 @@ export default function Dashboard() {
   };
 
   const sortLabel = sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
+  const formatMoney = (value: number | null | undefined, full = false) =>
+    hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
 
   // Unique types from holdings for filter menu
   const availableTypes = useMemo(() => {
@@ -799,8 +805,22 @@ export default function Dashboard() {
         ) : (
           <>
             <Card className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground uppercase tracking-widest">Tổng tài sản</p>
-              <p className="text-3xl font-bold tracking-tight">{formatVNDFull(totalValue)}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground uppercase tracking-widest">Tổng tài sản</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !hideValues;
+                    setHideValues(next);
+                    localStorage.setItem("hide_values", next ? "1" : "0");
+                  }}
+                  className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={hideValues ? "Hiện giá trị" : "Ẩn giá trị"}
+                >
+                  {hideValues ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              <p className="text-3xl font-bold tracking-tight">{formatMoney(totalValue, true)}</p>
             </Card>
 
             {totalValue > 0 && (
@@ -821,14 +841,14 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                     <YAxis
-                      tickFormatter={(v) => formatVND(v)}
+                      tickFormatter={(v) => (hideValues ? "" : formatVND(v))}
                       tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
                       axisLine={false}
                       tickLine={false}
                       width={60}
                     />
                     <Tooltip
-                      formatter={(value: number) => [formatVNDFull(value), "Tổng"]}
+                      formatter={(value: number) => [hideValues ? "****" : formatVNDFull(value), "Tổng"]}
                       contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
                     />
                     <Area type="monotone" dataKey="totalValue" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#colorTotal)" />
@@ -990,7 +1010,7 @@ export default function Dashboard() {
                           {/* Giá — ẩn/hiện */}
                           {showPriceCol && (
                             <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                              {formatVND(h.currentPrice)}
+                              {formatMoney(h.currentPrice)}
                             </span>
                           )}
 
@@ -1003,7 +1023,7 @@ export default function Dashboard() {
 
                           {/* Tổng giá trị — full format */}
                           <span className="text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
-                            {formatVNDFull(h.currentValue)}
+                            {formatMoney(h.currentValue, true)}
                           </span>
                         </div>
                       ))}
@@ -1021,7 +1041,7 @@ export default function Dashboard() {
                             {filterType === "all" ? "Tổng danh mục" : `Tổng ${filterType === "stock" ? "cổ phiếu" : filterType === "gold" ? "vàng" : filterType === "crypto" ? "crypto" : filterType}`}
                           </span>
                           <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
-                            {formatVNDFull(filteredTotal)}
+                            {formatMoney(filteredTotal, true)}
                           </span>
                         </div>
                       )}

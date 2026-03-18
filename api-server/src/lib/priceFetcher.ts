@@ -461,43 +461,45 @@ export async function getLatestPrices(): Promise<typeof pricesTable.$inferSelect
 }
 
 let schedulerTimeout: ReturnType<typeof setTimeout> | null = null;
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 function getNextRunTime(now: Date): Date {
-  const next = new Date(now);
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  const second = now.getSeconds();
-  const ms = now.getMilliseconds();
+  const nowVn = new Date(now.getTime() + VN_OFFSET_MS);
+  const vnYear = nowVn.getUTCFullYear();
+  const vnMonth = nowVn.getUTCMonth();
+  const vnDate = nowVn.getUTCDate();
+  const vnHour = nowVn.getUTCHours();
+  const vnMinute = nowVn.getUTCMinutes();
+  const vnSecond = nowVn.getUTCSeconds();
+  const vnMs = nowVn.getUTCMilliseconds();
 
-  const todayAt = (h: number) => {
-    const d = new Date(now);
-    d.setHours(h, 0, 0, 0);
-    return d;
+  const makeUtcFromVn = (year: number, month: number, date: number, hour: number) => {
+    return new Date(Date.UTC(year, month, date, hour - 7, 0, 0, 0));
   };
 
-  if (hour < 10 || (hour === 10 && minute === 0 && second === 0 && ms === 0)) {
-    return todayAt(10);
+  if (vnHour < 10 || (vnHour === 10 && vnMinute === 0 && vnSecond === 0 && vnMs === 0)) {
+    return makeUtcFromVn(vnYear, vnMonth, vnDate, 10);
   }
-  if (hour < 17 || (hour === 17 && minute === 0 && second === 0 && ms === 0)) {
-    return todayAt(17);
+  if (vnHour < 17 || (vnHour === 17 && vnMinute === 0 && vnSecond === 0 && vnMs === 0)) {
+    return makeUtcFromVn(vnYear, vnMonth, vnDate, 17);
   }
 
-  next.setDate(now.getDate() + 1);
-  next.setHours(10, 0, 0, 0);
-  return next;
+  return makeUtcFromVn(vnYear, vnMonth, vnDate + 1, 10);
 }
 
 export function startPriceScheduler(): void {
   if (schedulerTimeout) return;
 
-  console.log("[PriceFetcher] Starting price scheduler (10:00 and 17:00 daily)");
+  console.log("[PriceFetcher] Starting price scheduler (10:00 and 17:00 Vietnam time)");
 
   const scheduleNext = () => {
     const now = new Date();
     const nextRun = getNextRunTime(now);
     const delayMs = Math.max(0, nextRun.getTime() - now.getTime());
 
-    console.log(`[PriceFetcher] Next scheduled fetch at ${nextRun.toISOString()}`);
+    const nextRunVn = new Date(nextRun.getTime() + VN_OFFSET_MS);
+    const vnLabel = nextRunVn.toISOString().replace("T", " ").slice(0, 19) + " (VN)";
+    console.log(`[PriceFetcher] Next scheduled fetch at ${vnLabel}`);
 
     schedulerTimeout = setTimeout(() => {
       console.log("[PriceFetcher] Running scheduled price fetch...");
