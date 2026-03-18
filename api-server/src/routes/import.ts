@@ -92,6 +92,51 @@ function parseVNNumber(v: string | number | undefined | null): number | undefine
   return isNaN(n) ? undefined : n;
 }
 
+function parseCsvLine(line: string, separator: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === "\"") {
+      const next = line[i + 1];
+      if (inQuotes && next === "\"") {
+        cur += "\"";
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === separator && !inQuotes) {
+      out.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+function parseCsvRows(text: string, separator: string): RawRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length === 0) return [];
+  const headers = parseCsvLine(lines[0], separator).map((h) => h.trim().toLowerCase());
+  const rows: RawRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCsvLine(lines[i], separator);
+    const row: RawRow = {};
+    for (let j = 0; j < headers.length; j++) {
+      const key = headers[j];
+      if (!key) continue;
+      row[key] = values[j] ?? "";
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 interface NormalizedRow {
   symbol: string;
   type?: string;
@@ -125,20 +170,20 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
       || req.file.mimetype.includes("csv")
       || req.file.mimetype === "text/plain";
 
-    let workbook: XLSX.WorkBook;
     if (isCsv) {
       const text = req.file.buffer.toString("utf8");
       const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
       const commaCount = (firstLine.match(/,/g) || []).length;
       const semicolonCount = (firstLine.match(/;/g) || []).length;
       const separator = semicolonCount >= commaCount ? ";" : ",";
-      workbook = XLSX.read(text, { type: "string", FS: separator });
+      rows = parseCsvRows(text, separator);
     } else {
-      workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      rows = XLSX.utils.sheet_to_json<RawRow>(sheet, { defval: "" });
     }
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    rows = XLSX.utils.sheet_to_json<RawRow>(sheet, { defval: "" });
+    const sheetName = isCsv ? "CSV" : "Sheet1";
     console.log(`[Import] Parsed ${rows.length} row(s) from sheet "${sheetName}"`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
