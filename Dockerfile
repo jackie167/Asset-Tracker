@@ -4,7 +4,7 @@ WORKDIR /app
 
 ENV NODE_ENV=development
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc tsconfig.base.json ./
 COPY api-server ./api-server
 COPY artifacts/finance-tracker ./artifacts/finance-tracker
 COPY attached_assets ./attached_assets
