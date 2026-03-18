@@ -10,5 +10,6 @@ RUN corepack enable
 RUN corepack prepare pnpm@latest --activate
 
 RUN pnpm install --filter ./api-server... --no-frozen-lockfile
+RUN pnpm -C api-server build
 
-CMD ["pnpm", "-C", "api-server", "dev"]
+CMD ["pnpm", "-C", "api-server", "start"]
