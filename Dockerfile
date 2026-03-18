@@ -13,7 +13,7 @@ COPY lib ./lib
 RUN corepack enable
 RUN corepack prepare pnpm@latest --activate
 
-RUN pnpm install --filter ./api-server... --filter ./artifacts/finance-tracker... --no-frozen-lockfile
+RUN pnpm install --filter ./api-server... --filter ./artifacts/finance-tracker... --no-frozen-lockfile --prod=false
 RUN pnpm -C artifacts/finance-tracker build
 RUN pnpm -C api-server build
 
