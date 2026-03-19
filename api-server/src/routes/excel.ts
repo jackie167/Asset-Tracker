@@ -26,7 +26,8 @@ function loadWorkbook(): XLSX.WorkBook {
   if (!fs.existsSync(candidate)) {
     throw new Error("No Excel file available");
   }
-  return XLSX.readFile(candidate, { cellDates: true });
+  const buffer = fs.readFileSync(candidate);
+  return XLSX.read(buffer, { type: "buffer", cellDates: true });
 }
 
 router.post("/excel/upload", upload.single("file"), (req, res) => {
