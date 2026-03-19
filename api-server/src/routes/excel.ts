@@ -11,9 +11,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-const STORAGE_DIR = path.resolve(process.cwd(), "api-server", "data");
+const STORAGE_DIR = path.resolve(process.cwd(), "data");
 const STORAGE_FILE = path.join(STORAGE_DIR, "excel-source.xlsx");
-const DEFAULT_SOURCE = path.resolve(process.cwd(), "api-server", "data", "excel-source.xlsx");
+const DEFAULT_SOURCE = path.join(STORAGE_DIR, "excel-source.xlsx");
 
 function ensureStorageDir(): void {
   if (!fs.existsSync(STORAGE_DIR)) {
