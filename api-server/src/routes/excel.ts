@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import { HyperFormula } from "hyperformula";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -28,6 +29,53 @@ function loadWorkbook(): XLSX.WorkBook {
   }
   const buffer = fs.readFileSync(candidate);
   return XLSX.read(buffer, { type: "buffer", cellDates: true });
+}
+
+function sheetToGrid(sheet: XLSX.WorkSheet): (string | number | boolean | null)[][] {
+  const range = sheet["!ref"] ? XLSX.utils.decode_range(sheet["!ref"]) : null;
+  if (!range) return [];
+
+  const rows: (string | number | boolean | null)[][] = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const row: (string | number | boolean | null)[] = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[cellRef] as XLSX.CellObject | undefined;
+      if (!cell) {
+        row.push(null);
+        continue;
+      }
+      if (cell.f) {
+        row.push(`=${cell.f}`);
+        continue;
+      }
+      if (cell.v === undefined || cell.v === null) {
+        row.push(null);
+        continue;
+      }
+      row.push(cell.v as string | number | boolean);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function evaluateWorkbook(workbook: XLSX.WorkBook) {
+  const sheetData: Record<string, (string | number | boolean | null)[][]> = {};
+  for (const name of workbook.SheetNames) {
+    const sheet = workbook.Sheets[name];
+    sheetData[name] = sheetToGrid(sheet);
+  }
+
+  const hf = HyperFormula.buildFromSheets(sheetData, {
+    licenseKey: "gpl-v3",
+  });
+
+  const values: Record<string, (string | number | boolean | null)[][]> = {};
+  for (const name of workbook.SheetNames) {
+    values[name] = hf.getSheetValues(name) as (string | number | boolean | null)[][];
+  }
+  return values;
 }
 
 router.post("/excel/upload", upload.single("file"), (req, res) => {
@@ -63,18 +111,12 @@ router.get("/excel/sheet", (req, res) => {
 
   try {
     const workbook = loadWorkbook();
-    const sheet = workbook.Sheets[name];
-    if (!sheet) {
+    if (!workbook.Sheets[name]) {
       res.status(404).json({ error: "Sheet not found" });
       return;
     }
-
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      header: 1,
-      defval: "",
-      raw: true,
-    }) as (string | number | null)[][];
-
+    const evaluated = evaluateWorkbook(workbook);
+    const rows = evaluated[name] ?? [];
     res.json({ name, rows });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
