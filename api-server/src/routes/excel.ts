@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { HyperFormula } from "hyperformula";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -15,6 +15,8 @@ const upload = multer({
 const STORAGE_DIR = path.resolve(process.cwd(), "data");
 const STORAGE_FILE = path.join(STORAGE_DIR, "excel-source.xlsx");
 const DEFAULT_SOURCE = path.join(STORAGE_DIR, "excel-source.xlsx");
+const CALCULATED_FILE = path.join(STORAGE_DIR, "excel-source-calculated.xlsx");
+const TMP_INPUT = path.join(STORAGE_DIR, "excel-source-input.xlsx");
 
 function ensureStorageDir(): void {
   if (!fs.existsSync(STORAGE_DIR)) {
@@ -23,21 +25,534 @@ function ensureStorageDir(): void {
 }
 
 function loadWorkbook(): XLSX.WorkBook {
-  const candidate = fs.existsSync(STORAGE_FILE) ? STORAGE_FILE : DEFAULT_SOURCE;
-  if (!fs.existsSync(candidate)) {
+  const source = fs.existsSync(STORAGE_FILE) ? STORAGE_FILE : DEFAULT_SOURCE;
+  if (!fs.existsSync(source)) {
     throw new Error("No Excel file available");
   }
+  const candidate = maybeRecalculateWithLibreOffice(source);
   const buffer = fs.readFileSync(candidate);
   return XLSX.read(buffer, { type: "buffer", cellDates: true });
 }
 
-function sheetToGrid(sheet: XLSX.WorkSheet): (string | number | boolean | null)[][] {
+type ExcelOverrides = Record<string, string | number | null>;
+
+function applyOverrides(workbook: XLSX.WorkBook, sheetName: string, overrides: ExcelOverrides | undefined): void {
+  if (!overrides || !Object.keys(overrides).length) return;
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet || !sheet["!ref"]) return;
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  for (const key of Object.keys(overrides)) {
+    const [rStr, cStr] = key.split(",");
+    const rOffset = Number(rStr);
+    const cOffset = Number(cStr);
+    if (!Number.isFinite(rOffset) || !Number.isFinite(cOffset)) continue;
+    const r = range.s.r + rOffset;
+    const c = range.s.c + cOffset;
+    const addr = XLSX.utils.encode_cell({ r, c });
+    const existing = sheet[addr] as XLSX.CellObject | undefined;
+    if (existing?.f) continue;
+    const value = overrides[key];
+    if (value === null || value === "") {
+      delete sheet[addr];
+      continue;
+    }
+    if (typeof value === "number") {
+      sheet[addr] = { t: "n", v: value };
+    } else {
+      sheet[addr] = { t: "s", v: String(value) };
+    }
+  }
+}
+
+function maybeRecalculateWithLibreOffice(sourcePath: string): string {
+  const useLibre = String(process.env.EXCEL_USE_LIBREOFFICE ?? "").toLowerCase();
+  if (!(useLibre === "1" || useLibre === "true" || useLibre === "yes")) {
+    return sourcePath;
+  }
+
+  try {
+    ensureStorageDir();
+    const force = String(process.env.EXCEL_RECALC_FORCE ?? "").toLowerCase();
+    const shouldForce = force === "1" || force === "true" || force === "yes";
+    const sourceStat = fs.statSync(sourcePath);
+    if (!shouldForce && fs.existsSync(CALCULATED_FILE)) {
+      const calcStat = fs.statSync(CALCULATED_FILE);
+      if (calcStat.mtimeMs >= sourceStat.mtimeMs) {
+        return CALCULATED_FILE;
+      }
+    }
+
+    fs.copyFileSync(sourcePath, TMP_INPUT);
+    execFileSync("soffice", ["--headless", "--convert-to", "xlsx", "--outdir", STORAGE_DIR, TMP_INPUT], {
+      stdio: "ignore",
+    });
+    const generated = path.join(STORAGE_DIR, path.basename(TMP_INPUT));
+    if (fs.existsSync(CALCULATED_FILE)) {
+      fs.unlinkSync(CALCULATED_FILE);
+    }
+    if (fs.existsSync(generated)) {
+      fs.renameSync(generated, CALCULATED_FILE);
+    }
+    if (fs.existsSync(TMP_INPUT)) {
+      fs.unlinkSync(TMP_INPUT);
+    }
+    return fs.existsSync(CALCULATED_FILE) ? CALCULATED_FILE : sourcePath;
+  } catch {
+    if (fs.existsSync(TMP_INPUT)) {
+      fs.unlinkSync(TMP_INPUT);
+    }
+    return sourcePath;
+  }
+}
+
+type CellValue = string | number | boolean | null;
+type RawCellValue = CellValue | Date | Record<string, unknown>;
+
+function normalizeCellValue(value: RawCellValue): CellValue {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === "object") {
+    if ("value" in value && typeof value.value === "string") {
+      return value.value;
+    }
+    if ("message" in value && typeof value.message === "string") {
+      return value.message;
+    }
+    if ("type" in value && typeof value.type === "string") {
+      return value.type;
+    }
+    return JSON.stringify(value);
+  }
+  return null;
+}
+
+function sheetToValueGrid(sheet: XLSX.WorkSheet): CellValue[][] {
   const range = sheet["!ref"] ? XLSX.utils.decode_range(sheet["!ref"]) : null;
   if (!range) return [];
 
-  const rows: (string | number | boolean | null)[][] = [];
+  const rows: CellValue[][] = [];
   for (let r = range.s.r; r <= range.e.r; r++) {
-    const row: (string | number | boolean | null)[] = [];
+    const row: CellValue[] = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[cellRef] as XLSX.CellObject | undefined;
+      if (!cell || cell.v === undefined || cell.v === null) {
+        row.push(null);
+        continue;
+      }
+      row.push(cell.v as string | number | boolean);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function sheetFormulaText(sheet: XLSX.WorkSheet): string[][] {
+  const range = sheet["!ref"] ? XLSX.utils.decode_range(sheet["!ref"]) : null;
+  if (!range) return [];
+
+  const rows: string[][] = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const row: string[] = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[cellRef] as XLSX.CellObject | undefined;
+      row.push(cell?.f ? `=${cell.f}` : "");
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function formatCellError(value: RawCellValue): string {
+  if (!value || typeof value !== "object") return "";
+  if ("value" in value && typeof value.value === "string") return value.value;
+  if ("message" in value && typeof value.message === "string") return value.message;
+  if ("type" in value && typeof value.type === "string") return value.type;
+  return "";
+}
+
+function isCycleError(value: RawCellValue): boolean {
+  if (!value || typeof value !== "object") return false;
+  return ("value" in value && value.value === "#CYCLE!") || ("type" in value && value.type === "CYCLE");
+}
+
+type WorkbookMap = Record<string, XLSX.WorkSheet>;
+type EvalContext = {
+  workbook: WorkbookMap;
+  memo: Map<string, CellValue>;
+  visiting: Set<string>;
+};
+
+function getCellValue(ctx: EvalContext, sheetName: string, addr: string): CellValue {
+  const key = `${sheetName}!${addr}`;
+  if (ctx.memo.has(key)) return ctx.memo.get(key) ?? null;
+  if (ctx.visiting.has(key)) {
+    const fallback = ctx.workbook[sheetName]?.[addr] as XLSX.CellObject | undefined;
+    const value = fallback?.v ?? null;
+    ctx.memo.set(key, value as CellValue);
+    return value as CellValue;
+  }
+  ctx.visiting.add(key);
+  const sheet = ctx.workbook[sheetName];
+  const cell = sheet?.[addr] as XLSX.CellObject | undefined;
+  let value: CellValue = null;
+  if (!cell) {
+    value = null;
+  } else if (cell.f) {
+    value = evaluateFormula(ctx, sheetName, cell.f);
+  } else if (cell.v !== undefined && cell.v !== null) {
+    value = cell.v as CellValue;
+  }
+  ctx.memo.set(key, value);
+  ctx.visiting.delete(key);
+  return value;
+}
+
+type Token =
+  | { type: "number"; value: number }
+  | { type: "string"; value: string }
+  | { type: "ident"; value: string }
+  | { type: "op"; value: string }
+  | { type: "paren"; value: "(" | ")" }
+  | { type: "comma" }
+  | { type: "colon" }
+  | { type: "bang" };
+
+function tokenizeFormula(input: string): Token[] {
+  const s = input.trim();
+  const tokens: Token[] = [];
+  let i = 0;
+  const pushOp = (value: string) => tokens.push({ type: "op", value });
+
+  while (i < s.length) {
+    const ch = s[i];
+    if (ch === " " || ch === "\t" || ch === "\n") {
+      i++;
+      continue;
+    }
+    if (ch === "(" || ch === ")") {
+      tokens.push({ type: "paren", value: ch });
+      i++;
+      continue;
+    }
+    if (ch === ",") {
+      tokens.push({ type: "comma" });
+      i++;
+      continue;
+    }
+    if (ch === ":") {
+      tokens.push({ type: "colon" });
+      i++;
+      continue;
+    }
+    if (ch === "!") {
+      tokens.push({ type: "bang" });
+      i++;
+      continue;
+    }
+    if (ch === "'" ) {
+      let j = i + 1;
+      let value = "";
+      while (j < s.length) {
+        if (s[j] === "'" && s[j + 1] === "'") {
+          value += "'";
+          j += 2;
+          continue;
+        }
+        if (s[j] === "'") break;
+        value += s[j];
+        j++;
+      }
+      tokens.push({ type: "string", value });
+      i = j + 1;
+      continue;
+    }
+    if (ch === "\"" ) {
+      let j = i + 1;
+      let value = "";
+      while (j < s.length && s[j] !== "\"") {
+        value += s[j];
+        j++;
+      }
+      tokens.push({ type: "string", value });
+      i = j + 1;
+      continue;
+    }
+    const two = s.slice(i, i + 2);
+    if (two === "<=" || two === ">=" || two === "<>") {
+      pushOp(two);
+      i += 2;
+      continue;
+    }
+    if ("+-*/^=<>".includes(ch)) {
+      pushOp(ch);
+      i++;
+      continue;
+    }
+    if (ch >= "0" && ch <= "9" || ch === ".") {
+      let j = i;
+      while (j < s.length && /[0-9.]/.test(s[j])) j++;
+      const num = Number(s.slice(i, j));
+      tokens.push({ type: "number", value: num });
+      i = j;
+      if (s[i] === "%") {
+        tokens.push({ type: "op", value: "%" });
+        i++;
+      }
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(ch)) {
+      let j = i;
+      while (j < s.length && /[A-Za-z0-9_.$]/.test(s[j])) j++;
+      tokens.push({ type: "ident", value: s.slice(i, j) });
+      i = j;
+      continue;
+    }
+    i++;
+  }
+  return tokens;
+}
+
+function parseCellRef(ref: string): string {
+  return ref.replace(/\$/g, "");
+}
+
+function parseRange(start: string, end: string): string[] {
+  const s = XLSX.utils.decode_cell(parseCellRef(start));
+  const e = XLSX.utils.decode_cell(parseCellRef(end));
+  const addrs: string[] = [];
+  for (let r = Math.min(s.r, e.r); r <= Math.max(s.r, e.r); r++) {
+    for (let c = Math.min(s.c, e.c); c <= Math.max(s.c, e.c); c++) {
+      addrs.push(XLSX.utils.encode_cell({ r, c }));
+    }
+  }
+  return addrs;
+}
+
+function evaluateFormula(ctx: EvalContext, sheetName: string, formula: string): CellValue {
+  const tokens = tokenizeFormula(formula);
+  let pos = 0;
+
+  const peek = () => tokens[pos];
+  const next = () => tokens[pos++];
+
+  const parsePrimary = (): any => {
+    const t = peek();
+    if (!t) return null;
+    if (t.type === "number") {
+      next();
+      return t.value;
+    }
+    if (t.type === "string") {
+      next();
+      const after = peek();
+      if (after && after.type === "bang") {
+        next();
+        const refToken = next();
+        if (refToken?.type === "ident") {
+          const ref = parseCellRef(refToken.value);
+          if (peek() && peek().type === "colon") {
+            next();
+            const end = next();
+            if (end?.type === "ident") {
+              return parseRange(ref, end.value).map((addr) => getCellValue(ctx, t.value, addr));
+            }
+          }
+          return getCellValue(ctx, t.value, ref);
+        }
+      }
+      return t.value;
+    }
+    if (t.type === "ident") {
+      const ident = t.value;
+      next();
+      const after = peek();
+      if (after && after.type === "paren" && after.value === "(") {
+        next();
+        const args: any[] = [];
+        if (peek() && !(peek().type === "paren" && peek().value === ")")) {
+          while (true) {
+            args.push(parseExpression());
+            if (peek() && peek().type === "comma") {
+              next();
+              continue;
+            }
+            break;
+          }
+        }
+        if (peek() && peek().type === "paren" && peek().value === ")") next();
+        return evaluateFunction(ctx, sheetName, ident, args);
+      }
+      if (after && after.type === "bang") {
+        next();
+        const refToken = next();
+        if (refToken?.type === "ident") {
+          const ref = parseCellRef(refToken.value);
+          if (peek() && peek().type === "colon") {
+            next();
+            const end = next();
+            if (end?.type === "ident") {
+              return parseRange(ref, end.value).map((addr) => getCellValue(ctx, ident, addr));
+            }
+          }
+          return getCellValue(ctx, ident, ref);
+        }
+      }
+      if (after && after.type === "colon") {
+        next();
+        const end = next();
+        if (end?.type === "ident") {
+          return parseRange(ident, end.value).map((addr) => getCellValue(ctx, sheetName, addr));
+        }
+      }
+      return getCellValue(ctx, sheetName, parseCellRef(ident));
+    }
+    if (t.type === "paren" && t.value === "(") {
+      next();
+      const expr = parseExpression();
+      if (peek() && peek().type === "paren" && peek().value === ")") next();
+      return expr;
+    }
+    return null;
+  };
+
+  const parseUnary = (): any => {
+    const t = peek();
+    if (t && t.type === "op" && (t.value === "+" || t.value === "-")) {
+      next();
+      const v = parseUnary();
+      return t.value === "-" ? -Number(v || 0) : Number(v || 0);
+    }
+    return parsePrimary();
+  };
+
+  const parsePercent = (): any => {
+    let v = parseUnary();
+    while (peek() && peek().type === "op" && peek().value === "%") {
+      next();
+      v = Number(v || 0) / 100;
+    }
+    return v;
+  };
+
+  const parseMulDiv = (): any => {
+    let v = parsePercent();
+    while (peek() && peek().type === "op" && (peek() as any).value && "*/".includes((peek() as any).value)) {
+      const op = (next() as any).value;
+      const right = parsePercent();
+      v = op === "*" ? Number(v || 0) * Number(right || 0) : Number(v || 0) / Number(right || 0);
+    }
+    return v;
+  };
+
+  const parseAddSub = (): any => {
+    let v = parseMulDiv();
+    while (peek() && peek().type === "op" && "+-".includes((peek() as any).value)) {
+      const op = (next() as any).value;
+      const right = parseMulDiv();
+      v = op === "+" ? Number(v || 0) + Number(right || 0) : Number(v || 0) - Number(right || 0);
+    }
+    return v;
+  };
+
+  const parseCompare = (): any => {
+    let v = parseAddSub();
+    const t = peek();
+    if (t && t.type === "op" && ["=", "<>", "<", ">", "<=", ">="].includes(t.value)) {
+      const op = (next() as any).value;
+      const right = parseAddSub();
+      switch (op) {
+        case "=": return v == right;
+        case "<>": return v != right;
+        case "<": return Number(v) < Number(right);
+        case ">": return Number(v) > Number(right);
+        case "<=": return Number(v) <= Number(right);
+        case ">=": return Number(v) >= Number(right);
+      }
+    }
+    return v;
+  };
+
+  const parseExpression = (): any => parseCompare();
+
+  const result = parseExpression();
+  return normalizeCellValue(result as RawCellValue);
+}
+
+function flattenValues(input: any): number[] {
+  if (Array.isArray(input)) {
+    return input.flatMap((v) => flattenValues(v));
+  }
+  if (input === null || input === undefined || input === "") return [];
+  const num = Number(input);
+  return Number.isFinite(num) ? [num] : [];
+}
+
+function evaluateFunction(ctx: EvalContext, sheetName: string, fn: string, args: any[]): any {
+  const name = fn.toUpperCase();
+  if (name === "SUM") {
+    return args.flatMap((a) => flattenValues(a)).reduce((a, b) => a + b, 0);
+  }
+  if (name === "IF") {
+    const [cond, t, f] = args;
+    return cond ? t : f;
+  }
+  if (name === "SUMIF") {
+    const range = args[0];
+    const criteria = args[1];
+    const sumRange = args[2] ?? range;
+    const rVals = Array.isArray(range) ? range : [range];
+    const sVals = Array.isArray(sumRange) ? sumRange : [sumRange];
+    const opMatch = typeof criteria === "string" ? criteria.match(/^(<=|>=|<>|=|<|>)(.*)$/) : null;
+    const op = opMatch ? opMatch[1] : "=";
+    const rhsRaw = opMatch ? opMatch[2] : criteria;
+    const rhsNum = Number(rhsRaw);
+    const rhs = Number.isFinite(rhsNum) ? rhsNum : rhsRaw;
+    let sum = 0;
+    for (let i = 0; i < rVals.length; i++) {
+      const left = rVals[i];
+      let ok = false;
+      if (typeof rhs === "number") {
+        const leftNum = Number(left);
+        if (!Number.isFinite(leftNum)) ok = false;
+        else {
+          if (op === "=") ok = leftNum === rhs;
+          else if (op === "<>") ok = leftNum !== rhs;
+          else if (op === "<") ok = leftNum < rhs;
+          else if (op === ">") ok = leftNum > rhs;
+          else if (op === "<=") ok = leftNum <= rhs;
+          else if (op === ">=") ok = leftNum >= rhs;
+        }
+      } else {
+        const leftStr = String(left ?? "");
+        const rightStr = String(rhs ?? "");
+        if (op === "=") ok = leftStr === rightStr;
+        else if (op === "<>") ok = leftStr !== rightStr;
+        else ok = false;
+      }
+      if (ok) {
+        const v = Number(sVals[i] ?? 0);
+        if (Number.isFinite(v)) sum += v;
+      }
+    }
+    return sum;
+  }
+  return null;
+}
+
+function sheetToGrid(sheet: XLSX.WorkSheet): CellValue[][] {
+  const range = sheet["!ref"] ? XLSX.utils.decode_range(sheet["!ref"]) : null;
+  if (!range) return [];
+
+  const rows: CellValue[][] = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const row: CellValue[] = [];
     for (let c = range.s.c; c <= range.e.c; c++) {
       const cellRef = XLSX.utils.encode_cell({ r, c });
       const cell = sheet[cellRef] as XLSX.CellObject | undefined;
@@ -60,22 +575,73 @@ function sheetToGrid(sheet: XLSX.WorkSheet): (string | number | boolean | null)[
   return rows;
 }
 
+function sheetFormulaMask(sheet: XLSX.WorkSheet): boolean[][] {
+  const range = sheet["!ref"] ? XLSX.utils.decode_range(sheet["!ref"]) : null;
+  if (!range) return [];
+
+  const rows: boolean[][] = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const row: boolean[] = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[cellRef] as XLSX.CellObject | undefined;
+      row.push(Boolean(cell?.f));
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 function evaluateWorkbook(workbook: XLSX.WorkBook) {
-  const sheetData: Record<string, (string | number | boolean | null)[][]> = {};
+  const formulaMask: Record<string, boolean[][]> = {};
+  const formulaText: Record<string, string[][]> = {};
+  const sourceValues: Record<string, CellValue[][]> = {};
+  const workbookMap: WorkbookMap = {};
   for (const name of workbook.SheetNames) {
     const sheet = workbook.Sheets[name];
-    sheetData[name] = sheetToGrid(sheet);
+    formulaMask[name] = sheetFormulaMask(sheet);
+    formulaText[name] = sheetFormulaText(sheet);
+    sourceValues[name] = sheetToValueGrid(sheet);
+    workbookMap[name] = sheet;
   }
-
-  const hf = HyperFormula.buildFromSheets(sheetData, {
-    licenseKey: "gpl-v3",
-  });
-
-  const values: Record<string, (string | number | boolean | null)[][]> = {};
+  const ctx: EvalContext = { workbook: workbookMap, memo: new Map(), visiting: new Set() };
+  const values: Record<string, CellValue[][]> = {};
+  const errors: Record<string, string[][]> = {};
   for (const name of workbook.SheetNames) {
-    values[name] = hf.getSheetValues(name) as (string | number | boolean | null)[][];
+    const sheet = workbook.Sheets[name];
+    const range = sheet["!ref"] ? XLSX.utils.decode_range(sheet["!ref"]) : null;
+    if (!range) {
+      values[name] = [];
+      errors[name] = [];
+      continue;
+    }
+    const rows: CellValue[][] = [];
+    const errRows: string[][] = [];
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const row: CellValue[] = [];
+      const errRow: string[] = [];
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const cell = sheet[addr] as XLSX.CellObject | undefined;
+        if (cell?.f) {
+          const v = getCellValue(ctx, name, addr);
+          row.push(v);
+          errRow.push("");
+        } else if (cell?.v !== undefined && cell?.v !== null) {
+          row.push(cell.v as CellValue);
+          errRow.push("");
+        } else {
+          row.push(null);
+          errRow.push("");
+        }
+      }
+      rows.push(row);
+      errRows.push(errRow);
+    }
+    values[name] = rows;
+    errors[name] = errRows;
   }
-  return values;
+  return { values, formulaMask, formulaText, errors };
 }
 
 router.post("/excel/upload", upload.single("file"), (req, res) => {
@@ -104,6 +670,8 @@ router.get("/excel/sheets", (_req, res) => {
 
 router.get("/excel/sheet", (req, res) => {
   const name = String(req.query.name ?? "").trim();
+  const debug = String(req.query.debug ?? "").toLowerCase();
+  const isDebug = debug === "1" || debug === "true" || debug === "yes";
   if (!name) {
     res.status(400).json({ error: "Missing sheet name" });
     return;
@@ -116,8 +684,39 @@ router.get("/excel/sheet", (req, res) => {
       return;
     }
     const evaluated = evaluateWorkbook(workbook);
-    const rows = evaluated[name] ?? [];
-    res.json({ name, rows });
+    const rows = evaluated.values[name] ?? [];
+    const formulas = evaluated.formulaMask[name] ?? [];
+    if (isDebug) {
+      const formulaText = evaluated.formulaText[name] ?? [];
+      const errors = evaluated.errors[name] ?? [];
+      res.json({ name, rows, formulas, debug: { formulaText, errors } });
+      return;
+    }
+    res.json({ name, rows, formulas });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+router.post("/excel/sheet/recalc", (req, res) => {
+  const name = String(req.body?.name ?? "").trim();
+  const overrides = req.body?.overrides as ExcelOverrides | undefined;
+  if (!name) {
+    res.status(400).json({ error: "Missing sheet name" });
+    return;
+  }
+
+  try {
+    const workbook = loadWorkbook();
+    if (!workbook.Sheets[name]) {
+      res.status(404).json({ error: "Sheet not found" });
+      return;
+    }
+    applyOverrides(workbook, name, overrides);
+    const evaluated = evaluateWorkbook(workbook);
+    const rows = evaluated.values[name] ?? [];
+    const formulas = evaluated.formulaMask[name] ?? [];
+    res.json({ name, rows, formulas });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

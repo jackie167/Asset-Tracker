@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListHoldingsQueryKey, getGetPortfolioSummaryQueryKey, getListSnapshotsQueryKey } from "@workspace/api-client-react";
 import { format } from "date-fns";
@@ -609,7 +610,11 @@ function AllocationChart({ holdings, totalValue }: { holdings: HoldingItem[]; to
   );
 }
 
-export default function Dashboard() {
+type DashboardMode = "assets" | "excel";
+
+export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode }) {
+  const showAssets = mode !== "excel";
+  const showExcel = mode !== "assets";
   const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData();
   const { createHolding, updateHolding, deleteHolding, refreshPrices } = usePortfolioMutations();
   const queryClient = useQueryClient();
@@ -628,6 +633,12 @@ export default function Dashboard() {
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
   const [excelSheet, setExcelSheet] = useState<string>("");
   const [excelRows, setExcelRows] = useState<Array<Array<string | number>>>([]);
+  const [excelFormulas, setExcelFormulas] = useState<Array<Array<boolean>>>([]);
+  const [excelDebug, setExcelDebug] = useState(false);
+  const [excelFormulaText, setExcelFormulaText] = useState<Array<Array<string>>>([]);
+  const [excelErrors, setExcelErrors] = useState<Array<Array<string>>>([]);
+  const [excelEdit, setExcelEdit] = useState<{ row: number; col: number; value: string } | null>(null);
+  const [excelOverrides, setExcelOverrides] = useState<Record<string, string | number | null>>({});
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelError, setExcelError] = useState<string | null>(null);
   const [showQtyCol, setShowQtyCol] = useState<boolean>(() =>
@@ -714,6 +725,8 @@ export default function Dashboard() {
   const sortLabel = sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
+  const formatExcelNumber = (value: number) =>
+    value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const loadExcelSheets = async () => {
     setExcelError(null);
@@ -739,15 +752,68 @@ export default function Dashboard() {
     setExcelError(null);
     setExcelLoading(true);
     try {
-      const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(name)}`);
+      const debugParam = excelDebug ? "&debug=1" : "";
+      const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(name)}${debugParam}`);
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể tải dữ liệu sheet.");
       setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
+      setExcelFormulas(Array.isArray(data?.formulas) ? data.formulas : []);
+      if (excelDebug && data?.debug) {
+        setExcelFormulaText(Array.isArray(data?.debug?.formulaText) ? data.debug.formulaText : []);
+        setExcelErrors(Array.isArray(data?.debug?.errors) ? data.debug.errors : []);
+      } else {
+        setExcelFormulaText([]);
+        setExcelErrors([]);
+      }
     } catch (err) {
       setExcelError(err instanceof Error ? err.message : "Không thể tải dữ liệu sheet.");
     } finally {
       setExcelLoading(false);
     }
+  };
+
+  const recalcExcelSheet = async (name: string, overrides: Record<string, string | number | null>) => {
+    setExcelError(null);
+    setExcelLoading(true);
+    try {
+      const res = await fetch("/api/excel/sheet/recalc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, overrides }),
+      });
+      const data = await readJsonSafe(res);
+      if (!res.ok) throw new Error(data?.error || "Không thể tính lại dữ liệu sheet.");
+      setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
+      setExcelFormulas(Array.isArray(data?.formulas) ? data.formulas : []);
+    } catch (err) {
+      setExcelError(err instanceof Error ? err.message : "Không thể tính lại dữ liệu sheet.");
+    } finally {
+      setExcelLoading(false);
+    }
+  };
+
+  const startExcelEdit = (row: number, col: number, value: string) => {
+    setExcelEdit({ row, col, value });
+  };
+
+  const commitExcelEdit = () => {
+    if (!excelEdit) return;
+    const { row, col, value } = excelEdit;
+    const trimmed = value.trim();
+    const parsed =
+      trimmed === ""
+        ? null
+        : (() => {
+            const num = Number(trimmed.replace(/,/g, ""));
+            return Number.isFinite(num) && trimmed.match(/^[-+]?[\d,.]+$/) ? num : trimmed;
+          })();
+    const key = `${row},${col}`;
+    const nextOverrides = { ...excelOverrides, [key]: parsed };
+    setExcelOverrides(nextOverrides);
+    if (excelSheet) {
+      recalcExcelSheet(excelSheet, nextOverrides);
+    }
+    setExcelEdit(null);
   };
 
   const toggleHoldingsCollapsed = () => {
@@ -777,6 +843,19 @@ export default function Dashboard() {
   [filteredHoldings]);
 
   const handleAdd = (data: HoldingForm) => {
+    const existing = holdings.find(
+      (h) => h.symbol.toLowerCase() === data.symbol.trim().toLowerCase()
+    );
+    if (existing) {
+      const sameQty = data.quantity === existing.quantity;
+      const nextQuantity = sameQty ? existing.quantity : existing.quantity + data.quantity;
+      const nextManualPrice = data.manualPrice ?? existing.manualPrice ?? null;
+      updateHolding.mutate(
+        { id: existing.id, data: { type: data.type || existing.type, quantity: nextQuantity, manualPrice: nextManualPrice } },
+        { onSuccess: () => setShowAdd(false) }
+      );
+      return;
+    }
     createHolding.mutate({ data }, { onSuccess: () => setShowAdd(false) });
   };
 
@@ -803,14 +882,18 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    loadExcelSheets();
-  }, []);
+    if (showExcel) {
+      loadExcelSheets();
+    }
+  }, [showExcel]);
 
   useEffect(() => {
+    if (!showExcel) return;
     if (excelSheet) {
+      setExcelOverrides({});
       loadExcelSheet(excelSheet);
     }
-  }, [excelSheet]);
+  }, [excelSheet, excelDebug, showExcel]);
 
   const handleRefresh = () => {
     refreshPrices.mutate({});
@@ -820,57 +903,73 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 bg-background z-10">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Tài sản</h1>
-          {lastUpdated && (
+          <h1 className="text-lg font-semibold tracking-tight">
+            {showAssets ? "Tài sản" : "Excel Sheets"}
+          </h1>
+          {showAssets && lastUpdated && (
             <p className="text-xs text-muted-foreground">
               Cập nhật: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
             </p>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshPrices.isPending}
-            className="text-xs"
-          >
-            {refreshPrices.isPending ? "..." : "↻ Làm mới"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportCSV}
-            disabled={!holdings.length}
-            className="text-xs"
-          >
-            ↓ Export
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowImport(true)}
-            className="text-xs"
-          >
-            ↑ Import
-          </Button>
-          <Button size="sm" onClick={() => setShowAdd(true)} className="text-xs">
-            + Thêm
-          </Button>
+          <Link href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            Trang chính
+          </Link>
+          <Link href="/assets" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            Tài sản
+          </Link>
+          <Link href="/excel" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            Excel
+          </Link>
+          {showAssets && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshPrices.isPending}
+                className="text-xs"
+              >
+                {refreshPrices.isPending ? "..." : "↻ Làm mới"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCSV}
+                disabled={!holdings.length}
+                className="text-xs"
+              >
+                ↓ Export
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowImport(true)}
+                className="text-xs"
+              >
+                ↑ Import
+              </Button>
+              <Button size="sm" onClick={() => setShowAdd(true)} className="text-xs">
+                + Thêm
+              </Button>
+            </>
+          )}
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-        {isError ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-            {error instanceof Error ? error.message : "Không thể tải dữ liệu."}
-          </div>
-        ) : isLoading ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-            Đang tải...
-          </div>
-        ) : (
-          <>
+        {showAssets && (
+          isError ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+              {error instanceof Error ? error.message : "Không thể tải dữ liệu."}
+            </div>
+          ) : isLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+              Đang tải...
+            </div>
+          ) : (
+            <>
             <Card className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground uppercase tracking-widest">Tổng tài sản</p>
@@ -1091,10 +1190,10 @@ export default function Dashboard() {
                             </span>
                           )}
 
-                          {/* Tỷ trọng % so với tổng danh mục */}
+                          {/* Tỷ trọng % theo tổng đang lọc */}
                           <span className="text-[10px] text-right tabular-nums text-muted-foreground">
-                            {totalValue > 0 && h.currentValue != null
-                              ? `${((h.currentValue / totalValue) * 100).toFixed(1)}%`
+                            {((filterType === "all" ? totalValue : filteredTotal) > 0) && h.currentValue != null
+                              ? `${((h.currentValue / (filterType === "all" ? totalValue : filteredTotal)) * 100).toFixed(1)}%`
                               : "—"}
                           </span>
 
@@ -1127,13 +1226,26 @@ export default function Dashboard() {
                 </>
               )}
             </Card>
+          </>
+        ))}
 
-            <Card className="p-4">
+        {showExcel && (
+          <Card className="p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-widest">Excel Sheets</p>
                   <p className="text-xs text-muted-foreground">Chọn sheet để xem dạng bảng</p>
                 </div>
+                <button
+                  onClick={() => setExcelDebug((prev) => !prev)}
+                  className={`text-xs px-2 py-1 rounded border transition-colors ${
+                    excelDebug
+                      ? "border-primary/60 text-primary bg-primary/5"
+                      : "border-border text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  Debug
+                </button>
               </div>
 
               {excelError && (
@@ -1168,19 +1280,63 @@ export default function Dashboard() {
                     <tbody>
                       {excelRows.slice(0, 200).map((row, idx) => (
                         <tr key={idx} className={idx === 0 ? "bg-muted/50 font-semibold" : ""}>
-                          {row.map((cell, cidx) => (
-                            <td key={cidx} className="px-2 py-1 border-b border-border whitespace-nowrap">
-                              {cell === null || cell === undefined || cell === "" ? "—" : String(cell)}
+                          {row.map((cell, cidx) => {
+                            const formulaRow = excelFormulas[idx] ?? [];
+                            const hasFormula = formulaRow[cidx] === true;
+                            const hasValue = cell !== null && cell !== undefined && cell !== "";
+                            const highlight = idx > 0 && !hasFormula && hasValue;
+                            const errorText = excelErrors[idx]?.[cidx] ?? "";
+                            const formulaText = excelFormulaText[idx]?.[cidx] ?? "";
+                            const isError = excelDebug && errorText;
+                            const displayValue = excelDebug
+                              ? isError
+                                ? `ERR: ${errorText}`
+                                : formulaText
+                                  ? formulaText
+                                  : cell
+                              : cell;
+                            const isEditing = excelEdit?.row === idx && excelEdit?.col === cidx;
+                            const isEditable = idx > 0 && !hasFormula && !excelDebug;
+                            return (
+                            <td
+                              key={cidx}
+                              className={`px-2 py-1 border-b border-border whitespace-nowrap ${
+                                highlight ? "underline decoration-amber-400 decoration-2 underline-offset-2" : ""
+                              } ${isError ? "text-destructive" : ""} ${isEditable ? "cursor-pointer" : ""}`}
+                              onClick={() => {
+                                if (!isEditable) return;
+                                startExcelEdit(idx, cidx, cell === null || cell === undefined ? "" : String(cell));
+                              }}
+                            >
+                              {isEditing ? (
+                                <input
+                                  autoFocus
+                                  className="w-full bg-transparent outline-none text-xs"
+                                  value={excelEdit?.value ?? ""}
+                                  onChange={(e) => setExcelEdit((prev) => prev ? { ...prev, value: e.target.value } : prev)}
+                                  onBlur={commitExcelEdit}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") commitExcelEdit();
+                                    if (e.key === "Escape") setExcelEdit(null);
+                                  }}
+                                />
+                              ) : (
+                                displayValue === null || displayValue === undefined || displayValue === ""
+                                  ? "—"
+                                  : typeof displayValue === "number"
+                                    ? formatExcelNumber(displayValue)
+                                    : String(displayValue)
+                              )}
                             </td>
-                          ))}
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-            </Card>
-          </>
+          </Card>
         )}
       </main>
 
