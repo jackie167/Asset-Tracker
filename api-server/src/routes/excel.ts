@@ -34,6 +34,14 @@ function loadWorkbook(): XLSX.WorkBook {
   return XLSX.read(buffer, { type: "buffer", cellDates: true });
 }
 
+function saveWorkbook(workbook: XLSX.WorkBook): void {
+  ensureStorageDir();
+  XLSX.writeFile(workbook, STORAGE_FILE);
+  if (fs.existsSync(CALCULATED_FILE)) {
+    fs.unlinkSync(CALCULATED_FILE);
+  }
+}
+
 type ExcelOverrides = Record<string, string | number | null>;
 
 function applyOverrides(workbook: XLSX.WorkBook, sheetName: string, overrides: ExcelOverrides | undefined): void {
@@ -713,6 +721,31 @@ router.post("/excel/sheet/recalc", (req, res) => {
       return;
     }
     applyOverrides(workbook, name, overrides);
+    const evaluated = evaluateWorkbook(workbook);
+    const rows = evaluated.values[name] ?? [];
+    const formulas = evaluated.formulaMask[name] ?? [];
+    res.json({ name, rows, formulas });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+router.post("/excel/sheet/update", (req, res) => {
+  const name = String(req.body?.name ?? "").trim();
+  const overrides = req.body?.overrides as ExcelOverrides | undefined;
+  if (!name) {
+    res.status(400).json({ error: "Missing sheet name" });
+    return;
+  }
+
+  try {
+    const workbook = loadWorkbook();
+    if (!workbook.Sheets[name]) {
+      res.status(404).json({ error: "Sheet not found" });
+      return;
+    }
+    applyOverrides(workbook, name, overrides);
+    saveWorkbook(workbook);
     const evaluated = evaluateWorkbook(workbook);
     const rows = evaluated.values[name] ?? [];
     const formulas = evaluated.formulaMask[name] ?? [];

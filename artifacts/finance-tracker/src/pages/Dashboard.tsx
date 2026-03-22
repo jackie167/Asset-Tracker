@@ -729,6 +729,17 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
   const formatExcelNumber = (value: number) =>
     value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const yearHeaderCols = useMemo(() => {
+    const header = excelRows[0] ?? [];
+    const set = new Set<number>();
+    header.forEach((cell, idx) => {
+      const label = String(cell ?? "").trim().toLowerCase();
+      if (label === "year" || label.includes("năm")) {
+        set.add(idx);
+      }
+    });
+    return set;
+  }, [excelRows]);
 
   const loadExcelSheets = async () => {
     setExcelError(null);
@@ -804,7 +815,7 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
     setExcelError(null);
     setExcelLoading(true);
     try {
-      const res = await fetch("/api/excel/sheet/recalc", {
+      const res = await fetch("/api/excel/sheet/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, overrides }),
@@ -1341,17 +1352,20 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
                                   ? formulaText
                                   : cell
                               : cell;
+                            const isYearCol = yearHeaderCols.has(cidx);
                             const highlight =
                               idx > 0 &&
                               !hasFormula &&
                               hasValue &&
-                              typeof displayValue === "number";
+                              typeof displayValue === "number" &&
+                              !isYearCol;
                             const isEditing = excelEdit?.row === idx && excelEdit?.col === cidx;
                             const isEditable = idx > 0 && !hasFormula && !excelDebug;
                             const isNumeric =
                               !isEditing &&
                               !excelDebug &&
-                              typeof displayValue === "number";
+                              typeof displayValue === "number" &&
+                              !isYearCol;
                             return (
                             <td
                               key={cidx}
@@ -1381,7 +1395,7 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
                                 displayValue === null || displayValue === undefined || displayValue === ""
                                   ? "—"
                                   : typeof displayValue === "number"
-                                    ? formatExcelNumber(displayValue)
+                                    ? (isYearCol ? String(Math.trunc(displayValue)) : formatExcelNumber(displayValue))
                                     : String(displayValue)
                               )}
                             </td>
