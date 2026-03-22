@@ -639,6 +639,8 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
   const [excelErrors, setExcelErrors] = useState<Array<Array<string>>>([]);
   const [excelEdit, setExcelEdit] = useState<{ row: number; col: number; value: string } | null>(null);
   const [excelOverrides, setExcelOverrides] = useState<Record<string, string | number | null>>({});
+  const [excelUploading, setExcelUploading] = useState(false);
+  const excelFileRef = useRef<HTMLInputElement | null>(null);
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelError, setExcelError] = useState<string | null>(null);
   const [showQtyCol, setShowQtyCol] = useState<boolean>(() =>
@@ -769,6 +771,32 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
       setExcelError(err instanceof Error ? err.message : "Không thể tải dữ liệu sheet.");
     } finally {
       setExcelLoading(false);
+    }
+  };
+
+  const handleExcelUpload = async (file: File) => {
+    setExcelError(null);
+    setExcelUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/excel/upload", { method: "POST", body: form });
+      const data = await readJsonSafe(res);
+      if (!res.ok) throw new Error(data?.error || "Không thể upload file Excel.");
+      const sheets = Array.isArray(data?.sheets) ? data.sheets : [];
+      setExcelSheets(sheets);
+      if (sheets.length) {
+        setExcelSheet(sheets[0]);
+      } else {
+        setExcelSheet("");
+        setExcelRows([]);
+        setExcelFormulas([]);
+      }
+    } catch (err) {
+      setExcelError(err instanceof Error ? err.message : "Không thể upload file Excel.");
+    } finally {
+      setExcelUploading(false);
+      if (excelFileRef.current) excelFileRef.current.value = "";
     }
   };
 
@@ -958,7 +986,7 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+      <main className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 py-4 space-y-4">
         {showAssets && (
           isError ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
@@ -1231,22 +1259,41 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
 
         {showExcel && (
           <Card className="p-4">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest">Excel Sheets</p>
-                  <p className="text-xs text-muted-foreground">Chọn sheet để xem dạng bảng</p>
-                </div>
-                <button
-                  onClick={() => setExcelDebug((prev) => !prev)}
-                  className={`text-xs px-2 py-1 rounded border transition-colors ${
-                    excelDebug
-                      ? "border-primary/60 text-primary bg-primary/5"
-                      : "border-border text-muted-foreground hover:border-primary/40"
-                  }`}
-                >
-                  Debug
-                </button>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest">Excel Sheets</p>
+                <p className="text-xs text-muted-foreground">Chọn sheet để xem dạng bảng</p>
               </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={excelFileRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleExcelUpload(f);
+                    }}
+                  />
+                  <button
+                    onClick={() => excelFileRef.current?.click()}
+                    className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:border-primary/40"
+                    disabled={excelUploading}
+                  >
+                    {excelUploading ? "Đang import..." : "Import file"}
+                  </button>
+                  <button
+                    onClick={() => setExcelDebug((prev) => !prev)}
+                    className={`text-xs px-2 py-1 rounded border transition-colors ${
+                      excelDebug
+                        ? "border-primary/60 text-primary bg-primary/5"
+                        : "border-border text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    Debug
+                  </button>
+                </div>
+            </div>
 
               {excelError && (
                 <p className="text-xs text-destructive mb-2">{excelError}</p>
@@ -1284,7 +1331,6 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
                             const formulaRow = excelFormulas[idx] ?? [];
                             const hasFormula = formulaRow[cidx] === true;
                             const hasValue = cell !== null && cell !== undefined && cell !== "";
-                            const highlight = idx > 0 && !hasFormula && hasValue;
                             const errorText = excelErrors[idx]?.[cidx] ?? "";
                             const formulaText = excelFormulaText[idx]?.[cidx] ?? "";
                             const isError = excelDebug && errorText;
@@ -1295,14 +1341,25 @@ export default function Dashboard({ mode = "assets" }: { mode?: DashboardMode })
                                   ? formulaText
                                   : cell
                               : cell;
+                            const highlight =
+                              idx > 0 &&
+                              !hasFormula &&
+                              hasValue &&
+                              typeof displayValue === "number";
                             const isEditing = excelEdit?.row === idx && excelEdit?.col === cidx;
                             const isEditable = idx > 0 && !hasFormula && !excelDebug;
+                            const isNumeric =
+                              !isEditing &&
+                              !excelDebug &&
+                              typeof displayValue === "number";
                             return (
                             <td
                               key={cidx}
                               className={`px-2 py-1 border-b border-border whitespace-nowrap ${
                                 highlight ? "underline decoration-amber-400 decoration-2 underline-offset-2" : ""
-                              } ${isError ? "text-destructive" : ""} ${isEditable ? "cursor-pointer" : ""}`}
+                              } ${isError ? "text-destructive" : ""} ${isEditable ? "cursor-pointer" : ""} ${
+                                isNumeric ? "text-right tabular-nums" : ""
+                              }`}
                               onClick={() => {
                                 if (!isEditable) return;
                                 startExcelEdit(idx, cidx, cell === null || cell === undefined ? "" : String(cell));

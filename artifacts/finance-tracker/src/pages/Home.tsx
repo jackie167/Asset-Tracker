@@ -11,7 +11,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+      <main className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 py-4 space-y-4">
         <Card className="p-4 space-y-4 border-border/70 bg-gradient-to-br from-card via-card to-muted/40">
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-[0.3em]">Asset Tracker</p>
