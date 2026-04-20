@@ -1,0 +1,148 @@
+import { useMemo, useState } from "react";
+import { BarChart, Bar, Cell, LabelList, Tooltip, XAxis, YAxis } from "recharts";
+import { Card } from "@/components/ui/card";
+import type { HoldingItem } from "@/pages/assets/types";
+import { formatVND, typeLabel } from "@/pages/assets/utils";
+
+const PIE_COLORS = [
+  "hsl(217, 91%, 60%)",
+  "hsl(43, 96%, 56%)",
+  "hsl(142, 71%, 45%)",
+  "hsl(280, 65%, 60%)",
+  "hsl(0, 72%, 60%)",
+];
+
+type AllocationChartProps = {
+  holdings: HoldingItem[];
+  totalValue: number;
+};
+
+export default function AllocationChart({ holdings, totalValue }: AllocationChartProps) {
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+
+  const data = useMemo(() => {
+    const typeMap = new Map<string, number>();
+    for (const holding of holdings ?? []) {
+      if (holding.currentValue == null || holding.currentValue <= 0) continue;
+      const normalizedType = holding.type.toLowerCase();
+      typeMap.set(normalizedType, (typeMap.get(normalizedType) ?? 0) + holding.currentValue);
+    }
+    const entries = Array.from(typeMap.entries());
+    entries.sort(([, a], [, b]) => (sortDir === "desc" ? b - a : a - b));
+    return entries.map(([type, value], index) => ({
+      type,
+      name: typeLabel(type),
+      value,
+      pct: totalValue > 0 ? (value / totalValue) * 100 : 0,
+      color: PIE_COLORS[index % PIE_COLORS.length],
+    }));
+  }, [holdings, totalValue, sortDir]);
+
+  if (data.length === 0) return null;
+
+  const barWidth = 48;
+  const barGap = 28;
+  const chartWidth = data.length * (barWidth + barGap) + 40;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs text-muted-foreground uppercase tracking-widest">Phân bổ tài sản</p>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setSortDir("desc")}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+              sortDir === "desc"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border text-muted-foreground hover:border-primary/50"
+            }`}
+          >
+            Cao → Thấp
+          </button>
+          <button
+            onClick={() => setSortDir("asc")}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+              sortDir === "asc"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border text-muted-foreground hover:border-primary/50"
+            }`}
+          >
+            Thấp → Cao
+          </button>
+        </div>
+      </div>
+
+      <div style={{ height: 160 }} className="flex justify-center overflow-x-auto">
+        <BarChart
+          width={chartWidth}
+          height={160}
+          data={data}
+          barSize={barWidth}
+          barCategoryGap={barGap}
+          margin={{ top: 18, right: 20, left: 20, bottom: 0 }}
+        >
+          <XAxis
+            dataKey="name"
+            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis hide />
+          <Tooltip
+            formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
+              `${formatVND(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
+              props.payload?.name ?? "",
+            ]}
+            contentStyle={{
+              background: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
+          <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+            <LabelList
+              dataKey="pct"
+              position="top"
+              style={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+              formatter={(value: number) => `${value.toFixed(1)}%`}
+            />
+            {data.map((entry, index) => (
+              <Cell key={index} fill={entry.color} />
+            ))}
+          </Bar>
+        </BarChart>
+      </div>
+
+      <div className="flex justify-center mt-1">
+        <table style={{ borderCollapse: "collapse", display: "inline-table" }}>
+          <thead>
+            <tr className="text-[9px] text-muted-foreground uppercase tracking-wider">
+              <th className="py-1.5 pr-6 text-left font-normal border-b border-border">Loại tài sản</th>
+              <th className="py-1.5 px-4 text-center font-normal border-b border-border">Tỷ lệ</th>
+              <th className="py-1.5 pl-6 text-right font-normal border-b border-border">Giá trị</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((entry, index) => (
+              <tr key={entry.type} className={index < data.length - 1 ? "border-b border-border" : ""}>
+                <td className="py-2.5 pr-6">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
+                    <span className="text-sm font-medium whitespace-nowrap">{entry.name}</span>
+                  </div>
+                </td>
+                <td className="py-2.5 px-4 text-[11px] text-center tabular-nums font-medium">
+                  {entry.pct.toFixed(1)}%
+                </td>
+                <td className="py-2.5 pl-6 text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
+                  {formatVND(entry.value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}

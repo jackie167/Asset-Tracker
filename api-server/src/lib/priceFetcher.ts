@@ -461,57 +461,27 @@ export async function getLatestPrices(): Promise<typeof pricesTable.$inferSelect
 }
 
 let schedulerTimeout: ReturnType<typeof setTimeout> | null = null;
-const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-
-function getNextRunTime(now: Date): Date {
-  const nowVn = new Date(now.getTime() + VN_OFFSET_MS);
-  const vnYear = nowVn.getUTCFullYear();
-  const vnMonth = nowVn.getUTCMonth();
-  const vnDate = nowVn.getUTCDate();
-  const vnHour = nowVn.getUTCHours();
-  const vnMinute = nowVn.getUTCMinutes();
-  const vnSecond = nowVn.getUTCSeconds();
-  const vnMs = nowVn.getUTCMilliseconds();
-
-  const makeUtcFromVn = (year: number, month: number, date: number, hour: number) => {
-    return new Date(Date.UTC(year, month, date, hour - 7, 0, 0, 0));
-  };
-
-  if (vnHour < 10 || (vnHour === 10 && vnMinute === 0 && vnSecond === 0 && vnMs === 0)) {
-    return makeUtcFromVn(vnYear, vnMonth, vnDate, 10);
-  }
-  if (vnHour < 17 || (vnHour === 17 && vnMinute === 0 && vnSecond === 0 && vnMs === 0)) {
-    return makeUtcFromVn(vnYear, vnMonth, vnDate, 17);
-  }
-
-  return makeUtcFromVn(vnYear, vnMonth, vnDate + 1, 10);
-}
+const PRICE_SCHEDULER_INTERVAL_MS = 60 * 60 * 1000;
 
 export function startPriceScheduler(): void {
   if (schedulerTimeout) return;
 
-  console.log("[PriceFetcher] Starting price scheduler (10:00 and 17:00 Vietnam time)");
+  console.log("[PriceFetcher] Starting price scheduler (every 60 minutes)");
 
-  const scheduleNext = () => {
-    const now = new Date();
-    const nextRun = getNextRunTime(now);
-    const delayMs = Math.max(0, nextRun.getTime() - now.getTime());
-
-    const nextRunVn = new Date(nextRun.getTime() + VN_OFFSET_MS);
-    const vnLabel = nextRunVn.toISOString().replace("T", " ").slice(0, 19) + " (VN)";
-    console.log(`[PriceFetcher] Next scheduled fetch at ${vnLabel}`);
-
-    schedulerTimeout = setTimeout(() => {
-      console.log("[PriceFetcher] Running scheduled price fetch...");
-      fetchAndStorePrices()
-        .then((r) => console.log("[PriceFetcher] Scheduled fetch result:", r.message))
-        .catch((e) => console.error("[PriceFetcher] Scheduled fetch failed:", e))
-        .finally(() => {
+  const runScheduledFetch = () => {
+    console.log("[PriceFetcher] Running scheduled price fetch...");
+    fetchAndStorePrices()
+      .then((result) => console.log("[PriceFetcher] Scheduled fetch result:", result.message))
+      .catch((error) => console.error("[PriceFetcher] Scheduled fetch failed:", error))
+      .finally(() => {
+        const nextRun = new Date(Date.now() + PRICE_SCHEDULER_INTERVAL_MS);
+        console.log(`[PriceFetcher] Next scheduled fetch at ${nextRun.toISOString()}`);
+        schedulerTimeout = setTimeout(() => {
           schedulerTimeout = null;
-          scheduleNext();
-        });
-    }, delayMs);
+          runScheduledFetch();
+        }, PRICE_SCHEDULER_INTERVAL_MS);
+      });
   };
 
-  scheduleNext();
+  runScheduledFetch();
 }

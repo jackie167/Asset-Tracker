@@ -1,3 +1,4 @@
+import "./lib/loadEnv.js";
 import { app } from './app.js';
 
 const rawPort = process.env["PORT"] || "4000";
