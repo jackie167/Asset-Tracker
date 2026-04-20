@@ -163,7 +163,7 @@ router.post("/holdings/import", upload.single("file"), async (req, res): Promise
 
   console.log(`[Import] Processing file: ${req.file.originalname} (${req.file.size} bytes, ${req.file.mimetype})`);
 
-  let rows: RawRow[] = [];
+  let rows: RawRow[];
 
   try {
     const isCsv = req.file.originalname.toLowerCase().endsWith(".csv")

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 
@@ -40,7 +40,7 @@ export default function ExcelPage() {
     return set;
   }, [excelRows]);
 
-  const loadExcelSheets = async () => {
+  const loadExcelSheets = useCallback(async () => {
     setExcelError(null);
     setExcelLoading(true);
     try {
@@ -55,9 +55,9 @@ export default function ExcelPage() {
     } finally {
       setExcelLoading(false);
     }
-  };
+  }, [excelSheet]);
 
-  const loadExcelSheet = async (name: string) => {
+  const loadExcelSheet = useCallback(async (name: string) => {
     if (!name) return;
     setExcelError(null);
     setExcelLoading(true);
@@ -80,7 +80,7 @@ export default function ExcelPage() {
     } finally {
       setExcelLoading(false);
     }
-  };
+  }, [excelDebug]);
 
   const handleExcelUpload = async (file: File) => {
     setExcelError(null);
@@ -154,13 +154,13 @@ export default function ExcelPage() {
 
   useEffect(() => {
     loadExcelSheets();
-  }, []);
+  }, [loadExcelSheets]);
 
   useEffect(() => {
     if (!excelSheet) return;
     setExcelOverrides({});
     loadExcelSheet(excelSheet);
-  }, [excelDebug, excelSheet]);
+  }, [excelSheet, loadExcelSheet]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">

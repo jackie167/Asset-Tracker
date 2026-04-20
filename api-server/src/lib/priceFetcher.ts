@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { db, pricesTable, holdingsTable, snapshotsTable } from "../../../lib/db/src/index.ts";
-import { desc, gte } from "drizzle-orm";
+import { desc } from "drizzle-orm";
+import { createPriceScheduler } from "./priceScheduler.js";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -460,28 +461,37 @@ export async function getLatestPrices(): Promise<typeof pricesTable.$inferSelect
   return result;
 }
 
-let schedulerTimeout: ReturnType<typeof setTimeout> | null = null;
-const PRICE_SCHEDULER_INTERVAL_MS = 60 * 60 * 1000;
+export const PRICE_SCHEDULER_INTERVAL_MS = 60 * 60 * 1000;
+let priceScheduler: ReturnType<typeof createPriceScheduler> | null = null;
 
-export function startPriceScheduler(): void {
-  if (schedulerTimeout) return;
+type SchedulerDeps = {
+  runFetch?: typeof fetchAndStorePrices;
+  now?: () => number;
+  log?: Pick<Console, "log" | "error">;
+};
 
-  console.log("[PriceFetcher] Starting price scheduler (every 60 minutes)");
+export function startPriceScheduler(deps: SchedulerDeps = {}): void {
+  if (priceScheduler) return;
 
-  const runScheduledFetch = () => {
-    console.log("[PriceFetcher] Running scheduled price fetch...");
-    fetchAndStorePrices()
-      .then((result) => console.log("[PriceFetcher] Scheduled fetch result:", result.message))
-      .catch((error) => console.error("[PriceFetcher] Scheduled fetch failed:", error))
-      .finally(() => {
-        const nextRun = new Date(Date.now() + PRICE_SCHEDULER_INTERVAL_MS);
-        console.log(`[PriceFetcher] Next scheduled fetch at ${nextRun.toISOString()}`);
-        schedulerTimeout = setTimeout(() => {
-          schedulerTimeout = null;
-          runScheduledFetch();
-        }, PRICE_SCHEDULER_INTERVAL_MS);
-      });
-  };
+  const runFetch = deps.runFetch ?? fetchAndStorePrices;
+  const now = deps.now ?? Date.now;
+  const log = deps.log ?? console;
+  priceScheduler = createPriceScheduler({
+    intervalMs: PRICE_SCHEDULER_INTERVAL_MS,
+    now,
+    log,
+    startMessage: "[PriceFetcher] Starting price scheduler (every 60 minutes)",
+    runTask: async () => {
+      const result = await runFetch();
+      log.log("[PriceFetcher] Scheduled fetch result:", result.message);
+    },
+  });
+  priceScheduler.start();
+}
 
-  runScheduledFetch();
+export function stopPriceScheduler(): void {
+  if (priceScheduler) {
+    priceScheduler.stop();
+    priceScheduler = null;
+  }
 }

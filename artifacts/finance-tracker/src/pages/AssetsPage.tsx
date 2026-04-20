@@ -176,7 +176,7 @@ export default function AssetsPage() {
     sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
 
   const handleRefresh = () => {
-    refreshPrices.mutate({});
+    refreshPrices.mutate();
   };
 
   const toggleHideValues = () => {

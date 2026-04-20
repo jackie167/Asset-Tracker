@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ const holdingSchema = z.object({
   manualPrice: z.coerce.number().min(0).optional().nullable(),
 });
 
+const BUILTIN_TYPES = ["stock", "gold", "crypto"];
+
 type AddEditDialogProps = {
   open: boolean;
   onClose: () => void;
@@ -40,14 +42,13 @@ export default function AddEditDialog({
 }: AddEditDialogProps) {
   const initialMode: TypeMode = initialData ? resolveMode(initialData.type) : "stock";
   const [typeMode, setTypeMode] = useState<TypeMode>(initialMode);
-  const builtinTypes = ["stock", "gold", "crypto"];
 
   const baseCustomTypes = useMemo(() => {
     const fromHoldings = allHoldings
       .map((holding) => holding.type.toLowerCase())
-      .filter((type) => !builtinTypes.includes(type));
+      .filter((type) => !BUILTIN_TYPES.includes(type));
     const fromEdit =
-      initialData && !builtinTypes.includes(initialData.type.toLowerCase())
+      initialData && !BUILTIN_TYPES.includes(initialData.type.toLowerCase())
         ? [initialData.type.toLowerCase()]
         : [];
     return [...new Set([...fromHoldings, ...fromEdit])];
@@ -66,7 +67,7 @@ export default function AddEditDialog({
   const isEditing = !!initialData;
 
   const form = useForm<HoldingForm>({
-    resolver: zodResolver(holdingSchema),
+    resolver: zodResolver(holdingSchema as never) as Resolver<HoldingForm>,
     defaultValues: initialData
       ? {
           type: initialData.type,
@@ -127,7 +128,7 @@ export default function AddEditDialog({
   const handleConfirmNewType = () => {
     const trimmed = newTypeName.trim().toLowerCase();
     if (!trimmed) return;
-    if (builtinTypes.includes(trimmed)) {
+    if (BUILTIN_TYPES.includes(trimmed)) {
       handleTypeSelect(trimmed);
       setShowNewInput(false);
       setNewTypeName("");

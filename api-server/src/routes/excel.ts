@@ -177,19 +177,6 @@ function sheetFormulaText(sheet: XLSX.WorkSheet): string[][] {
   return rows;
 }
 
-function formatCellError(value: RawCellValue): string {
-  if (!value || typeof value !== "object") return "";
-  if ("value" in value && typeof value.value === "string") return value.value;
-  if ("message" in value && typeof value.message === "string") return value.message;
-  if ("type" in value && typeof value.type === "string") return value.type;
-  return "";
-}
-
-function isCycleError(value: RawCellValue): boolean {
-  if (!value || typeof value !== "object") return false;
-  return ("value" in value && value.value === "#CYCLE!") || ("type" in value && value.type === "CYCLE");
-}
-
 type WorkbookMap = Record<string, XLSX.WorkSheet>;
 type EvalContext = {
   workbook: WorkbookMap;
@@ -470,7 +457,7 @@ function evaluateFormula(ctx: EvalContext, sheetName: string, formula: string): 
   };
 
   const parseCompare = (): any => {
-    let v = parseAddSub();
+    const v = parseAddSub();
     const t = peek();
     if (t && t.type === "op" && ["=", "<>", "<", ">", "<=", ">="].includes(t.value)) {
       const op = (next() as any).value;
@@ -552,35 +539,6 @@ function evaluateFunction(ctx: EvalContext, sheetName: string, fn: string, args:
     return sum;
   }
   return null;
-}
-
-function sheetToGrid(sheet: XLSX.WorkSheet): CellValue[][] {
-  const range = sheet["!ref"] ? XLSX.utils.decode_range(sheet["!ref"]) : null;
-  if (!range) return [];
-
-  const rows: CellValue[][] = [];
-  for (let r = range.s.r; r <= range.e.r; r++) {
-    const row: CellValue[] = [];
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cellRef = XLSX.utils.encode_cell({ r, c });
-      const cell = sheet[cellRef] as XLSX.CellObject | undefined;
-      if (!cell) {
-        row.push(null);
-        continue;
-      }
-      if (cell.f) {
-        row.push(`=${cell.f}`);
-        continue;
-      }
-      if (cell.v === undefined || cell.v === null) {
-        row.push(null);
-        continue;
-      }
-      row.push(cell.v as string | number | boolean);
-    }
-    rows.push(row);
-  }
-  return rows;
 }
 
 function sheetFormulaMask(sheet: XLSX.WorkSheet): boolean[][] {

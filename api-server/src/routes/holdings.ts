@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, holdingsTable, pricesTable } from "../../../lib/db/src/index.ts";
+import { db, holdingsTable } from "../../../lib/db/src/index.ts";
 import {
   ListHoldingsResponse,
   CreateHoldingBody,
