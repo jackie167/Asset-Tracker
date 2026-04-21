@@ -15,9 +15,10 @@ const PIE_COLORS = [
 type AllocationChartProps = {
   holdings: HoldingItem[];
   totalValue: number;
+  onTypeSelect?: (type: string) => void;
 };
 
-export default function AllocationChart({ holdings, totalValue }: AllocationChartProps) {
+export default function AllocationChart({ holdings, totalValue, onTypeSelect }: AllocationChartProps) {
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
 
   const data = useMemo(() => {
@@ -108,7 +109,12 @@ export default function AllocationChart({ holdings, totalValue }: AllocationChar
               formatter={(value: number) => `${value.toFixed(1)}%`}
             />
             {data.map((entry, index) => (
-              <Cell key={index} fill={entry.color} />
+              <Cell
+                key={entry.type}
+                fill={entry.color}
+                cursor={onTypeSelect ? "pointer" : "default"}
+                onClick={() => onTypeSelect?.(entry.type)}
+              />
             ))}
           </Bar>
         </BarChart>
@@ -125,7 +131,13 @@ export default function AllocationChart({ holdings, totalValue }: AllocationChar
           </thead>
           <tbody>
             {data.map((entry, index) => (
-              <tr key={entry.type} className={index < data.length - 1 ? "border-b border-border" : ""}>
+              <tr
+                key={entry.type}
+                className={`${index < data.length - 1 ? "border-b border-border" : ""} ${
+                  onTypeSelect ? "cursor-pointer hover:bg-muted/40 transition-colors" : ""
+                }`}
+                onClick={() => onTypeSelect?.(entry.type)}
+              >
                 <td className="py-2.5 pr-6">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />

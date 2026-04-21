@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getListHoldingsQueryKey,
@@ -18,6 +19,7 @@ import type { ChartPoint, HoldingForm, HoldingItem, SortOrder } from "@/pages/as
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
 export default function AssetsPage() {
+  const [, navigate] = useLocation();
   const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData();
   const { createHolding, updateHolding, deleteHolding, refreshPrices } = usePortfolioMutations();
   const queryClient = useQueryClient();
@@ -179,6 +181,10 @@ export default function AssetsPage() {
     refreshPrices.mutate();
   };
 
+  const handleOpenAssetType = (type: string) => {
+    navigate(`/assets/type/${encodeURIComponent(type)}`);
+  };
+
   const toggleHideValues = () => {
     const next = !hideValues;
     setHideValues(next);
@@ -226,7 +232,13 @@ export default function AssetsPage() {
               onToggleHideValues={toggleHideValues}
             />
 
-            {totalValue > 0 && <AllocationChart holdings={holdings} totalValue={totalValue} />}
+            {totalValue > 0 && (
+              <AllocationChart
+                holdings={holdings}
+                totalValue={totalValue}
+                onTypeSelect={handleOpenAssetType}
+              />
+            )}
 
             {holdings.length > 0 && <PerformanceChart chartData={chartData} hideValues={hideValues} />}
 

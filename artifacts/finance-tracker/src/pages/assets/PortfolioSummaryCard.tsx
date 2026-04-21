@@ -2,12 +2,14 @@ import { Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 type PortfolioSummaryCardProps = {
+  title?: string;
   totalValueLabel: string;
   hideValues: boolean;
   onToggleHideValues: () => void;
 };
 
 export default function PortfolioSummaryCard({
+  title = "Tổng tài sản",
   totalValueLabel,
   hideValues,
   onToggleHideValues,
@@ -15,7 +17,7 @@ export default function PortfolioSummaryCard({
   return (
     <Card className="p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground uppercase tracking-widest">Tổng tài sản</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-widest">{title}</p>
         <button
           type="button"
           onClick={onToggleHideValues}

@@ -23,10 +23,15 @@ const holdingSchema = z.object({
 
 const BUILTIN_TYPES = ["stock", "gold", "crypto"];
 
+function getDefaultSymbol(type: string) {
+  return type === "gold" ? "SJC_1L" : "";
+}
+
 type AddEditDialogProps = {
   open: boolean;
   onClose: () => void;
   initialData?: HoldingItem | null;
+  defaultType?: string;
   onSubmit: (data: HoldingForm) => void;
   isLoading: boolean;
   allHoldings?: HoldingItem[];
@@ -36,11 +41,13 @@ export default function AddEditDialog({
   open,
   onClose,
   initialData,
+  defaultType = "stock",
   onSubmit,
   isLoading,
   allHoldings = [],
 }: AddEditDialogProps) {
-  const initialMode: TypeMode = initialData ? resolveMode(initialData.type) : "stock";
+  const normalizedDefaultType = defaultType.toLowerCase();
+  const initialMode: TypeMode = initialData ? resolveMode(initialData.type) : resolveMode(normalizedDefaultType);
   const [typeMode, setTypeMode] = useState<TypeMode>(initialMode);
 
   const baseCustomTypes = useMemo(() => {
@@ -75,7 +82,7 @@ export default function AddEditDialog({
           quantity: initialData.quantity,
           manualPrice: null,
         }
-      : { type: "stock", symbol: "", quantity: 0, manualPrice: null },
+      : { type: normalizedDefaultType, symbol: getDefaultSymbol(normalizedDefaultType), quantity: 0, manualPrice: null },
   });
 
   useEffect(() => {
@@ -84,11 +91,16 @@ export default function AddEditDialog({
 
   useEffect(() => {
     if (open && !initialData) {
-      form.reset({ type: "stock", symbol: "", quantity: 0, manualPrice: null });
+      form.reset({
+        type: normalizedDefaultType,
+        symbol: getDefaultSymbol(normalizedDefaultType),
+        quantity: 0,
+        manualPrice: null,
+      });
       setTotalValueStr("");
-      setTypeMode("stock");
+      setTypeMode(resolveMode(normalizedDefaultType));
     }
-  }, [form, initialData, open]);
+  }, [form, initialData, normalizedDefaultType, open]);
 
   const watchQty = form.watch("quantity");
   const watchSymbol = form.watch("symbol");

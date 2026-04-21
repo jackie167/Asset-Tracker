@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AssetsPage from "@/pages/AssetsPage";
+import AssetTypePage from "@/pages/AssetTypePage";
 import ExcelPage from "@/pages/ExcelPage";
 import Home from "@/pages/Home";
 import NotFound from "@/pages/not-found";
@@ -21,6 +22,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/assets" component={AssetsPage} />
+      <Route path="/assets/type/:type" component={AssetTypePage} />
       <Route path="/excel" component={ExcelPage} />
       <Route component={NotFound} />
     </Switch>
