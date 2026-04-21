@@ -11,5 +11,6 @@ export interface Snapshot {
   totalValue: number;
   stockValue: number;
   goldValue: number;
+  typeValues: Record<string, number>;
   snapshotAt: Date;
 }

@@ -117,13 +117,14 @@ export const RefreshPricesResponse = zod.object({
 });
 
 /**
- * @summary Get portfolio value snapshots for the last 7 days
+ * @summary Get portfolio value snapshots for the selected range
  */
 export const ListSnapshotsResponseItem = zod.object({
   id: zod.number(),
   totalValue: zod.number(),
   stockValue: zod.number(),
   goldValue: zod.number(),
+  typeValues: zod.record(zod.string(), zod.number()),
   snapshotAt: zod.date(),
 });
 export const ListSnapshotsResponse = zod.array(ListSnapshotsResponseItem);

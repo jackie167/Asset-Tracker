@@ -66,11 +66,12 @@ export default function AssetTypePage() {
       .sort((a, b) => new Date(a.snapshotAt).getTime() - new Date(b.snapshotAt).getTime())
       .map((snapshot) => {
         const value =
-          normalizedType === "stock"
+          snapshot.typeValues?.[normalizedType] ??
+          (normalizedType === "stock"
             ? snapshot.stockValue
             : normalizedType === "gold"
               ? snapshot.goldValue
-              : null;
+              : null);
 
         if (value == null) return null;
 
@@ -86,7 +87,7 @@ export default function AssetTypePage() {
     return points;
   }, [normalizedType, snapshots]);
 
-  const supportsHistoricalChart = normalizedType === "stock" || normalizedType === "gold";
+  const supportsHistoricalChart = typeHoldings.length > 0;
   const typeLabel = normalizedType ? formatTypeLabel(normalizedType) : "Loại tài sản";
   const lastUpdated = summary?.lastUpdated;
 

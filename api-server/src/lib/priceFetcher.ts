@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { db, pricesTable, holdingsTable, snapshotsTable } from "../../../lib/db/src/index.ts";
+import { db, pricesTable, holdingsTable, snapshotsTable, snapshotTypeValuesTable } from "../../../lib/db/src/index.ts";
 import { desc } from "drizzle-orm";
 import { createPriceScheduler } from "./priceScheduler.js";
 
@@ -419,6 +419,7 @@ async function savePortfolioSnapshot(
   let stockValue = 0;
   let goldValue = 0;
   let otherValue = 0;
+  const typeTotals = new Map<string, number>();
 
   for (const h of holdings) {
     const qty = parseFloat(String(h.quantity));
@@ -426,6 +427,8 @@ async function savePortfolioSnapshot(
     const price = priceMap.get(sym) ?? (h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null);
     if (price == null) continue;
     const val = qty * price;
+    const normalizedType = h.type.toLowerCase();
+    typeTotals.set(normalizedType, (typeTotals.get(normalizedType) ?? 0) + val);
     if (h.type === "stock") stockValue += val;
     else if (h.type === "gold") goldValue += val;
     else otherValue += val;
@@ -433,11 +436,26 @@ async function savePortfolioSnapshot(
 
   const totalValue = stockValue + goldValue + otherValue;
   if (totalValue > 0) {
-    await db.insert(snapshotsTable).values({
-      totalValue: String(totalValue),
-      stockValue: String(stockValue),
-      goldValue: String(goldValue),
-      snapshotAt: new Date(),
+    await db.transaction(async (tx) => {
+      const [snapshot] = await tx
+        .insert(snapshotsTable)
+        .values({
+          totalValue: String(totalValue),
+          stockValue: String(stockValue),
+          goldValue: String(goldValue),
+          snapshotAt: new Date(),
+        })
+        .returning({ id: snapshotsTable.id });
+
+      if (snapshot && typeTotals.size > 0) {
+        await tx.insert(snapshotTypeValuesTable).values(
+          Array.from(typeTotals.entries()).map(([type, value]) => ({
+            snapshotId: snapshot.id,
+            type,
+            value: String(value),
+          })),
+        );
+      }
     });
     console.log(`[PriceFetcher] Snapshot saved: total=${totalValue.toLocaleString()} VND`);
   }

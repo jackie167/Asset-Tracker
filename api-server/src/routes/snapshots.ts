@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, snapshotsTable } from "../../../lib/db/src/index.ts";
-import { desc, gte } from "drizzle-orm";
+import { db, snapshotsTable, snapshotTypeValuesTable } from "../../../lib/db/src/index.ts";
+import { desc, gte, inArray } from "drizzle-orm";
 import { ListSnapshotsResponse } from "../../../lib/api-zod/src/index.ts";
 
 const router: IRouter = Router();
@@ -47,6 +47,21 @@ router.get("/snapshots", async (req, res): Promise<void> => {
     .limit(10000);
 
   const dailySnapshots = collapseSnapshotsByDay(snapshots);
+  const snapshotIds = dailySnapshots.map((snapshot) => snapshot.id);
+  const typeValues =
+    snapshotIds.length > 0
+      ? await db
+          .select()
+          .from(snapshotTypeValuesTable)
+          .where(inArray(snapshotTypeValuesTable.snapshotId, snapshotIds))
+      : [];
+
+  const typeValuesBySnapshot = new Map<number, Record<string, number>>();
+  for (const item of typeValues) {
+    const existing = typeValuesBySnapshot.get(item.snapshotId) ?? {};
+    existing[item.type] = parseFloat(String(item.value));
+    typeValuesBySnapshot.set(item.snapshotId, existing);
+  }
 
   res.json(
     ListSnapshotsResponse.parse(
@@ -55,6 +70,7 @@ router.get("/snapshots", async (req, res): Promise<void> => {
         totalValue: parseFloat(String(s.totalValue)),
         stockValue: parseFloat(String(s.stockValue)),
         goldValue: parseFloat(String(s.goldValue)),
+        typeValues: typeValuesBySnapshot.get(s.id) ?? {},
       }))
     )
   );

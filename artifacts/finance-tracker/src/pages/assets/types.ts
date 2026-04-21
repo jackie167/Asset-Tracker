@@ -26,4 +26,5 @@ export type ChartPoint = {
   totalValue: number;
   stockValue: number;
   goldValue: number;
+  typeValues?: Record<string, number>;
 };

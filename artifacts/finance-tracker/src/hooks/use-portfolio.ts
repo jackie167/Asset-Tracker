@@ -9,10 +9,18 @@ import {
   getGetPortfolioSummaryQueryKey,
   getListSnapshotsQueryKey,
   type Holding,
-  type Snapshot,
 } from "@workspace/api-client-react";
 import { useToast } from "./use-toast";
 import type { SnapshotRange } from "@/pages/assets/types";
+
+export type PortfolioSnapshot = {
+  id: number;
+  totalValue: number;
+  stockValue: number;
+  goldValue: number;
+  typeValues: Record<string, number>;
+  snapshotAt: string;
+};
 
 async function fetchHoldings(): Promise<Holding[]> {
   const res = await fetch("/api/holdings");
@@ -22,7 +30,7 @@ async function fetchHoldings(): Promise<Holding[]> {
   return res.json();
 }
 
-async function fetchSnapshots(range: SnapshotRange): Promise<Snapshot[]> {
+async function fetchSnapshots(range: SnapshotRange): Promise<PortfolioSnapshot[]> {
   const res = await fetch(`/api/snapshots?range=${encodeURIComponent(range)}`);
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} ${res.statusText}`);
