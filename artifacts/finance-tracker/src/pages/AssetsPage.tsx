@@ -15,12 +15,13 @@ import AssetsHeader from "@/pages/assets/AssetsHeader";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
 import PerformanceChart from "@/pages/assets/PerformanceChart";
 import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
-import type { ChartPoint, HoldingForm, HoldingItem, SortOrder } from "@/pages/assets/types";
+import type { ChartPoint, HoldingForm, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
 export default function AssetsPage() {
   const [, navigate] = useLocation();
-  const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData();
+  const [snapshotRange, setSnapshotRange] = useState<SnapshotRange>("1m");
+  const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData(snapshotRange);
   const { createHolding, updateHolding, deleteHolding, refreshPrices } = usePortfolioMutations();
   const queryClient = useQueryClient();
 
@@ -240,8 +241,15 @@ export default function AssetsPage() {
               />
             )}
 
-            {holdings.length > 0 && <PerformanceChart chartData={chartData} hideValues={hideValues} />}
-
+            {holdings.length > 0 && (
+              <PerformanceChart
+                title="Biến động"
+                chartData={chartData}
+                hideValues={hideValues}
+                selectedRange={snapshotRange}
+                onRangeChange={setSnapshotRange}
+              />
+            )}
             <HoldingsTable
               holdings={holdings}
               filteredHoldings={filteredHoldings}

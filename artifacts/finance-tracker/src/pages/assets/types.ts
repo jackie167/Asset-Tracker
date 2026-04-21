@@ -19,6 +19,7 @@ export type HoldingItem = {
 
 export type SortOrder = "none" | "asc" | "desc";
 export type TypeMode = "stock" | "gold" | "other";
+export type SnapshotRange = "1m" | "3m" | "6m" | "1y";
 
 export type ChartPoint = {
   date: string;

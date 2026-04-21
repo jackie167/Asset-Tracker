@@ -8,8 +8,15 @@ import {
   YAxis,
 } from "recharts";
 import { Card } from "@/components/ui/card";
-import type { ChartPoint } from "@/pages/assets/types";
+import type { ChartPoint, SnapshotRange } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
+
+const RANGE_OPTIONS: Array<{ value: SnapshotRange; label: string }> = [
+  { value: "1m", label: "1 tháng" },
+  { value: "3m", label: "3 tháng" },
+  { value: "6m", label: "6 tháng" },
+  { value: "1y", label: "1 năm" },
+];
 
 type PerformanceChartProps = {
   title?: string;
@@ -17,19 +24,45 @@ type PerformanceChartProps = {
   emptyMessage?: string;
   chartData: ChartPoint[];
   hideValues: boolean;
+  selectedRange: SnapshotRange;
+  onRangeChange: (range: SnapshotRange) => void;
 };
 
 export default function PerformanceChart({
-  title = "Biến động 7 ngày",
+  title = "Biến động",
   seriesLabel = "Tổng",
   emptyMessage = 'Chưa có dữ liệu lịch sử. Nhấn "Làm mới" để cập nhật giá.',
   chartData,
   hideValues,
+  selectedRange,
+  onRangeChange,
 }: PerformanceChartProps) {
+  const rangeControls = (
+    <div className="flex flex-wrap gap-1">
+      {RANGE_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onRangeChange(option.value)}
+          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+            selectedRange === option.value
+              ? "bg-primary text-primary-foreground border-primary"
+              : "border-border text-muted-foreground hover:border-primary/50"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (chartData.length > 0) {
     return (
       <Card className="p-4">
-        <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">{title}</p>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-xs text-muted-foreground uppercase tracking-widest">{title}</p>
+          {rangeControls}
+        </div>
         <ResponsiveContainer width="100%" height={160}>
           <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <defs>
@@ -76,7 +109,10 @@ export default function PerformanceChart({
 
   return (
     <Card className="p-4">
-      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">{title}</p>
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <p className="text-xs text-muted-foreground uppercase tracking-widest">{title}</p>
+        {rangeControls}
+      </div>
       <p className="text-sm text-muted-foreground text-center py-6">{emptyMessage}</p>
     </Card>
   );

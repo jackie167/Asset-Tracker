@@ -14,7 +14,7 @@ import AddEditDialog from "@/pages/assets/AddEditDialog";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
 import PerformanceChart from "@/pages/assets/PerformanceChart";
 import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
-import type { ChartPoint, HoldingForm, HoldingItem, SortOrder } from "@/pages/assets/types";
+import type { ChartPoint, HoldingForm, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatVND, formatVNDFull, formatTypeLabel } from "@/pages/assets/utils";
 
 type RouteParams = {
@@ -25,7 +25,8 @@ export default function AssetTypePage() {
   const [, params] = useRoute<RouteParams>("/assets/type/:type");
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData();
+  const [snapshotRange, setSnapshotRange] = useState<SnapshotRange>("1m");
+  const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData(snapshotRange);
   const { createHolding, updateHolding, deleteHolding, refreshPrices } = usePortfolioMutations();
 
   const [showAdd, setShowAdd] = useState(false);
@@ -260,14 +261,16 @@ export default function AssetTypePage() {
             />
 
             <PerformanceChart
-              title="Biến động 7 ngày"
+              title="Biến động"
               seriesLabel=""
               chartData={supportsHistoricalChart ? chartData : []}
               hideValues={hideValues}
+              selectedRange={snapshotRange}
+              onRangeChange={setSnapshotRange}
               emptyMessage={
                 supportsHistoricalChart
                   ? 'Chưa có dữ liệu lịch sử. Nhấn "Làm mới" để cập nhật giá.'
-                  : "Hiện hệ thống chưa lưu lịch sử 7 ngày riêng cho loại tài sản này."
+                  : "Hiện hệ thống chưa lưu lịch sử riêng theo loại tài sản này."
               }
             />
 
