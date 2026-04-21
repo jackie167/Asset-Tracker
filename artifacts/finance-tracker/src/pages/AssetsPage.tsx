@@ -209,7 +209,7 @@ export default function AssetsPage() {
         onAdd={() => setShowAdd(true)}
       />
 
-      <main className="w-full max-w-[min(1800px,calc(100vw-1.5rem))] sm:max-w-[min(1800px,calc(100vw-2rem))] lg:max-w-[min(1800px,calc(100vw-3rem))] mx-auto px-3 sm:px-4 lg:px-6 py-4 space-y-4">
+      <main className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 py-4 space-y-4">
         {isError ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
             {error instanceof Error ? error.message : "Không thể tải dữ liệu."}

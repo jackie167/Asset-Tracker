@@ -181,7 +181,7 @@ export default function ExcelPage() {
         </div>
       </header>
 
-      <main className="w-full max-w-[min(1800px,calc(100vw-1.5rem))] sm:max-w-[min(1800px,calc(100vw-2rem))] lg:max-w-[min(1800px,calc(100vw-3rem))] mx-auto px-3 sm:px-4 lg:px-6 py-4 space-y-4">
+      <main className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 py-4 space-y-4">
         <Card className="p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>
