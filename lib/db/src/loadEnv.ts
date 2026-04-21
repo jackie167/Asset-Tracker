@@ -5,11 +5,14 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function resolveEnvCandidates(baseDir: string) {
-  return [
-    path.resolve(baseDir, "../../../.env"),
-    path.resolve(baseDir, "../../.env"),
-  ];
+export function resolveEnvCandidates(cwd: string, moduleDir: string) {
+  return [...new Set([
+    path.resolve(cwd, ".env"),
+    path.resolve(cwd, "../.env"),
+    path.resolve(cwd, "../../.env"),
+    path.resolve(moduleDir, "../../../.env"),
+    path.resolve(moduleDir, "../../.env"),
+  ])];
 }
 
 export function loadEnvFiles(
@@ -33,6 +36,6 @@ export function loadEnvFiles(
   return loadedFiles;
 }
 
-const envCandidates = resolveEnvCandidates(__dirname);
+const envCandidates = resolveEnvCandidates(process.cwd(), __dirname);
 
 loadEnvFiles(envCandidates);

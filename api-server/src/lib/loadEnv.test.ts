@@ -13,11 +13,13 @@ afterEach(() => {
 });
 
 describe("resolveEnvCandidates", () => {
-  it("prioritizes the repo root .env before the api-server-local one", () => {
-    const baseDir = "/repo/api-server/src/lib";
-    expect(resolveEnvCandidates(baseDir)).toEqual([
-      "/repo/.env",
+  it("includes cwd-first candidates before module-relative fallbacks", () => {
+    const cwd = "/repo/api-server";
+    const moduleDir = "/repo/api-server/src/lib";
+    expect(resolveEnvCandidates(cwd, moduleDir)).toEqual([
       "/repo/api-server/.env",
+      "/repo/.env",
+      "/.env",
     ]);
   });
 });
