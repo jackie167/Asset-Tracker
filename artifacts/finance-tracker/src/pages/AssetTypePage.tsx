@@ -253,15 +253,15 @@ export default function AssetTypePage() {
         ) : (
           <>
             <PortfolioSummaryCard
-              title={`Tổng tài sản • ${typeLabel}`}
+              title={typeLabel}
               totalValueLabel={formatMoney(totalValue, true)}
               hideValues={hideValues}
               onToggleHideValues={toggleHideValues}
             />
 
             <PerformanceChart
-              title={`Biến động 7 ngày • ${typeLabel}`}
-              seriesLabel={typeLabel}
+              title="Biến động 7 ngày"
+              seriesLabel=""
               chartData={supportsHistoricalChart ? chartData : []}
               hideValues={hideValues}
               emptyMessage={

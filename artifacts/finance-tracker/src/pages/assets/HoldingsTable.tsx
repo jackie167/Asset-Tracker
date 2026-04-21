@@ -74,12 +74,12 @@ export default function HoldingsTable({
   onDelete,
 }: HoldingsTableProps) {
   const colTemplate = [
-    "96px",
-    "42px",
-    showQtyCol ? "50px" : null,
-    showPriceCol ? "64px" : null,
-    "36px",
-    "1fr",
+    "minmax(96px, 1.45fr)",
+    "minmax(52px, 0.85fr)",
+    showQtyCol ? "minmax(50px, 0.65fr)" : null,
+    showPriceCol ? "minmax(64px, 0.9fr)" : null,
+    "minmax(40px, 0.55fr)",
+    "minmax(132px, 1.25fr)",
   ]
     .filter(Boolean)
     .join(" ");
@@ -179,7 +179,7 @@ export default function HoldingsTable({
           ) : (
             <div>
               <div
-                className="grid gap-x-1 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
+                className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
                 style={{ gridTemplateColumns: colTemplate }}
               >
                 <span>Tài sản</span>
@@ -199,7 +199,7 @@ export default function HoldingsTable({
               {filteredHoldings.map((holding) => (
                 <div
                   key={holding.id}
-                  className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
+                  className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
                   style={{ gridTemplateColumns: colTemplate }}
                 >
                   <div className="overflow-hidden">
@@ -255,7 +255,7 @@ export default function HoldingsTable({
 
               {filteredHoldings.length > 0 && (
                 <div
-                  className="grid gap-x-1 items-center pt-2.5 mt-0.5"
+                  className="grid gap-x-2 items-center pt-2.5 mt-0.5"
                   style={{ gridTemplateColumns: colTemplate }}
                 >
                   <span
