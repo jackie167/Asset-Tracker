@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
+import {
+  getGetPortfolioSummaryQueryKey,
+  getListHoldingsQueryKey,
+  getListSnapshotsQueryKey,
+} from "@workspace/api-client-react";
 
 function formatExcelNumber(value: number) {
   return value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -20,6 +26,7 @@ function isInvestmentSheetName(name: string) {
 }
 
 export default function ExcelPage() {
+  const queryClient = useQueryClient();
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
   const [excelSheet, setExcelSheet] = useState<string>("");
   const [excelRows, setExcelRows] = useState<Array<Array<string | number>>>([]);
@@ -177,15 +184,20 @@ export default function ExcelPage() {
       });
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể sync Investment sang Tài sản.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() }),
+      ]);
       setExcelNotice(
-        `${data?.message || "Đồng bộ thành công."} Tạo mới: ${data?.created ?? 0}, cập nhật: ${data?.updated ?? 0}.`
+        `${data?.message || "Đồng bộ thành công."} Tạo mới: ${data?.created ?? 0}, cập nhật: ${data?.updated ?? 0}, xóa: ${data?.removed ?? 0}.`
       );
     } catch (err) {
       setExcelError(err instanceof Error ? err.message : "Không thể sync Investment sang Tài sản.");
     } finally {
       setExcelSyncingInvestment(false);
     }
-  }, [excelOverrides, excelSheet]);
+  }, [excelOverrides, excelSheet, queryClient]);
 
   useEffect(() => {
     loadExcelSheets();
