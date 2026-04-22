@@ -4,6 +4,8 @@ import * as XLSX from "xlsx";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { eq } from "drizzle-orm";
+import { db, holdingsTable } from "../../../lib/db/src/index.ts";
 
 const router: IRouter = Router();
 
@@ -40,6 +42,130 @@ function saveWorkbook(workbook: XLSX.WorkBook): void {
   if (fs.existsSync(CALCULATED_FILE)) {
     fs.unlinkSync(CALCULATED_FILE);
   }
+}
+
+function parseVNNumber(value: string | number | boolean | null | undefined): number | undefined {
+  if (value == null || value === "") return undefined;
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "boolean") return value ? 1 : 0;
+
+  const s = String(value).trim().replace(/\s/g, "");
+  if (!s) return undefined;
+
+  if (s.includes(",") && s.includes(".")) {
+    const parsed = parseFloat(s.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  if (s.includes(",")) {
+    const parsed = parseFloat(s.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  if (s.includes(".")) {
+    const parts = s.split(".");
+    if (parts.length > 2) {
+      const parsed = parseFloat(parts.join(""));
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    if (parts[0] !== "0" && parts[1]?.length === 3) {
+      const parsed = parseFloat(parts[0] + parts[1]);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+  }
+
+  const parsed = parseFloat(s);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+type InvestmentRow = {
+  symbol: string;
+  type: string;
+  quantity: number;
+  manualPrice: number | null;
+};
+
+function shouldSyncManualPrice(type: string): boolean {
+  return type !== "stock" && type !== "gold" && type !== "crypto";
+}
+
+function normalizeInvestmentType(symbol: string, rawType: string | number | boolean | null | undefined): string {
+  const typeText = String(rawType ?? "").trim().toLowerCase();
+  const upperSymbol = symbol.toUpperCase();
+  const cryptoSymbols = new Set([
+    "BTC",
+    "ETH",
+    "BNB",
+    "SOL",
+    "XRP",
+    "AVAX",
+    "ADA",
+    "DOT",
+    "LINK",
+    "USDC",
+    "USDT",
+    "PAXG",
+  ]);
+
+  if (typeText === "bond") return "bond";
+  if (typeText === "stock") return "fund";
+  if (upperSymbol.startsWith("SJC")) return "gold";
+  if (cryptoSymbols.has(upperSymbol)) return "crypto";
+  return "stock";
+}
+
+function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"): InvestmentRow[] {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) {
+    throw new Error(`Sheet "${sheetName}" not found`);
+  }
+
+  const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
+    header: 1,
+    defval: "",
+  });
+
+  const headerIndex = rows.findIndex((row) =>
+    String(row[0] ?? "").trim().toLowerCase() === "tài sản"
+  );
+
+  if (headerIndex === -1) {
+    throw new Error(`Sheet "${sheetName}" does not contain a valid header row`);
+  }
+
+  const header = rows[headerIndex].map((cell) => String(cell ?? "").trim().toLowerCase());
+  const assetIndex = header.findIndex((value) => value === "tài sản");
+  const typeIndex = header.findIndex((value) => value === "loại");
+  const quantityIndex = header.findIndex((value) => value === "ql" || value === "qi");
+  const currentPriceIndex = header.findIndex((value) => value === "current price");
+
+  if (assetIndex === -1 || quantityIndex === -1) {
+    throw new Error(`Sheet "${sheetName}" is missing required columns`);
+  }
+
+  const parsedRows: InvestmentRow[] = [];
+
+  for (const row of rows.slice(headerIndex + 1)) {
+    const symbol = String(row[assetIndex] ?? "").trim().toUpperCase();
+    if (!symbol) continue;
+
+    const quantity = parseVNNumber(row[quantityIndex]);
+    if (quantity == null || quantity <= 0) continue;
+
+    const type = normalizeInvestmentType(symbol, typeIndex >= 0 ? row[typeIndex] : "");
+    const parsedCurrentPrice =
+      currentPriceIndex >= 0 ? (parseVNNumber(row[currentPriceIndex]) ?? null) : null;
+    const manualPrice = shouldSyncManualPrice(type) ? parsedCurrentPrice : null;
+
+    parsedRows.push({
+      symbol,
+      type,
+      quantity,
+      manualPrice,
+    });
+  }
+
+  return parsedRows;
 }
 
 type ExcelOverrides = Record<string, string | number | null>;
@@ -710,6 +836,72 @@ router.post("/excel/sheet/update", (req, res) => {
     res.json({ name, rows, formulas });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+router.post("/excel/investment/sync", async (_req, res): Promise<void> => {
+  try {
+    const workbook = loadWorkbook();
+    const rows = parseInvestmentRows(workbook, "Investment");
+
+    if (rows.length === 0) {
+      res.status(400).json({ error: 'Sheet "Investment" không có dòng dữ liệu hợp lệ để sync.' });
+      return;
+    }
+
+    const existingHoldings = await db.select().from(holdingsTable);
+    const existingBySymbol = new Map(existingHoldings.map((holding) => [holding.symbol.toUpperCase(), holding]));
+
+    let created = 0;
+    let updated = 0;
+    const skipped: string[] = [];
+
+    for (const row of rows) {
+      const existing = existingBySymbol.get(row.symbol);
+
+      if (existing) {
+        await db
+          .update(holdingsTable)
+          .set({
+            type: row.type,
+            quantity: String(row.quantity),
+            manualPrice: shouldSyncManualPrice(row.type)
+              ? row.manualPrice != null
+                ? String(row.manualPrice)
+                : null
+              : existing.manualPrice,
+            updatedAt: new Date(),
+          })
+          .where(eq(holdingsTable.id, existing.id));
+        updated += 1;
+        continue;
+      }
+
+      await db.insert(holdingsTable).values({
+        symbol: row.symbol,
+        type: row.type,
+        quantity: String(row.quantity),
+        manualPrice: shouldSyncManualPrice(row.type)
+          ? row.manualPrice != null
+            ? String(row.manualPrice)
+            : null
+          : null,
+      });
+      created += 1;
+    }
+
+    res.json({
+      success: true,
+      sheet: "Investment",
+      total: rows.length,
+      created,
+      updated,
+      skipped,
+      message: `Đã sync ${rows.length} dòng từ Investment sang Tài sản.`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Không thể sync sheet Investment.";
+    res.status(500).json({ error: message });
   }
 });
 

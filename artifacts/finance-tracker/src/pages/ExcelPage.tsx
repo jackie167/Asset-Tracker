@@ -26,8 +26,10 @@ export default function ExcelPage() {
   const [excelEdit, setExcelEdit] = useState<{ row: number; col: number; value: string } | null>(null);
   const [excelOverrides, setExcelOverrides] = useState<Record<string, string | number | null>>({});
   const [excelUploading, setExcelUploading] = useState(false);
+  const [excelSyncingInvestment, setExcelSyncingInvestment] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelError, setExcelError] = useState<string | null>(null);
+  const [excelNotice, setExcelNotice] = useState<string | null>(null);
   const excelFileRef = useRef<HTMLInputElement | null>(null);
 
   const yearHeaderCols = useMemo(() => {
@@ -42,6 +44,7 @@ export default function ExcelPage() {
 
   const loadExcelSheets = useCallback(async () => {
     setExcelError(null);
+    setExcelNotice(null);
     setExcelLoading(true);
     try {
       const res = await fetch("/api/excel/sheets");
@@ -60,6 +63,7 @@ export default function ExcelPage() {
   const loadExcelSheet = useCallback(async (name: string) => {
     if (!name) return;
     setExcelError(null);
+    setExcelNotice(null);
     setExcelLoading(true);
     try {
       const debugParam = excelDebug ? "&debug=1" : "";
@@ -84,6 +88,7 @@ export default function ExcelPage() {
 
   const handleExcelUpload = async (file: File) => {
     setExcelError(null);
+    setExcelNotice(null);
     setExcelUploading(true);
     try {
       const form = new FormData();
@@ -110,6 +115,7 @@ export default function ExcelPage() {
 
   const recalcExcelSheet = async (name: string, overrides: Record<string, string | number | null>) => {
     setExcelError(null);
+    setExcelNotice(null);
     setExcelLoading(true);
     try {
       const res = await fetch("/api/excel/sheet/update", {
@@ -151,6 +157,24 @@ export default function ExcelPage() {
     if (excelSheet) recalcExcelSheet(excelSheet, nextOverrides);
     setExcelEdit(null);
   };
+
+  const syncInvestmentToAssets = useCallback(async () => {
+    setExcelError(null);
+    setExcelNotice(null);
+    setExcelSyncingInvestment(true);
+    try {
+      const res = await fetch("/api/excel/investment/sync", { method: "POST" });
+      const data = await readJsonSafe(res);
+      if (!res.ok) throw new Error(data?.error || "Không thể sync Investment sang Tài sản.");
+      setExcelNotice(
+        `${data?.message || "Đồng bộ thành công."} Tạo mới: ${data?.created ?? 0}, cập nhật: ${data?.updated ?? 0}.`
+      );
+    } catch (err) {
+      setExcelError(err instanceof Error ? err.message : "Không thể sync Investment sang Tài sản.");
+    } finally {
+      setExcelSyncingInvestment(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadExcelSheets();
@@ -224,6 +248,7 @@ export default function ExcelPage() {
           </div>
 
           {excelError && <p className="text-xs text-destructive mb-2">{excelError}</p>}
+          {excelNotice && <p className="text-xs text-emerald-400 mb-2">{excelNotice}</p>}
 
           {excelSheets.length > 0 && (
             <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -240,6 +265,19 @@ export default function ExcelPage() {
                   {sheet}
                 </button>
               ))}
+              {excelSheet === "Investment" && (
+                <button
+                  onClick={syncInvestmentToAssets}
+                  disabled={excelSyncingInvestment}
+                  className={`text-xs px-2 py-1 rounded border transition-colors ${
+                    excelSyncingInvestment
+                      ? "border-primary/40 text-primary/70 bg-primary/5"
+                      : "border-primary/60 text-primary bg-primary/5 hover:border-primary"
+                  }`}
+                >
+                  {excelSyncingInvestment ? "Đang sync..." : "Sync Investment -> Tài sản"}
+                </button>
+              )}
             </div>
           )}
 
