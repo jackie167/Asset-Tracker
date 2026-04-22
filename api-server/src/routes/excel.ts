@@ -103,15 +103,22 @@ function shouldSyncManualPrice(type: string): boolean {
   return type !== "stock" && type !== "gold" && type !== "crypto";
 }
 
-function normalizeInvestmentType(rawType: string | number | boolean | null | undefined): string {
-  const typeText = String(rawType ?? "").trim().toLowerCase();
-  if (!typeText) return "other";
-
-  const normalized = typeText
+function normalizeHeaderName(value: string | number | boolean | null | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function normalizeInvestmentType(rawType: string | number | boolean | null | undefined): string {
+  const typeText = String(rawType ?? "").trim().toLowerCase();
+  if (!typeText) return "other";
+
+  const normalized = normalizeHeaderName(typeText);
+  if (!normalized || normalized === "n_a") return "other";
 
   const aliases: Record<string, string> = {
     stock: "stock",
@@ -149,20 +156,21 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
     defval: "",
   });
 
-  const headerIndex = rows.findIndex((row) =>
-    String(row[0] ?? "").trim().toLowerCase() === "tài sản"
-  );
+  const headerIndex = rows.findIndex((row) => {
+    const firstCell = normalizeHeaderName(row[0]);
+    return firstCell === "tai_san" || firstCell === "asset" || firstCell === "symbol";
+  });
 
   if (headerIndex === -1) {
     throw new Error(`Sheet "${sheetName}" does not contain a valid header row`);
   }
 
-  const header = rows[headerIndex].map((cell) => String(cell ?? "").trim().toLowerCase());
-  const assetIndex = header.findIndex((value) => value === "tài sản");
-  const typeIndex = header.findIndex((value) => value === "loại");
-  const currentIndex = header.findIndex((value) => value === "current");
-  const quantityIndex = header.findIndex((value) => value === "ql" || value === "qi");
-  const currentPriceIndex = header.findIndex((value) => value === "current price");
+  const header = rows[headerIndex].map((cell) => normalizeHeaderName(cell));
+  const assetIndex = header.findIndex((value) => value === "tai_san" || value === "symbol" || value === "asset");
+  const typeIndex = header.findIndex((value) => value === "loai" || value === "type");
+  const currentIndex = header.findIndex((value) => value === "current" || value === "current_value");
+  const quantityIndex = header.findIndex((value) => value === "ql" || value === "qi" || value === "quantity");
+  const currentPriceIndex = header.findIndex((value) => value === "current_price" || value === "price");
 
   if (assetIndex === -1 || quantityIndex === -1) {
     throw new Error(`Sheet "${sheetName}" is missing required columns`);
@@ -174,14 +182,19 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
     const symbol = String(row[assetIndex] ?? "").trim().toUpperCase();
     if (!symbol) continue;
 
-    const quantity = parseVNNumber(row[quantityIndex]);
-    if (quantity == null || quantity <= 0) continue;
-
     const type = normalizeInvestmentType(typeIndex >= 0 ? row[typeIndex] : "");
     const parsedCurrentValue =
       currentIndex >= 0 ? (parseVNNumber(row[currentIndex]) ?? null) : null;
     const parsedCurrentPrice =
       currentPriceIndex >= 0 ? (parseVNNumber(row[currentPriceIndex]) ?? null) : null;
+    let quantity = parseVNNumber(row[quantityIndex]);
+
+    if ((quantity == null || quantity <= 0) && shouldSyncManualPrice(type) && parsedCurrentValue != null && parsedCurrentValue > 0) {
+      quantity = 1;
+    }
+
+    if (quantity == null || quantity <= 0) continue;
+
     const derivedCurrentPrice =
       parsedCurrentPrice != null
         ? parsedCurrentPrice
