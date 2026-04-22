@@ -2,6 +2,38 @@ import type { TypeMode } from "@/pages/assets/types";
 
 const VND_INT = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
 const VND_2 = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
+const TYPE_META: Record<string, { label: string; shortLabel: string; decoratedLabel: string }> = {
+  stock: { label: "Cổ phiếu", shortLabel: "CP", decoratedLabel: "📈 Cổ phiếu" },
+  fund: { label: "Quỹ", shortLabel: "Quỹ", decoratedLabel: "📦 Quỹ" },
+  bond: { label: "Trái phiếu", shortLabel: "TP", decoratedLabel: "🧾 Trái phiếu" },
+  cash: { label: "Tiền mặt", shortLabel: "Tiền mặt", decoratedLabel: "💵 Tiền mặt" },
+  real_estate: { label: "Bất động sản", shortLabel: "BĐS", decoratedLabel: "🏠 Bất động sản" },
+  gold: { label: "Vàng", shortLabel: "Vàng", decoratedLabel: "🥇 Vàng" },
+  crypto: { label: "Crypto", shortLabel: "Crypto", decoratedLabel: "🪙 Crypto" },
+  other: { label: "Khác", shortLabel: "Khác", decoratedLabel: "💼 Khác" },
+};
+
+function toTitleCase(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getTypeMeta(type: string) {
+  const normalizedType = type.trim().toLowerCase();
+  const fallbackLabel = toTitleCase(normalizedType || "other");
+  return (
+    TYPE_META[normalizedType] ?? {
+      label: fallbackLabel,
+      shortLabel: fallbackLabel,
+      decoratedLabel: `💼 ${fallbackLabel}`,
+    }
+  );
+}
 
 export function formatVND(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -22,15 +54,13 @@ export function resolveMode(type: string): TypeMode {
 }
 
 export function typeLabel(type: string) {
-  if (type === "stock") return "📈 Cổ phiếu";
-  if (type === "gold") return "🥇 Vàng";
-  const name = type.charAt(0).toUpperCase() + type.slice(1);
-  return `💼 ${name}`;
+  return getTypeMeta(type).decoratedLabel;
 }
 
 export function formatTypeLabel(type: string) {
-  if (type === "stock") return "📈 Cổ phiếu";
-  if (type === "gold") return "🥇 Vàng";
-  if (type === "crypto") return "🪙 Crypto";
-  return `💼 ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+  return getTypeMeta(type).label;
+}
+
+export function formatTypeShortLabel(type: string) {
+  return getTypeMeta(type).shortLabel;
 }

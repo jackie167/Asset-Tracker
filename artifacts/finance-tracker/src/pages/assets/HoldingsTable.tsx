@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { HoldingItem, SortOrder } from "@/pages/assets/types";
-import { formatTypeLabel } from "@/pages/assets/utils";
+import { formatTypeLabel, formatTypeShortLabel } from "@/pages/assets/utils";
 
 function ChangeChip({
   change,
@@ -237,7 +237,7 @@ export default function HoldingsTable({
                   </div>
 
                   <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate block">
-                    {holding.type === "stock" ? "CP" : holding.type === "gold" ? "Vàng" : holding.type}
+                    {formatTypeShortLabel(holding.type)}
                   </span>
 
                   {showQtyCol && (
