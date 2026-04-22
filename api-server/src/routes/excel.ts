@@ -103,29 +103,39 @@ function shouldSyncManualPrice(type: string): boolean {
   return type !== "stock" && type !== "gold" && type !== "crypto";
 }
 
-function normalizeInvestmentType(symbol: string, rawType: string | number | boolean | null | undefined): string {
+function normalizeInvestmentType(rawType: string | number | boolean | null | undefined): string {
   const typeText = String(rawType ?? "").trim().toLowerCase();
-  const upperSymbol = symbol.toUpperCase();
-  const cryptoSymbols = new Set([
-    "BTC",
-    "ETH",
-    "BNB",
-    "SOL",
-    "XRP",
-    "AVAX",
-    "ADA",
-    "DOT",
-    "LINK",
-    "USDC",
-    "USDT",
-    "PAXG",
-  ]);
+  if (!typeText) return "other";
 
-  if (typeText === "bond") return "bond";
-  if (typeText === "stock") return "fund";
-  if (upperSymbol.startsWith("SJC")) return "gold";
-  if (cryptoSymbols.has(upperSymbol)) return "crypto";
-  return "stock";
+  const normalized = typeText
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const aliases: Record<string, string> = {
+    stock: "stock",
+    equity: "stock",
+    co_phieu: "stock",
+    bond: "bond",
+    trai_phieu: "bond",
+    fund: "fund",
+    funds: "fund",
+    quy: "fund",
+    quy_mo: "fund",
+    ccq: "fund",
+    crypto: "crypto",
+    tien_ma_hoa: "crypto",
+    gold: "gold",
+    vang: "gold",
+    cash: "cash",
+    tien_mat: "cash",
+    real_estate: "real_estate",
+    bat_dong_san: "real_estate",
+    other: "other",
+  };
+
+  return aliases[normalized] ?? normalized ?? "other";
 }
 
 function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"): InvestmentRow[] {
@@ -167,7 +177,7 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
     const quantity = parseVNNumber(row[quantityIndex]);
     if (quantity == null || quantity <= 0) continue;
 
-    const type = normalizeInvestmentType(symbol, typeIndex >= 0 ? row[typeIndex] : "");
+    const type = normalizeInvestmentType(typeIndex >= 0 ? row[typeIndex] : "");
     const parsedCurrentValue =
       currentIndex >= 0 ? (parseVNNumber(row[currentIndex]) ?? null) : null;
     const parsedCurrentPrice =
@@ -886,9 +896,11 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
 
     const existingHoldings = await db.select().from(holdingsTable);
     const existingBySymbol = new Map(existingHoldings.map((holding) => [holding.symbol.toUpperCase(), holding]));
+    const syncedSymbols = new Set(rows.map((row) => row.symbol));
 
     let created = 0;
     let updated = 0;
+    let removed = 0;
     const skipped: string[] = [];
 
     for (const row of rows) {
@@ -925,12 +937,19 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       created += 1;
     }
 
+    for (const holding of existingHoldings) {
+      if (syncedSymbols.has(holding.symbol.toUpperCase())) continue;
+      await db.delete(holdingsTable).where(eq(holdingsTable.id, holding.id));
+      removed += 1;
+    }
+
     res.json({
       success: true,
       sheet: investmentSheetName,
       total: rows.length,
       created,
       updated,
+      removed,
       skipped,
       message: `Đã sync ${rows.length} dòng từ "${investmentSheetName}" sang Tài sản.`,
     });

@@ -8,8 +8,9 @@ type AssetsHeaderProps = {
   isRefreshing: boolean;
   onRefresh: () => void;
   onExport: () => void;
-  onImport: () => void;
-  onAdd: () => void;
+  onImport?: () => void;
+  onAdd?: () => void;
+  readOnly?: boolean;
 };
 
 export default function AssetsHeader({
@@ -20,6 +21,7 @@ export default function AssetsHeader({
   onExport,
   onImport,
   onAdd,
+  readOnly = false,
 }: AssetsHeaderProps) {
   return (
     <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
@@ -54,12 +56,21 @@ export default function AssetsHeader({
           <Button variant="outline" size="sm" onClick={onExport} disabled={!hasHoldings} className="text-xs h-8">
             ↓ Export
           </Button>
-          <Button variant="outline" size="sm" onClick={onImport} className="text-xs h-8">
-            ↑ Import
-          </Button>
-          <Button size="sm" onClick={onAdd} className="text-xs h-8">
-            + Thêm
-          </Button>
+          {!readOnly && onImport && (
+            <Button variant="outline" size="sm" onClick={onImport} className="text-xs h-8">
+              ↑ Import
+            </Button>
+          )}
+          {!readOnly && onAdd && (
+            <Button size="sm" onClick={onAdd} className="text-xs h-8">
+              + Thêm
+            </Button>
+          )}
+          {readOnly && (
+            <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground">
+              Nguồn dữ liệu: Investment sheet
+            </span>
+          )}
         </div>
       </div>
     </header>

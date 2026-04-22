@@ -14,6 +14,12 @@ import { getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
 
+function rejectManualPortfolioWrite(res: { status: (code: number) => { json: (body: unknown) => void } }): void {
+  res.status(403).json({
+    error: "Danh muc Tai san dang dong bo tu Investment sheet. Hay cap nhat Excel roi bam Sync.",
+  });
+}
+
 router.get("/holdings", async (_req, res): Promise<void> => {
   const holdings = await db.select().from(holdingsTable).orderBy(holdingsTable.createdAt);
   res.json(
@@ -28,6 +34,9 @@ router.get("/holdings", async (_req, res): Promise<void> => {
 });
 
 router.post("/holdings", async (req, res): Promise<void> => {
+  rejectManualPortfolioWrite(res);
+  return;
+
   const parsed = CreateHoldingBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -52,6 +61,9 @@ router.post("/holdings", async (req, res): Promise<void> => {
 });
 
 router.put("/holdings/:id", async (req, res): Promise<void> => {
+  rejectManualPortfolioWrite(res);
+  return;
+
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = UpdateHoldingParams.safeParse({ id: rawId });
   if (!params.success) {
@@ -89,6 +101,9 @@ router.put("/holdings/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/holdings/:id", async (req, res): Promise<void> => {
+  rejectManualPortfolioWrite(res);
+  return;
+
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = DeleteHoldingParams.safeParse({ id: rawId });
   if (!params.success) {

@@ -1,33 +1,20 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  getListHoldingsQueryKey,
-  getGetPortfolioSummaryQueryKey,
-  getListSnapshotsQueryKey,
-} from "@workspace/api-client-react";
 import { format } from "date-fns";
 import { usePortfolioData, usePortfolioMutations } from "@/hooks/use-portfolio";
-import ImportDialog from "@/components/ImportDialog";
-import AddEditDialog from "@/pages/assets/AddEditDialog";
 import AllocationChart from "@/pages/assets/AllocationChart";
 import AssetsHeader from "@/pages/assets/AssetsHeader";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
 import PerformanceChart from "@/pages/assets/PerformanceChart";
 import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
-import type { ChartPoint, HoldingForm, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
+import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
 export default function AssetsPage() {
   const [, navigate] = useLocation();
   const [snapshotRange, setSnapshotRange] = useState<SnapshotRange>("1m");
   const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData(snapshotRange);
-  const { createHolding, updateHolding, deleteHolding, refreshPrices } = usePortfolioMutations();
-  const queryClient = useQueryClient();
-
-  const [showAdd, setShowAdd] = useState(false);
-  const [showImport, setShowImport] = useState(false);
-  const [editItem, setEditItem] = useState<HoldingItem | null>(null);
+  const { refreshPrices } = usePortfolioMutations();
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState<boolean>(
     () => localStorage.getItem("holdings_collapsed") !== "0"
@@ -110,12 +97,6 @@ export default function AssetsPage() {
     localStorage.setItem("holdings_collapsed", next ? "1" : "0");
   };
 
-  const handleImportSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
-    queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
-    queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
-  };
-
   const handleExportCSV = () => {
     if (!holdings.length) return;
     const formatNumber = (value: number) => value.toLocaleString("vi-VN");
@@ -137,42 +118,6 @@ export default function AssetsPage() {
     link.download = `danh-muc-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  };
-
-  const handleAdd = (data: HoldingForm) => {
-    const existing = holdings.find(
-      (holding) => holding.symbol.toLowerCase() === data.symbol.trim().toLowerCase()
-    );
-    if (existing) {
-      const sameQty = data.quantity === existing.quantity;
-      const nextQuantity = sameQty ? existing.quantity : existing.quantity + data.quantity;
-      const nextManualPrice = data.manualPrice ?? existing.manualPrice ?? null;
-      updateHolding.mutate(
-        {
-          id: existing.id,
-          data: { type: data.type || existing.type, quantity: nextQuantity, manualPrice: nextManualPrice },
-        },
-        { onSuccess: () => setShowAdd(false) }
-      );
-      return;
-    }
-    createHolding.mutate({ data }, { onSuccess: () => setShowAdd(false) });
-  };
-
-  const handleEdit = (data: HoldingForm) => {
-    if (!editItem) return;
-    updateHolding.mutate(
-      {
-        id: editItem.id,
-        data: { type: data.type, quantity: data.quantity, manualPrice: data.manualPrice ?? null },
-      },
-      { onSuccess: () => setEditItem(null) }
-    );
-  };
-
-  const handleDelete = (id: number) => {
-    if (!confirm("Xóa tài sản này?")) return;
-    deleteHolding.mutate({ id });
   };
 
   const sortLabel =
@@ -212,8 +157,7 @@ export default function AssetsPage() {
         isRefreshing={refreshPrices.isPending}
         onRefresh={handleRefresh}
         onExport={handleExportCSV}
-        onImport={() => setShowImport(true)}
-        onAdd={() => setShowAdd(true)}
+        readOnly
       />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
@@ -268,34 +212,11 @@ export default function AssetsPage() {
               onTogglePriceCol={togglePriceCol}
               onFilterTypeChange={setFilterType}
               onCycleSortOrder={cycleSortOrder}
-              onAdd={() => setShowAdd(true)}
-              onEdit={setEditItem}
-              onDelete={handleDelete}
+              readOnly
             />
           </>
         )}
       </main>
-
-      <ImportDialog open={showImport} onClose={() => setShowImport(false)} onSuccess={handleImportSuccess} />
-
-      <AddEditDialog
-        open={showAdd}
-        onClose={() => setShowAdd(false)}
-        onSubmit={handleAdd}
-        isLoading={createHolding.isPending}
-        allHoldings={holdings}
-      />
-
-      {editItem && (
-        <AddEditDialog
-          open={true}
-          onClose={() => setEditItem(null)}
-          initialData={editItem}
-          onSubmit={handleEdit}
-          isLoading={updateHolding.isPending}
-          allHoldings={holdings}
-        />
-      )}
     </div>
   );
 }

@@ -46,9 +46,10 @@ type HoldingsTableProps = {
   onTogglePriceCol: () => void;
   onFilterTypeChange: (value: string) => void;
   onCycleSortOrder: () => void;
-  onAdd: () => void;
-  onEdit: (holding: HoldingItem) => void;
-  onDelete: (id: number) => void;
+  onAdd?: () => void;
+  onEdit?: (holding: HoldingItem) => void;
+  onDelete?: (id: number) => void;
+  readOnly?: boolean;
 };
 
 export default function HoldingsTable({
@@ -72,6 +73,7 @@ export default function HoldingsTable({
   onAdd,
   onEdit,
   onDelete,
+  readOnly = false,
 }: HoldingsTableProps) {
   const colTemplate = [
     "minmax(96px, 1.45fr)",
@@ -172,9 +174,15 @@ export default function HoldingsTable({
           {holdings.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground text-sm">Chưa có tài sản nào</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={onAdd}>
-                Thêm tài sản đầu tiên
-              </Button>
+              {readOnly ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Danh mục này chỉ đồng bộ từ sheet Investment.
+                </p>
+              ) : (
+                <Button variant="outline" size="sm" className="mt-3" onClick={onAdd}>
+                  Thêm tài sản đầu tiên
+                </Button>
+              )}
             </div>
           ) : (
             <div>
@@ -206,19 +214,25 @@ export default function HoldingsTable({
                     <p className="text-sm font-medium truncate">{holding.symbol}</p>
                     <div className="flex items-center gap-1 mt-0.5">
                       <ChangeChip change={holding.change} changePercent={holding.changePercent} />
-                      <button
-                        onClick={() => onEdit(holding)}
-                        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Sửa
-                      </button>
-                      <span className="text-[10px] text-muted-foreground">·</span>
-                      <button
-                        onClick={() => onDelete(holding.id)}
-                        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        Xóa
-                      </button>
+                      {readOnly ? (
+                        <span className="text-[10px] text-muted-foreground">Đồng bộ từ Investment</span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => onEdit?.(holding)}
+                            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Sửa
+                          </button>
+                          <span className="text-[10px] text-muted-foreground">·</span>
+                          <button
+                            onClick={() => onDelete?.(holding.id)}
+                            className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            Xóa
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
