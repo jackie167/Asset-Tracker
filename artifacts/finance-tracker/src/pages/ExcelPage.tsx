@@ -98,6 +98,9 @@ export default function ExcelPage() {
       if (data?.source) {
         setExcelSource(data.source as ExcelSourceInfo);
       }
+      if (typeof data?.name === "string" && data.name && data.name !== name) {
+        setExcelSheet(data.name);
+      }
       setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
       setExcelFormulas(Array.isArray(data?.formulas) ? data.formulas : []);
       if (excelDebug && data?.debug) {

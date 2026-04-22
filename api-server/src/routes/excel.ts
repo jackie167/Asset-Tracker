@@ -231,6 +231,29 @@ function isInvestmentSheetName(name: string): boolean {
   return name.trim().toLowerCase().startsWith("investment");
 }
 
+function normalizeSheetLookupName(name: string): string {
+  return name
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function resolveWorkbookSheetName(workbook: XLSX.WorkBook, requestedName: string): string | null {
+  if (workbook.Sheets[requestedName]) return requestedName;
+
+  const trimmed = requestedName.trim();
+  if (trimmed && workbook.Sheets[trimmed]) return trimmed;
+
+  const normalizedRequested = normalizeSheetLookupName(requestedName);
+  if (!normalizedRequested) return null;
+
+  return (
+    workbook.SheetNames.find((sheetName) => normalizeSheetLookupName(sheetName) === normalizedRequested) ??
+    null
+  );
+}
+
 function resolveInvestmentSheetName(workbook: XLSX.WorkBook): string {
   const exact = workbook.SheetNames.find((name) => name.trim().toLowerCase() === "investment");
   if (exact) return exact;
@@ -966,21 +989,22 @@ router.get("/excel/sheet", async (req, res) => {
 
   try {
     const workbook = await loadWorkbook();
-    if (!workbook.Sheets[name]) {
+    const resolvedName = resolveWorkbookSheetName(workbook, name);
+    if (!resolvedName) {
       res.status(404).json({ error: "Sheet not found" });
       return;
     }
     const evaluated = evaluateWorkbook(workbook);
-    const rows = evaluated.values[name] ?? [];
-    const formulas = evaluated.formulaMask[name] ?? [];
+    const rows = evaluated.values[resolvedName] ?? [];
+    const formulas = evaluated.formulaMask[resolvedName] ?? [];
     const sourceInfo = getExcelSourceInfo();
     if (isDebug) {
-      const formulaText = evaluated.formulaText[name] ?? [];
-      const errors = evaluated.errors[name] ?? [];
-      res.json({ name, rows, formulas, debug: { formulaText, errors }, source: sourceInfo });
+      const formulaText = evaluated.formulaText[resolvedName] ?? [];
+      const errors = evaluated.errors[resolvedName] ?? [];
+      res.json({ name: resolvedName, rows, formulas, debug: { formulaText, errors }, source: sourceInfo });
       return;
     }
-    res.json({ name, rows, formulas, source: sourceInfo });
+    res.json({ name: resolvedName, rows, formulas, source: sourceInfo });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -996,15 +1020,16 @@ router.post("/excel/sheet/recalc", async (req, res) => {
 
   try {
     const workbook = await loadWorkbook();
-    if (!workbook.Sheets[name]) {
+    const resolvedName = resolveWorkbookSheetName(workbook, name);
+    if (!resolvedName) {
       res.status(404).json({ error: "Sheet not found" });
       return;
     }
-    applyOverrides(workbook, name, overrides);
+    applyOverrides(workbook, resolvedName, overrides);
     const evaluated = evaluateWorkbook(workbook);
-    const rows = evaluated.values[name] ?? [];
-    const formulas = evaluated.formulaMask[name] ?? [];
-    res.json({ name, rows, formulas, source: getExcelSourceInfo() });
+    const rows = evaluated.values[resolvedName] ?? [];
+    const formulas = evaluated.formulaMask[resolvedName] ?? [];
+    res.json({ name: resolvedName, rows, formulas, source: getExcelSourceInfo() });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -1026,16 +1051,17 @@ router.post("/excel/sheet/update", async (req, res) => {
 
   try {
     const workbook = await loadWorkbook();
-    if (!workbook.Sheets[name]) {
+    const resolvedName = resolveWorkbookSheetName(workbook, name);
+    if (!resolvedName) {
       res.status(404).json({ error: "Sheet not found" });
       return;
     }
-    applyOverrides(workbook, name, overrides);
+    applyOverrides(workbook, resolvedName, overrides);
     saveWorkbook(workbook);
     const evaluated = evaluateWorkbook(workbook);
-    const rows = evaluated.values[name] ?? [];
-    const formulas = evaluated.formulaMask[name] ?? [];
-    res.json({ name, rows, formulas, source: sourceInfo });
+    const rows = evaluated.values[resolvedName] ?? [];
+    const formulas = evaluated.formulaMask[resolvedName] ?? [];
+    res.json({ name: resolvedName, rows, formulas, source: sourceInfo });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -1047,7 +1073,7 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
     const requestedSheetName = String(req.body?.name ?? "").trim();
     const overrides = req.body?.overrides as ExcelOverrides | undefined;
     const investmentSheetName = requestedSheetName
-      ? requestedSheetName
+      ? (resolveWorkbookSheetName(workbook, requestedSheetName) ?? requestedSheetName)
       : resolveInvestmentSheetName(workbook);
 
     if (!workbook.Sheets[investmentSheetName]) {
