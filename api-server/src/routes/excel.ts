@@ -85,6 +85,20 @@ type InvestmentRow = {
   manualPrice: number | null;
 };
 
+function isInvestmentSheetName(name: string): boolean {
+  return name.trim().toLowerCase().startsWith("investment");
+}
+
+function resolveInvestmentSheetName(workbook: XLSX.WorkBook): string {
+  const exact = workbook.SheetNames.find((name) => name.trim().toLowerCase() === "investment");
+  if (exact) return exact;
+
+  const prefixed = workbook.SheetNames.find((name) => isInvestmentSheetName(name));
+  if (prefixed) return prefixed;
+
+  throw new Error('Không tìm thấy sheet Investment trong file Excel.');
+}
+
 function shouldSyncManualPrice(type: string): boolean {
   return type !== "stock" && type !== "gold" && type !== "crypto";
 }
@@ -842,10 +856,11 @@ router.post("/excel/sheet/update", (req, res) => {
 router.post("/excel/investment/sync", async (_req, res): Promise<void> => {
   try {
     const workbook = loadWorkbook();
-    const rows = parseInvestmentRows(workbook, "Investment");
+    const investmentSheetName = resolveInvestmentSheetName(workbook);
+    const rows = parseInvestmentRows(workbook, investmentSheetName);
 
     if (rows.length === 0) {
-      res.status(400).json({ error: 'Sheet "Investment" không có dòng dữ liệu hợp lệ để sync.' });
+      res.status(400).json({ error: `Sheet "${investmentSheetName}" không có dòng dữ liệu hợp lệ để sync.` });
       return;
     }
 
@@ -892,12 +907,12 @@ router.post("/excel/investment/sync", async (_req, res): Promise<void> => {
 
     res.json({
       success: true,
-      sheet: "Investment",
+      sheet: investmentSheetName,
       total: rows.length,
       created,
       updated,
       skipped,
-      message: `Đã sync ${rows.length} dòng từ Investment sang Tài sản.`,
+      message: `Đã sync ${rows.length} dòng từ "${investmentSheetName}" sang Tài sản.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Không thể sync sheet Investment.";

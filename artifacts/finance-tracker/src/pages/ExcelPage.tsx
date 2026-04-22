@@ -15,6 +15,10 @@ async function readJsonSafe(res: Response) {
   return res.json();
 }
 
+function isInvestmentSheetName(name: string) {
+  return name.trim().toLowerCase().startsWith("investment");
+}
+
 export default function ExcelPage() {
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
   const [excelSheet, setExcelSheet] = useState<string>("");
@@ -265,7 +269,7 @@ export default function ExcelPage() {
                   {sheet}
                 </button>
               ))}
-              {excelSheet === "Investment" && (
+              {isInvestmentSheetName(excelSheet) && (
                 <button
                   onClick={syncInvestmentToAssets}
                   disabled={excelSyncingInvestment}
