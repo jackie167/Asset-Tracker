@@ -25,6 +25,12 @@ function isInvestmentSheetName(name: string) {
   return name.trim().toLowerCase().startsWith("investment");
 }
 
+type ExcelSourceInfo = {
+  mode: "local" | "google_drive";
+  readOnly: boolean;
+  label: string;
+};
+
 export default function ExcelPage() {
   const queryClient = useQueryClient();
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
@@ -41,6 +47,11 @@ export default function ExcelPage() {
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelError, setExcelError] = useState<string | null>(null);
   const [excelNotice, setExcelNotice] = useState<string | null>(null);
+  const [excelSource, setExcelSource] = useState<ExcelSourceInfo>({
+    mode: "local",
+    readOnly: false,
+    label: "Local file",
+  });
   const excelFileRef = useRef<HTMLInputElement | null>(null);
 
   const yearHeaderCols = useMemo(() => {
@@ -62,6 +73,9 @@ export default function ExcelPage() {
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể tải danh sách sheet.");
       const sheets = Array.isArray(data?.sheets) ? data.sheets : [];
+      if (data?.source) {
+        setExcelSource(data.source as ExcelSourceInfo);
+      }
       setExcelSheets(sheets);
       if (sheets.length && !excelSheet) setExcelSheet(sheets[0]);
     } catch (err) {
@@ -81,6 +95,9 @@ export default function ExcelPage() {
       const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(name)}${debugParam}`);
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể tải dữ liệu sheet.");
+      if (data?.source) {
+        setExcelSource(data.source as ExcelSourceInfo);
+      }
       setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
       setExcelFormulas(Array.isArray(data?.formulas) ? data.formulas : []);
       if (excelDebug && data?.debug) {
@@ -107,6 +124,9 @@ export default function ExcelPage() {
       const res = await fetch("/api/excel/upload", { method: "POST", body: form });
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể upload file Excel.");
+      if (data?.source) {
+        setExcelSource(data.source as ExcelSourceInfo);
+      }
       const sheets = Array.isArray(data?.sheets) ? data.sheets : [];
       setExcelSheets(sheets);
       if (sheets.length) {
@@ -136,6 +156,9 @@ export default function ExcelPage() {
       });
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể tính lại dữ liệu sheet.");
+      if (data?.source) {
+        setExcelSource(data.source as ExcelSourceInfo);
+      }
       setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
       setExcelFormulas(Array.isArray(data?.formulas) ? data.formulas : []);
     } catch (err) {
@@ -238,25 +261,33 @@ export default function ExcelPage() {
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-widest">Excel Sheets</p>
               <p className="text-xs text-muted-foreground">Chọn sheet để xem dạng bảng</p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Nguồn dữ liệu: {excelSource.label}
+                {excelSource.readOnly ? " • chỉnh sửa tại nguồn rồi app tự đọc" : ""}
+              </p>
             </div>
             <div className="flex items-center gap-2">
-              <input
-                ref={excelFileRef}
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) handleExcelUpload(file);
-                }}
-              />
-              <button
-                onClick={() => excelFileRef.current?.click()}
-                className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:border-primary/40"
-                disabled={excelUploading}
-              >
-                {excelUploading ? "Đang import..." : "Import file"}
-              </button>
+              {!excelSource.readOnly && (
+                <>
+                  <input
+                    ref={excelFileRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) handleExcelUpload(file);
+                    }}
+                  />
+                  <button
+                    onClick={() => excelFileRef.current?.click()}
+                    className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:border-primary/40"
+                    disabled={excelUploading}
+                  >
+                    {excelUploading ? "Đang import..." : "Import file"}
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setExcelDebug((previous) => !previous)}
                 className={`text-xs px-2 py-1 rounded border transition-colors ${
@@ -334,7 +365,7 @@ export default function ExcelPage() {
                           typeof displayValue === "number" &&
                           !isYearCol;
                         const isEditing = excelEdit?.row === rowIndex && excelEdit?.col === colIndex;
-                        const isEditable = rowIndex > 0 && !hasFormula && !excelDebug;
+                        const isEditable = rowIndex > 0 && !hasFormula && !excelDebug && !excelSource.readOnly;
                         const isNumeric =
                           !isEditing &&
                           !excelDebug &&

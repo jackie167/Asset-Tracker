@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { execFileSync } from "node:child_process";
+import { createSign } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
@@ -19,6 +20,13 @@ const STORAGE_FILE = path.join(STORAGE_DIR, "excel-source.xlsx");
 const DEFAULT_SOURCE = path.join(STORAGE_DIR, "excel-source.xlsx");
 const CALCULATED_FILE = path.join(STORAGE_DIR, "excel-source-calculated.xlsx");
 const TMP_INPUT = path.join(STORAGE_DIR, "excel-source-input.xlsx");
+const EXCEL_EXPORT_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+type ExcelSourceInfo = {
+  mode: "local" | "google_drive";
+  readOnly: boolean;
+  label: string;
+};
 
 function ensureStorageDir(): void {
   if (!fs.existsSync(STORAGE_DIR)) {
@@ -26,7 +34,141 @@ function ensureStorageDir(): void {
   }
 }
 
-function loadWorkbook(): XLSX.WorkBook {
+function getGoogleDriveConfig() {
+  const fileId = String(process.env["GOOGLE_DRIVE_FILE_ID"] ?? "").trim();
+  const clientEmail = String(process.env["GOOGLE_SERVICE_ACCOUNT_EMAIL"] ?? "").trim();
+  const privateKey = String(process.env["GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY"] ?? "")
+    .replace(/\\n/g, "\n")
+    .trim();
+
+  if (!fileId || !clientEmail || !privateKey) return null;
+
+  return {
+    fileId,
+    clientEmail,
+    privateKey,
+    tokenUri: "https://oauth2.googleapis.com/token",
+  };
+}
+
+function getExcelSourceInfo(): ExcelSourceInfo {
+  const driveConfig = getGoogleDriveConfig();
+  if (driveConfig) {
+    return {
+      mode: "google_drive",
+      readOnly: true,
+      label: "Google Drive",
+    };
+  }
+
+  return {
+    mode: "local",
+    readOnly: false,
+    label: "Local file",
+  };
+}
+
+function base64UrlEncode(input: string | Buffer): string {
+  return Buffer.from(input)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+async function getGoogleDriveAccessToken() {
+  const config = getGoogleDriveConfig();
+  if (!config) {
+    throw new Error("Google Drive source is not configured.");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const claimSet = {
+    iss: config.clientEmail,
+    scope: "https://www.googleapis.com/auth/drive.readonly",
+    aud: config.tokenUri,
+    exp: now + 3600,
+    iat: now,
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedClaims = base64UrlEncode(JSON.stringify(claimSet));
+  const unsignedToken = `${encodedHeader}.${encodedClaims}`;
+  const signer = createSign("RSA-SHA256");
+  signer.update(unsignedToken);
+  signer.end();
+  const signature = signer.sign(config.privateKey);
+  const assertion = `${unsignedToken}.${base64UrlEncode(signature)}`;
+
+  const response = await fetch(config.tokenUri, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Could not get Google access token: ${response.status} ${text.slice(0, 200)}`);
+  }
+
+  const json = await response.json() as { access_token?: string };
+  if (!json.access_token) {
+    throw new Error("Google token response is missing access_token.");
+  }
+
+  return json.access_token;
+}
+
+async function fetchWorkbookBufferFromGoogleDrive(): Promise<Buffer> {
+  const config = getGoogleDriveConfig();
+  if (!config) {
+    throw new Error("Google Drive source is not configured.");
+  }
+
+  const accessToken = await getGoogleDriveAccessToken();
+  const metadataResponse = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(config.fileId)}?fields=id,name,mimeType`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!metadataResponse.ok) {
+    const text = await metadataResponse.text();
+    throw new Error(`Could not read Google Drive file metadata: ${metadataResponse.status} ${text.slice(0, 200)}`);
+  }
+
+  const metadata = await metadataResponse.json() as { mimeType?: string; name?: string };
+  const mimeType = metadata.mimeType ?? "";
+  const isGoogleSheet = mimeType === "application/vnd.google-apps.spreadsheet";
+  const downloadUrl = isGoogleSheet
+    ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(config.fileId)}/export?mimeType=${encodeURIComponent(EXCEL_EXPORT_MIME)}`
+    : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(config.fileId)}?alt=media`;
+
+  const fileResponse = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!fileResponse.ok) {
+    const text = await fileResponse.text();
+    throw new Error(`Could not download Google Drive Excel source: ${fileResponse.status} ${text.slice(0, 200)}`);
+  }
+
+  const arrayBuffer = await fileResponse.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+async function loadWorkbook(): Promise<XLSX.WorkBook> {
+  const driveConfig = getGoogleDriveConfig();
+  if (driveConfig) {
+    const buffer = await fetchWorkbookBufferFromGoogleDrive();
+    return XLSX.read(buffer, { type: "buffer", cellDates: true });
+  }
+
   const source = fs.existsSync(STORAGE_FILE) ? STORAGE_FILE : DEFAULT_SOURCE;
   if (!fs.existsSync(source)) {
     throw new Error("No Excel file available");
@@ -783,6 +925,12 @@ function evaluateWorkbook(workbook: XLSX.WorkBook) {
 }
 
 router.post("/excel/upload", upload.single("file"), (req, res) => {
+  const sourceInfo = getExcelSourceInfo();
+  if (sourceInfo.mode === "google_drive") {
+    res.status(409).json({ error: "Excel source đang lấy từ Google Drive. Hãy cập nhật file trên Drive." });
+    return;
+  }
+
   if (!req.file) {
     res.status(400).json({ error: "No file uploaded" });
     return;
@@ -794,19 +942,20 @@ router.post("/excel/upload", upload.single("file"), (req, res) => {
   const workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true });
   res.json({
     sheets: workbook.SheetNames,
+    source: sourceInfo,
   });
 });
 
-router.get("/excel/sheets", (_req, res) => {
+router.get("/excel/sheets", async (_req, res) => {
   try {
-    const workbook = loadWorkbook();
-    res.json({ sheets: workbook.SheetNames });
+    const workbook = await loadWorkbook();
+    res.json({ sheets: workbook.SheetNames, source: getExcelSourceInfo() });
   } catch (err) {
     res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
-router.get("/excel/sheet", (req, res) => {
+router.get("/excel/sheet", async (req, res) => {
   const name = String(req.query.name ?? "").trim();
   const debug = String(req.query.debug ?? "").toLowerCase();
   const isDebug = debug === "1" || debug === "true" || debug === "yes";
@@ -816,7 +965,7 @@ router.get("/excel/sheet", (req, res) => {
   }
 
   try {
-    const workbook = loadWorkbook();
+    const workbook = await loadWorkbook();
     if (!workbook.Sheets[name]) {
       res.status(404).json({ error: "Sheet not found" });
       return;
@@ -824,19 +973,20 @@ router.get("/excel/sheet", (req, res) => {
     const evaluated = evaluateWorkbook(workbook);
     const rows = evaluated.values[name] ?? [];
     const formulas = evaluated.formulaMask[name] ?? [];
+    const sourceInfo = getExcelSourceInfo();
     if (isDebug) {
       const formulaText = evaluated.formulaText[name] ?? [];
       const errors = evaluated.errors[name] ?? [];
-      res.json({ name, rows, formulas, debug: { formulaText, errors } });
+      res.json({ name, rows, formulas, debug: { formulaText, errors }, source: sourceInfo });
       return;
     }
-    res.json({ name, rows, formulas });
+    res.json({ name, rows, formulas, source: sourceInfo });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
-router.post("/excel/sheet/recalc", (req, res) => {
+router.post("/excel/sheet/recalc", async (req, res) => {
   const name = String(req.body?.name ?? "").trim();
   const overrides = req.body?.overrides as ExcelOverrides | undefined;
   if (!name) {
@@ -845,7 +995,7 @@ router.post("/excel/sheet/recalc", (req, res) => {
   }
 
   try {
-    const workbook = loadWorkbook();
+    const workbook = await loadWorkbook();
     if (!workbook.Sheets[name]) {
       res.status(404).json({ error: "Sheet not found" });
       return;
@@ -854,13 +1004,19 @@ router.post("/excel/sheet/recalc", (req, res) => {
     const evaluated = evaluateWorkbook(workbook);
     const rows = evaluated.values[name] ?? [];
     const formulas = evaluated.formulaMask[name] ?? [];
-    res.json({ name, rows, formulas });
+    res.json({ name, rows, formulas, source: getExcelSourceInfo() });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
-router.post("/excel/sheet/update", (req, res) => {
+router.post("/excel/sheet/update", async (req, res) => {
+  const sourceInfo = getExcelSourceInfo();
+  if (sourceInfo.mode === "google_drive") {
+    res.status(409).json({ error: "Excel source đang lấy từ Google Drive. Hãy chỉnh file trên Drive." });
+    return;
+  }
+
   const name = String(req.body?.name ?? "").trim();
   const overrides = req.body?.overrides as ExcelOverrides | undefined;
   if (!name) {
@@ -869,7 +1025,7 @@ router.post("/excel/sheet/update", (req, res) => {
   }
 
   try {
-    const workbook = loadWorkbook();
+    const workbook = await loadWorkbook();
     if (!workbook.Sheets[name]) {
       res.status(404).json({ error: "Sheet not found" });
       return;
@@ -879,7 +1035,7 @@ router.post("/excel/sheet/update", (req, res) => {
     const evaluated = evaluateWorkbook(workbook);
     const rows = evaluated.values[name] ?? [];
     const formulas = evaluated.formulaMask[name] ?? [];
-    res.json({ name, rows, formulas });
+    res.json({ name, rows, formulas, source: sourceInfo });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -887,7 +1043,7 @@ router.post("/excel/sheet/update", (req, res) => {
 
 router.post("/excel/investment/sync", async (req, res): Promise<void> => {
   try {
-    const workbook = loadWorkbook();
+    const workbook = await loadWorkbook();
     const requestedSheetName = String(req.body?.name ?? "").trim();
     const overrides = req.body?.overrides as ExcelOverrides | undefined;
     const investmentSheetName = requestedSheetName
@@ -928,8 +1084,8 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
             manualPrice: shouldSyncManualPrice(row.type)
               ? row.manualPrice != null
                 ? String(row.manualPrice)
-                : existing.manualPrice
-              : existing.manualPrice,
+                : null
+              : null,
             updatedAt: new Date(),
           })
           .where(eq(holdingsTable.id, existing.id));
