@@ -164,24 +164,28 @@ export default function ExcelPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 bg-background z-10">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Excel Sheets</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            Trang chính
-          </Link>
-          <Link href="/assets" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            Tài sản
-          </Link>
-          <Link href="/excel" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            Excel
-          </Link>
+      <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
+        <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto space-y-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Excel Sheets</h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <Link href="/" className="hover:text-foreground transition-colors">
+                Trang chính
+              </Link>
+              <Link href="/assets" className="hover:text-foreground transition-colors">
+                Tài sản
+              </Link>
+              <Link href="/excel" className="hover:text-foreground transition-colors">
+                Excel
+              </Link>
+            </div>
+          </div>
         </div>
       </header>
 
-      <main className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 py-4 space-y-4">
+      <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
         <Card className="p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>

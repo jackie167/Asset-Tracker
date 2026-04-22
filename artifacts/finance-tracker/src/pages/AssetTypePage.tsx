@@ -203,42 +203,52 @@ export default function AssetTypePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 bg-background z-10">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Link href="/assets" className="hover:text-foreground transition-colors">
-              Tài sản
-            </Link>
-            <span>/</span>
-            <span className="text-foreground">{typeLabel}</span>
+      <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
+        <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto space-y-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-semibold tracking-tight">{typeLabel}</h1>
+              {lastUpdated && (
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Cập nhật: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <Link href="/" className="hover:text-foreground transition-colors">
+                Trang chính
+              </Link>
+              <Link href="/assets" className="hover:text-foreground transition-colors">
+                Tài sản
+              </Link>
+              <Link href="/excel" className="hover:text-foreground transition-colors">
+                Excel
+              </Link>
+            </div>
           </div>
-          <h1 className="text-lg font-semibold tracking-tight mt-1">{typeLabel}</h1>
-          {lastUpdated && (
-            <p className="text-xs text-muted-foreground">
-              Cập nhật: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => navigate("/assets")} className="text-xs">
-            ← Quay lại
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshPrices.isPending} className="text-xs">
-            {refreshPrices.isPending ? "..." : "↻ Làm mới"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={!typeHoldings.length} className="text-xs">
-            ↓ Export
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowImport(true)} className="text-xs">
-            ↑ Import
-          </Button>
-          <Button size="sm" onClick={() => setShowAdd(true)} className="text-xs">
-            + Thêm
-          </Button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/assets")} className="text-xs h-8">
+              ← Quay lại
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshPrices.isPending} className="text-xs h-8">
+              {refreshPrices.isPending ? "..." : "↻ Làm mới"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={!typeHoldings.length} className="text-xs h-8">
+              ↓ Export
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowImport(true)} className="text-xs h-8">
+              ↑ Import
+            </Button>
+            <Button size="sm" onClick={() => setShowAdd(true)} className="text-xs h-8">
+              + Thêm
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 py-4 space-y-4">
+      <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
         {isError ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
             {error instanceof Error ? error.message : "Không thể tải dữ liệu."}
