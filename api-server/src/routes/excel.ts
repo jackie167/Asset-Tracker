@@ -150,6 +150,7 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
   const header = rows[headerIndex].map((cell) => String(cell ?? "").trim().toLowerCase());
   const assetIndex = header.findIndex((value) => value === "tài sản");
   const typeIndex = header.findIndex((value) => value === "loại");
+  const currentIndex = header.findIndex((value) => value === "current");
   const quantityIndex = header.findIndex((value) => value === "ql" || value === "qi");
   const currentPriceIndex = header.findIndex((value) => value === "current price");
 
@@ -167,9 +168,17 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
     if (quantity == null || quantity <= 0) continue;
 
     const type = normalizeInvestmentType(symbol, typeIndex >= 0 ? row[typeIndex] : "");
+    const parsedCurrentValue =
+      currentIndex >= 0 ? (parseVNNumber(row[currentIndex]) ?? null) : null;
     const parsedCurrentPrice =
       currentPriceIndex >= 0 ? (parseVNNumber(row[currentPriceIndex]) ?? null) : null;
-    const manualPrice = shouldSyncManualPrice(type) ? parsedCurrentPrice : null;
+    const derivedCurrentPrice =
+      parsedCurrentPrice != null
+        ? parsedCurrentPrice
+        : parsedCurrentValue != null && quantity > 0
+          ? parsedCurrentValue / quantity
+          : null;
+    const manualPrice = shouldSyncManualPrice(type) ? derivedCurrentPrice : null;
 
     parsedRows.push({
       symbol,
@@ -894,7 +903,7 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
             manualPrice: shouldSyncManualPrice(row.type)
               ? row.manualPrice != null
                 ? String(row.manualPrice)
-                : null
+                : existing.manualPrice
               : existing.manualPrice,
             updatedAt: new Date(),
           })
