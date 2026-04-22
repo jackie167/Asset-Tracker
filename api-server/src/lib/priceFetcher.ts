@@ -14,6 +14,11 @@ interface PriceData {
   changePercent: number | null;
 }
 
+function isSjcGoldSymbol(symbol: string): boolean {
+  const normalized = symbol.trim().toUpperCase();
+  return normalized === "SJC_1L" || normalized === "SJC_1C" || normalized.startsWith("SJC");
+}
+
 const COINGECKO_ID_MAP: Record<string, string> = {
   BTC: "bitcoin",
   ETH: "ethereum",
@@ -354,7 +359,11 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
   const stockSymbols = [
     ...new Set(holdings.filter((h) => h.type === "stock").map((h) => h.symbol.toUpperCase())),
   ];
-  const hasGold = holdings.some((h) => h.type === "gold");
+  const goldSymbols = [
+    ...new Set(holdings.filter((h) => h.type === "gold").map((h) => h.symbol.toUpperCase())),
+  ];
+  const hasSjcGold = goldSymbols.some(isSjcGoldSymbol);
+  const tokenGoldSymbols = goldSymbols.filter((symbol) => !isSjcGoldSymbol(symbol) && COINGECKO_ID_MAP[symbol]);
 
   // Detect crypto: non-stock/gold holdings whose symbol is in the CoinGecko map
   const cryptoSymbols = [
@@ -368,20 +377,28 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
 
   console.log(
     `[PriceFetcher] Starting fetch for ${stockSymbols.length} stock(s)` +
-    `${hasGold ? " + gold" : ""}` +
+    `${hasSjcGold ? " + SJC gold" : ""}` +
+    `${tokenGoldSymbols.length ? ` + token-gold (${tokenGoldSymbols.join(", ")})` : ""}` +
     `${cryptoSymbols.length ? ` + crypto (${cryptoSymbols.join(", ")})` : ""}`
   );
 
   const stockPromises = stockSymbols.map(fetchStockPriceYahoo);
-  const [stockResults, goldResults, cryptoResults] = await Promise.all([
+  const [stockResults, sjcGoldResults, tokenGoldResults, cryptoResults] = await Promise.all([
     Promise.all(stockPromises),
-    hasGold ? fetchGoldPriceSJC() : Promise.resolve([] as PriceData[]),
+    hasSjcGold ? fetchGoldPriceSJC() : Promise.resolve([] as PriceData[]),
+    tokenGoldSymbols.length ? fetchCryptoPricesCoinGecko(tokenGoldSymbols) : Promise.resolve([] as PriceData[]),
     cryptoSymbols.length ? fetchCryptoPricesCoinGecko(cryptoSymbols) : Promise.resolve([] as PriceData[]),
   ]);
 
+  const normalizedTokenGoldResults = tokenGoldResults.map((price) => ({
+    ...price,
+    type: "gold",
+  }));
+
   const prices: PriceData[] = [
     ...stockResults.filter((p): p is PriceData => p !== null),
-    ...goldResults,
+    ...sjcGoldResults,
+    ...normalizedTokenGoldResults,
     ...cryptoResults,
   ];
 
