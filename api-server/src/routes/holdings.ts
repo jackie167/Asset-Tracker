@@ -138,6 +138,7 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
       changePercent: p.changePercent != null ? parseFloat(String(p.changePercent)) : null,
     });
   }
+  const goldBenchmark = latestPrices.find((price) => price.type === "gold");
 
   let stockValue = 0;
   let goldValue = 0;
@@ -153,7 +154,13 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
   const holdingsWithValue = holdings.map((h) => {
     const qty = parseFloat(String(h.quantity));
     const sym = h.symbol.toUpperCase();
-    const priceData = priceMap.get(sym);
+    const priceData = priceMap.get(sym) ?? (h.type === "gold" && goldBenchmark
+      ? {
+          price: parseFloat(String(goldBenchmark.price)),
+          change: goldBenchmark.change != null ? parseFloat(String(goldBenchmark.change)) : null,
+          changePercent: goldBenchmark.changePercent != null ? parseFloat(String(goldBenchmark.changePercent)) : null,
+        }
+      : undefined);
     const manualUnitPrice = h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null;
     const currentPrice = priceData?.price ?? manualUnitPrice;
     const currentValue = currentPrice != null ? qty * currentPrice : null;

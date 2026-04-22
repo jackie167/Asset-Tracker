@@ -14,11 +14,6 @@ interface PriceData {
   changePercent: number | null;
 }
 
-function isSjcGoldSymbol(symbol: string): boolean {
-  const normalized = symbol.trim().toUpperCase();
-  return normalized === "SJC_1L" || normalized === "SJC_1C" || normalized.startsWith("SJC");
-}
-
 const COINGECKO_ID_MAP: Record<string, string> = {
   BTC: "bitcoin",
   ETH: "ethereum",
@@ -362,8 +357,7 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
   const goldSymbols = [
     ...new Set(holdings.filter((h) => h.type === "gold").map((h) => h.symbol.toUpperCase())),
   ];
-  const hasSjcGold = goldSymbols.some(isSjcGoldSymbol);
-  const tokenGoldSymbols = goldSymbols.filter((symbol) => !isSjcGoldSymbol(symbol) && COINGECKO_ID_MAP[symbol]);
+  const hasGold = goldSymbols.length > 0;
 
   // Detect crypto: non-stock/gold holdings whose symbol is in the CoinGecko map
   const cryptoSymbols = [
@@ -377,28 +371,30 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
 
   console.log(
     `[PriceFetcher] Starting fetch for ${stockSymbols.length} stock(s)` +
-    `${hasSjcGold ? " + SJC gold" : ""}` +
-    `${tokenGoldSymbols.length ? ` + token-gold (${tokenGoldSymbols.join(", ")})` : ""}` +
+    `${hasGold ? " + gold(SJC benchmark)" : ""}` +
     `${cryptoSymbols.length ? ` + crypto (${cryptoSymbols.join(", ")})` : ""}`
   );
 
   const stockPromises = stockSymbols.map(fetchStockPriceYahoo);
-  const [stockResults, sjcGoldResults, tokenGoldResults, cryptoResults] = await Promise.all([
+  const [stockResults, sjcGoldResults, cryptoResults] = await Promise.all([
     Promise.all(stockPromises),
-    hasSjcGold ? fetchGoldPriceSJC() : Promise.resolve([] as PriceData[]),
-    tokenGoldSymbols.length ? fetchCryptoPricesCoinGecko(tokenGoldSymbols) : Promise.resolve([] as PriceData[]),
+    hasGold ? fetchGoldPriceSJC() : Promise.resolve([] as PriceData[]),
     cryptoSymbols.length ? fetchCryptoPricesCoinGecko(cryptoSymbols) : Promise.resolve([] as PriceData[]),
   ]);
 
-  const normalizedTokenGoldResults = tokenGoldResults.map((price) => ({
-    ...price,
-    type: "gold",
-  }));
+  const goldBenchmark = sjcGoldResults.find((price) => price.symbol.toUpperCase() === "SJC_1L") ?? sjcGoldResults[0] ?? null;
+  const normalizedGoldResults =
+    goldBenchmark != null
+      ? goldSymbols.map((symbol) => ({
+          ...goldBenchmark,
+          symbol,
+          type: "gold",
+        }))
+      : [];
 
   const prices: PriceData[] = [
     ...stockResults.filter((p): p is PriceData => p !== null),
-    ...sjcGoldResults,
-    ...normalizedTokenGoldResults,
+    ...normalizedGoldResults,
     ...cryptoResults,
   ];
 
