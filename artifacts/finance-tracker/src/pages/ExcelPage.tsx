@@ -167,7 +167,14 @@ export default function ExcelPage() {
     setExcelNotice(null);
     setExcelSyncingInvestment(true);
     try {
-      const res = await fetch("/api/excel/investment/sync", { method: "POST" });
+      const res = await fetch("/api/excel/investment/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: excelSheet,
+          overrides: excelOverrides,
+        }),
+      });
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể sync Investment sang Tài sản.");
       setExcelNotice(
@@ -178,7 +185,7 @@ export default function ExcelPage() {
     } finally {
       setExcelSyncingInvestment(false);
     }
-  }, []);
+  }, [excelOverrides, excelSheet]);
 
   useEffect(() => {
     loadExcelSheets();

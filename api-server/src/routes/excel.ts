@@ -853,10 +853,21 @@ router.post("/excel/sheet/update", (req, res) => {
   }
 });
 
-router.post("/excel/investment/sync", async (_req, res): Promise<void> => {
+router.post("/excel/investment/sync", async (req, res): Promise<void> => {
   try {
     const workbook = loadWorkbook();
-    const investmentSheetName = resolveInvestmentSheetName(workbook);
+    const requestedSheetName = String(req.body?.name ?? "").trim();
+    const overrides = req.body?.overrides as ExcelOverrides | undefined;
+    const investmentSheetName = requestedSheetName
+      ? requestedSheetName
+      : resolveInvestmentSheetName(workbook);
+
+    if (!workbook.Sheets[investmentSheetName]) {
+      res.status(404).json({ error: `Sheet "${investmentSheetName}" không tồn tại.` });
+      return;
+    }
+
+    applyOverrides(workbook, investmentSheetName, overrides);
     const rows = parseInvestmentRows(workbook, investmentSheetName);
 
     if (rows.length === 0) {
