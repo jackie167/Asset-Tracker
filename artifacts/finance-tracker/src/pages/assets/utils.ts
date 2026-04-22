@@ -3,14 +3,14 @@ import type { TypeMode } from "@/pages/assets/types";
 const VND_INT = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
 const VND_2 = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
 const TYPE_META: Record<string, { label: string; shortLabel: string; decoratedLabel: string }> = {
-  stock: { label: "Cổ phiếu", shortLabel: "CP", decoratedLabel: "📈 Cổ phiếu" },
-  fund: { label: "Quỹ", shortLabel: "Quỹ", decoratedLabel: "📦 Quỹ" },
-  bond: { label: "Trái phiếu", shortLabel: "TP", decoratedLabel: "🧾 Trái phiếu" },
-  cash: { label: "Tiền mặt", shortLabel: "Tiền mặt", decoratedLabel: "💵 Tiền mặt" },
-  real_estate: { label: "Bất động sản", shortLabel: "BĐS", decoratedLabel: "🏠 Bất động sản" },
-  gold: { label: "Vàng", shortLabel: "Vàng", decoratedLabel: "🥇 Vàng" },
+  stock: { label: "Stock", shortLabel: "Stock", decoratedLabel: "📈 Stock" },
+  fund: { label: "Fund", shortLabel: "Fund", decoratedLabel: "📦 Fund" },
+  bond: { label: "Bond", shortLabel: "Bond", decoratedLabel: "🧾 Bond" },
+  cash: { label: "Cash", shortLabel: "Cash", decoratedLabel: "💵 Cash" },
+  real_estate: { label: "Real Estate", shortLabel: "Real Estate", decoratedLabel: "🏠 Real Estate" },
+  gold: { label: "Gold", shortLabel: "Gold", decoratedLabel: "🥇 Gold" },
   crypto: { label: "Crypto", shortLabel: "Crypto", decoratedLabel: "🪙 Crypto" },
-  other: { label: "Khác", shortLabel: "Khác", decoratedLabel: "💼 Khác" },
+  other: { label: "Other", shortLabel: "Other", decoratedLabel: "💼 Other" },
 };
 
 function toTitleCase(value: string): string {
