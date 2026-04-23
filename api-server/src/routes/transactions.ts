@@ -18,7 +18,7 @@ const CreateTransactionBody = z.object({
 const UpdateTransactionParams = z.object({
   id: z.coerce.number().int().positive(),
 });
-const UpdateTransactionBody = CreateTransactionBody.omit({ executedAt: true });
+const UpdateTransactionBody = CreateTransactionBody;
 
 function serializeTransaction(transaction: typeof transactionsTable.$inferSelect) {
   const quantity = parseFloat(String(transaction.quantity));
@@ -297,6 +297,7 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
           realizedInterest: String(realizedInterest),
           note: parsed.data.note || null,
           status: "applied",
+          executedAt: parsed.data.executedAt ?? existing.executedAt,
           updatedAt: new Date(),
         })
         .where(eq(transactionsTable.id, params.data.id))

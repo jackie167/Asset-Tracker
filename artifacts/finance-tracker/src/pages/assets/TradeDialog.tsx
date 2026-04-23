@@ -27,8 +27,15 @@ type TradeDialogProps = {
     quantity: number;
     totalValue: number;
     note?: string;
+    executedAt?: string;
   }) => void;
 };
+
+function formatDateInputValue(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
 
 export default function TradeDialog({ open, holdings, editingOrder, isSaving, onClose, onSubmit }: TradeDialogProps) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -36,6 +43,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
   const [symbol, setSymbol] = useState("");
   const [quantity, setQuantity] = useState("");
   const [totalValue, setTotalValue] = useState("");
+  const [executedAt, setExecutedAt] = useState(formatDateInputValue(new Date()));
   const [note, setNote] = useState("");
 
   const assetTypes = useMemo(
@@ -51,6 +59,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
       setSymbol(editingOrder.symbol);
       setQuantity(String(editingOrder.quantity));
       setTotalValue(String(editingOrder.totalValue));
+      setExecutedAt(formatDateInputValue(editingOrder.executedAt));
       setNote(editingOrder.note ?? "");
       return;
     }
@@ -59,6 +68,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
     setSymbol("");
     setQuantity("");
     setTotalValue("");
+    setExecutedAt(formatDateInputValue(new Date()));
     setNote("");
   }, [assetTypes, editingOrder, open]);
 
@@ -78,6 +88,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
       quantity: parsedQuantity,
       totalValue: parsedTotalValue,
       note: note.trim() || undefined,
+      executedAt,
     });
   };
 
@@ -162,6 +173,15 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
                 placeholder="0"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="text-sm text-muted-foreground mb-1 block">Trade Date</label>
+            <Input
+              value={executedAt}
+              onChange={(event) => setExecutedAt(event.target.value)}
+              type="date"
+            />
           </div>
 
           <div>

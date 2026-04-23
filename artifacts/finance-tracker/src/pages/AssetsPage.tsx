@@ -99,6 +99,7 @@ export default function AssetsPage() {
     quantity: number;
     totalValue: number;
     note?: string;
+    executedAt?: string;
   }) => ({
     ...body,
     fundingSource: "CASH",
@@ -113,6 +114,7 @@ export default function AssetsPage() {
       quantity: number;
       totalValue: number;
       note?: string;
+      executedAt?: string;
     }) => {
       const res = await fetch("/api/transactions", {
         method: "POST",
@@ -146,6 +148,7 @@ export default function AssetsPage() {
       quantity: number;
       totalValue: number;
       note?: string;
+      executedAt?: string;
     }) => {
       if (!editingTradeOrder) throw new Error("No trade selected.");
       const res = await fetch(`/api/transactions/${editingTradeOrder.id}`, {
