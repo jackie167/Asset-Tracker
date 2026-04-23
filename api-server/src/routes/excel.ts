@@ -229,8 +229,27 @@ type InvestmentRow = {
   interest: number | null;
 };
 
+type TransactionImportRow = {
+  side: "buy" | "sell";
+  fundingSource: string;
+  assetType: string;
+  symbol: string;
+  quantity: number;
+  totalValue: number;
+  unitPrice: number;
+  realizedInterest: number;
+  note: string | null;
+  executedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 function isInvestmentSheetName(name: string): boolean {
   return name.trim().toLowerCase().startsWith("investment");
+}
+
+function isTransactionsSheetName(name: string): boolean {
+  return normalizeHeaderName(name) === "transactions";
 }
 
 function normalizeSheetLookupName(name: string): string {
@@ -385,6 +404,148 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
       interest: parsedInterest,
     });
   }
+
+  return parsedRows;
+}
+
+function parseDateCell(value: string | number | boolean | Date | null | undefined): Date | null {
+  if (value == null || value === "") return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (!parsed) return null;
+    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H ?? 0, parsed.M ?? 0, parsed.S ?? 0));
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const vnDate = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (vnDate) {
+    const day = Number(vnDate[1]);
+    const month = Number(vnDate[2]);
+    const rawYear = Number(vnDate[3]);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    const hour = Number(vnDate[4] ?? 0);
+    const minute = Number(vnDate[5] ?? 0);
+    const second = Number(vnDate[6] ?? 0);
+    const date = new Date(year, month - 1, day, hour, minute, second);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseTransactionRows(workbook: XLSX.WorkBook, sheetName: string): TransactionImportRow[] {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date | null>>(sheet, {
+    header: 1,
+    defval: "",
+    raw: true,
+  });
+
+  const headerIndex = rows.findIndex((row) => {
+    const normalized = row.map((cell) => normalizeHeaderName(cell));
+    return normalized.includes("side") && (normalized.includes("asset") || normalized.includes("symbol"));
+  });
+
+  if (headerIndex === -1) {
+    throw new Error(`Sheet "${sheetName}" does not contain a valid Transactions header row`);
+  }
+
+  const header = rows[headerIndex].map((cell) => normalizeHeaderName(cell));
+  const sideIndex = header.findIndex((value) => value === "side");
+  const assetIndex = header.findIndex((value) => value === "asset" || value === "symbol" || value === "tai_san");
+  const typeIndex = header.findIndex((value) => value === "asset_type" || value === "type" || value === "loai");
+  const quantityIndex = header.findIndex((value) => value === "quantity" || value === "qty" || value === "ql" || value === "sl");
+  const totalValueIndex = header.findIndex((value) => value === "total_value" || value === "total" || value === "tong_gia_tri");
+  const unitPriceIndex = header.findIndex((value) => value === "unit_price" || value === "price" || value === "gia");
+  const realizedInterestIndex = header.findIndex((value) => value === "realized_interest" || value === "interest");
+  const fundingSourceIndex = header.findIndex((value) => value === "funding_source" || value === "source" || value === "nguon_tien");
+  const executedAtIndex = header.findIndex((value) => value === "executed_at" || value === "date" || value === "ngay");
+  const createdAtIndex = header.findIndex((value) => value === "created_at");
+  const updatedAtIndex = header.findIndex((value) => value === "updated_at");
+  const noteIndex = header.findIndex((value) => value === "note" || value === "ghi_chu");
+
+  const missing: string[] = [];
+  if (sideIndex === -1) missing.push("side");
+  if (assetIndex === -1) missing.push("asset");
+  if (typeIndex === -1) missing.push("asset_type");
+  if (quantityIndex === -1) missing.push("quantity");
+  if (totalValueIndex === -1) missing.push("total_value");
+  if (executedAtIndex === -1) missing.push("executed_at");
+  if (missing.length) {
+    throw new Error(`Sheet "${sheetName}" is missing required columns: ${missing.join(", ")}`);
+  }
+
+  const parsedRows: TransactionImportRow[] = [];
+
+  rows.slice(headerIndex + 1).forEach((row, index) => {
+    const rowNumber = headerIndex + index + 2;
+    const sideText = String(row[sideIndex] ?? "").trim().toLowerCase();
+    if (!sideText) return;
+    const side = sideText === "buy" || sideText === "mua"
+      ? "buy"
+      : sideText === "sell" || sideText === "ban" || sideText === "bán"
+        ? "sell"
+        : null;
+    if (!side) {
+      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: side must be buy or sell`);
+    }
+
+    const symbol = String(row[assetIndex] ?? "").trim().toUpperCase();
+    if (!symbol) {
+      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: asset is required`);
+    }
+
+    const assetType = normalizeInvestmentType(row[typeIndex]);
+    const quantity = parseVNNumber(row[quantityIndex]);
+    const totalValue = parseVNNumber(row[totalValueIndex]);
+    if (quantity == null || quantity <= 0) {
+      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: quantity must be greater than 0`);
+    }
+    if (totalValue == null || totalValue <= 0) {
+      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: total_value must be greater than 0`);
+    }
+
+    const executedAt = parseDateCell(row[executedAtIndex]);
+    if (!executedAt) {
+      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: executed_at is invalid`);
+    }
+
+    const unitPrice = unitPriceIndex >= 0
+      ? (parseVNNumber(row[unitPriceIndex]) ?? totalValue / quantity)
+      : totalValue / quantity;
+    const realizedInterest = realizedInterestIndex >= 0
+      ? (parseVNNumber(row[realizedInterestIndex]) ?? 0)
+      : 0;
+    const createdAt = createdAtIndex >= 0 ? (parseDateCell(row[createdAtIndex]) ?? new Date()) : new Date();
+    const updatedAt = updatedAtIndex >= 0 ? (parseDateCell(row[updatedAtIndex]) ?? createdAt) : createdAt;
+    const note = noteIndex >= 0 ? String(row[noteIndex] ?? "").trim() || null : null;
+    const fundingSource = fundingSourceIndex >= 0
+      ? String(row[fundingSourceIndex] ?? "CASH").trim().toUpperCase() || "CASH"
+      : "CASH";
+
+    parsedRows.push({
+      side,
+      fundingSource,
+      assetType,
+      symbol,
+      quantity,
+      totalValue,
+      unitPrice,
+      realizedInterest,
+      note,
+      executedAt,
+      createdAt,
+      updatedAt,
+    });
+  });
 
   return parsedRows;
 }
@@ -1086,6 +1247,7 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
     const investmentSheetName = requestedSheetName
       ? (resolveWorkbookSheetName(workbook, requestedSheetName) ?? requestedSheetName)
       : resolveInvestmentSheetName(workbook);
+    const transactionsSheetName = workbook.SheetNames.find((name) => isTransactionsSheetName(name)) ?? null;
 
     if (!workbook.Sheets[investmentSheetName]) {
       res.status(404).json({ error: `Sheet "${investmentSheetName}" không tồn tại.` });
@@ -1094,6 +1256,9 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
 
     applyOverrides(workbook, investmentSheetName, overrides);
     const rows = parseInvestmentRows(workbook, investmentSheetName);
+    const transactionRows = transactionsSheetName
+      ? parseTransactionRows(workbook, transactionsSheetName)
+      : [];
 
     if (rows.length === 0) {
       res.status(400).json({ error: `Sheet "${investmentSheetName}" không có dòng dữ liệu hợp lệ để sync.` });
@@ -1157,17 +1322,39 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       removed += 1;
     }
 
+    if (transactionRows.length > 0) {
+      await db.insert(transactionsTable).values(
+        transactionRows.map((transaction) => ({
+          side: transaction.side,
+          fundingSource: transaction.fundingSource,
+          assetType: transaction.assetType,
+          symbol: transaction.symbol,
+          quantity: String(transaction.quantity),
+          totalValue: String(transaction.totalValue),
+          unitPrice: String(transaction.unitPrice),
+          realizedInterest: String(transaction.realizedInterest),
+          note: transaction.note,
+          status: "applied",
+          executedAt: transaction.executedAt,
+          createdAt: transaction.createdAt,
+          updatedAt: transaction.updatedAt,
+        }))
+      );
+    }
+
     res.json({
       success: true,
       sheet: investmentSheetName,
+      transactionsSheet: transactionsSheetName,
       total: rows.length,
       created,
       updated,
       removed,
       skipped,
       clearedTransactions,
+      importedTransactions: transactionRows.length,
       warning: clearedTransactions > 0
-        ? `Sync overwrote holdings from the Investment sheet and cleared ${clearedTransactions} trade order(s) to keep portfolio state consistent.`
+        ? `Sync overwrote holdings from the Investment sheet, cleared ${clearedTransactions} trade order(s), and imported ${transactionRows.length} transaction row(s).`
         : null,
       message: `Đã sync ${rows.length} dòng từ "${investmentSheetName}" sang Tài sản.`,
     });

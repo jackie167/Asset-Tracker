@@ -226,8 +226,12 @@ export default function ExcelPage() {
             ? 1
             : 0;
       const cleared = clearedCount > 0 ? ` Trade history cleared: ${clearedCount}.` : "";
+      const importedTransactions =
+        typeof data?.importedTransactions === "number" && data.importedTransactions > 0
+          ? ` Imported transactions: ${data.importedTransactions}.`
+          : "";
       setExcelNotice(
-        `${data?.message || "Sync completed."} Created: ${data?.created ?? 0}, updated: ${data?.updated ?? 0}, removed: ${data?.removed ?? 0}.${cleared}${warning}`
+        `${data?.message || "Sync completed."} Created: ${data?.created ?? 0}, updated: ${data?.updated ?? 0}, removed: ${data?.removed ?? 0}.${cleared}${importedTransactions}${warning}`
       );
     } catch (err) {
       setExcelError(err instanceof Error ? err.message : "Unable to sync Investment to assets.");
