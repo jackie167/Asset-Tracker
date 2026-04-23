@@ -1100,14 +1100,11 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       return;
     }
 
-    const [existingHoldings, existingTransactions] = await Promise.all([
+    const [existingHoldings, deletedTransactions] = await Promise.all([
       db.select().from(holdingsTable),
-      db.select({ id: transactionsTable.id }).from(transactionsTable).limit(1),
+      db.delete(transactionsTable).returning({ id: transactionsTable.id }),
     ]);
-    const hasTransactions = existingTransactions.length > 0;
-    if (hasTransactions) {
-      await db.delete(transactionsTable);
-    }
+    const clearedTransactions = deletedTransactions.length;
     const existingBySymbol = new Map(existingHoldings.map((holding) => [holding.symbol.toUpperCase(), holding]));
     const syncedSymbols = new Set(rows.map((row) => row.symbol));
 
@@ -1168,9 +1165,9 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       updated,
       removed,
       skipped,
-      clearedTransactions: hasTransactions,
-      warning: hasTransactions
-        ? "Sync overwrote holdings from the Investment sheet and cleared existing trade history to keep portfolio state consistent."
+      clearedTransactions,
+      warning: clearedTransactions > 0
+        ? `Sync overwrote holdings from the Investment sheet and cleared ${clearedTransactions} trade order(s) to keep portfolio state consistent.`
         : null,
       message: `Đã sync ${rows.length} dòng từ "${investmentSheetName}" sang Tài sản.`,
     });

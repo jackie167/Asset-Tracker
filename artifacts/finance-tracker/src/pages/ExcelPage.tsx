@@ -210,6 +210,7 @@ export default function ExcelPage() {
       });
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Unable to sync Investment to assets.");
+      queryClient.setQueryData(["transactions"], []);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() }),
@@ -218,7 +219,13 @@ export default function ExcelPage() {
         queryClient.invalidateQueries({ queryKey: ["portfolio-returns"] }),
       ]);
       const warning = typeof data?.warning === "string" && data.warning ? ` Warning: ${data.warning}` : "";
-      const cleared = data?.clearedTransactions ? " Trade history was cleared." : "";
+      const clearedCount =
+        typeof data?.clearedTransactions === "number"
+          ? data.clearedTransactions
+          : data?.clearedTransactions
+            ? 1
+            : 0;
+      const cleared = clearedCount > 0 ? ` Trade history cleared: ${clearedCount}.` : "";
       setExcelNotice(
         `${data?.message || "Sync completed."} Created: ${data?.created ?? 0}, updated: ${data?.updated ?? 0}, removed: ${data?.removed ?? 0}.${cleared}${warning}`
       );
