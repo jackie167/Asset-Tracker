@@ -214,10 +214,13 @@ export default function ExcelPage() {
         queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: ["transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["portfolio-returns"] }),
       ]);
       const warning = typeof data?.warning === "string" && data.warning ? ` Warning: ${data.warning}` : "";
+      const cleared = data?.clearedTransactions ? " Trade history was cleared." : "";
       setExcelNotice(
-        `${data?.message || "Sync completed."} Created: ${data?.created ?? 0}, updated: ${data?.updated ?? 0}, removed: ${data?.removed ?? 0}.${warning}`
+        `${data?.message || "Sync completed."} Created: ${data?.created ?? 0}, updated: ${data?.updated ?? 0}, removed: ${data?.removed ?? 0}.${cleared}${warning}`
       );
     } catch (err) {
       setExcelError(err instanceof Error ? err.message : "Unable to sync Investment to assets.");

@@ -1105,6 +1105,9 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       db.select({ id: transactionsTable.id }).from(transactionsTable).limit(1),
     ]);
     const hasTransactions = existingTransactions.length > 0;
+    if (hasTransactions) {
+      await db.delete(transactionsTable);
+    }
     const existingBySymbol = new Map(existingHoldings.map((holding) => [holding.symbol.toUpperCase(), holding]));
     const syncedSymbols = new Set(rows.map((row) => row.symbol));
 
@@ -1165,8 +1168,9 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       updated,
       removed,
       skipped,
+      clearedTransactions: hasTransactions,
       warning: hasTransactions
-        ? "Sync overwrote holdings from the Investment sheet. Existing trade history is still stored, but portfolio quantity/cost now follows the sheet."
+        ? "Sync overwrote holdings from the Investment sheet and cleared existing trade history to keep portfolio state consistent."
         : null,
       message: `Đã sync ${rows.length} dòng từ "${investmentSheetName}" sang Tài sản.`,
     });
