@@ -7,6 +7,7 @@ import AssetTypePage from "@/pages/AssetTypePage";
 import ExcelPage from "@/pages/ExcelPage";
 import Home from "@/pages/Home";
 import NotFound from "@/pages/not-found";
+import TransactionsPage from "@/pages/TransactionsPage";
 import WealthAllocationPage from "@/pages/WealthAllocationPage";
 import WealthAllocationTypePage from "@/pages/WealthAllocationTypePage";
 
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/assets" component={AssetsPage} />
       <Route path="/assets/type/:type" component={AssetTypePage} />
+      <Route path="/transactions" component={TransactionsPage} />
       <Route path="/wealth-allocation" component={WealthAllocationPage} />
       <Route path="/wealth-allocation/type/:type" component={WealthAllocationTypePage} />
       <Route path="/excel" component={ExcelPage} />

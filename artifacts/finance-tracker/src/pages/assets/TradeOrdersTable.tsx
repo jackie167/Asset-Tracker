@@ -17,9 +17,12 @@ export type TradeOrder = {
 type TradeOrdersTableProps = {
   orders: TradeOrder[];
   isLoading: boolean;
+  limit?: number;
 };
 
-export default function TradeOrdersTable({ orders, isLoading }: TradeOrdersTableProps) {
+export default function TradeOrdersTable({ orders, isLoading, limit = 10 }: TradeOrdersTableProps) {
+  const visibleOrders = limit > 0 ? orders.slice(0, limit) : orders;
+
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
@@ -47,7 +50,7 @@ export default function TradeOrdersTable({ orders, isLoading }: TradeOrdersTable
               </tr>
             </thead>
             <tbody>
-              {orders.slice(0, 10).map((order) => (
+              {visibleOrders.map((order) => (
                 <tr key={order.id} className="border-b border-border last:border-0">
                   <td className={`py-2 pr-3 font-semibold uppercase ${order.side === "buy" ? "text-emerald-400" : "text-amber-300"}`}>
                     {order.side}

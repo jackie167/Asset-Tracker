@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { HoldingItem } from "@/pages/assets/types";
 import { formatTypeLabel } from "@/pages/assets/utils";
 
@@ -23,7 +30,6 @@ type TradeDialogProps = {
 
 export default function TradeDialog({ open, holdings, isSaving, onClose, onSubmit }: TradeDialogProps) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [fundingSource, setFundingSource] = useState("CASH");
   const [assetType, setAssetType] = useState("stock");
   const [symbol, setSymbol] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -34,35 +40,28 @@ export default function TradeDialog({ open, holdings, isSaving, onClose, onSubmi
     () => [...new Set(holdings.map((holding) => holding.type.toLowerCase()))].sort(),
     [holdings]
   );
-  const fundingSources = useMemo(
-    () => holdings
-      .filter((holding) => ["cash", "fund", "other"].includes(holding.type.toLowerCase()))
-      .map((holding) => holding.symbol),
-    [holdings]
-  );
 
   useEffect(() => {
     if (!open) return;
     setSide("buy");
-    setFundingSource(fundingSources[0] ?? "CASH");
     setAssetType(assetTypes[0] ?? "stock");
     setSymbol("");
     setQuantity("");
     setTotalValue("");
     setNote("");
-  }, [assetTypes, fundingSources, open]);
+  }, [assetTypes, open]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const parsedQuantity = Number(quantity);
     const parsedTotalValue = Number(totalValue);
-    if (!symbol.trim() || !fundingSource.trim() || !assetType.trim()) return;
+    if (!symbol.trim() || !assetType.trim()) return;
     if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) return;
     if (!Number.isFinite(parsedTotalValue) || parsedTotalValue <= 0) return;
 
     onSubmit({
       side,
-      fundingSource: fundingSource.trim(),
+      fundingSource: "CASH",
       assetType: assetType.trim(),
       symbol: symbol.trim(),
       quantity: parsedQuantity,
@@ -98,35 +97,26 @@ export default function TradeDialog({ open, holdings, isSaving, onClose, onSubmi
 
           <div>
             <label className="text-sm text-muted-foreground mb-1 block">Funding Source</label>
-            <Input
-              list="funding-sources"
-              value={fundingSource}
-              onChange={(event) => setFundingSource(event.target.value.toUpperCase())}
-              placeholder="CASH"
-            />
-            <datalist id="funding-sources">
-              {fundingSources.map((source) => (
-                <option key={source} value={source} />
-              ))}
-            </datalist>
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-muted-foreground">
+              CASH
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Asset Type</label>
-              <Input
-                list="asset-types"
-                value={assetType}
-                onChange={(event) => setAssetType(event.target.value.toLowerCase())}
-                placeholder="stock"
-              />
-              <datalist id="asset-types">
+              <Select value={assetType} onValueChange={setAssetType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
                 {assetTypes.map((type) => (
-                  <option key={type} value={type}>
+                  <SelectItem key={type} value={type}>
                     {formatTypeLabel(type)}
-                  </option>
+                  </SelectItem>
                 ))}
-              </datalist>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Asset Symbol</label>

@@ -57,6 +57,9 @@ export default function AssetsHeader({
               <Link href="/wealth-allocation">Wealth Allocation</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
+              <Link href="/transactions">Transactions</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
               <Link href="/excel">Excel</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
