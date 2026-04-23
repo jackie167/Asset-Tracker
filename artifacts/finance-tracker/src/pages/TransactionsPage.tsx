@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTable";
 
 async function fetchTradeOrders(): Promise<TradeOrder[]> {
@@ -8,11 +9,62 @@ async function fetchTradeOrders(): Promise<TradeOrder[]> {
   return res.json();
 }
 
+function csvValue(value: string | number | null | undefined) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function exportTradeOrdersCSV(orders: TradeOrder[]) {
+  const headers = [
+    "id",
+    "side",
+    "asset",
+    "asset_type",
+    "quantity",
+    "total_value",
+    "unit_price",
+    "realized_interest",
+    "funding_source",
+    "status",
+    "executed_at",
+    "created_at",
+    "updated_at",
+    "note",
+  ];
+  const rows = orders.map((order) => [
+    order.id,
+    order.side,
+    order.symbol,
+    order.assetType,
+    order.quantity,
+    order.totalValue,
+    order.unitPrice ?? "",
+    order.realizedInterest ?? "",
+    order.fundingSource,
+    order.status,
+    order.executedAt,
+    order.createdAt ?? "",
+    order.updatedAt ?? "",
+    order.note ?? "",
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function TransactionsPage() {
   const tradeOrdersQuery = useQuery({
     queryKey: ["transactions"],
     queryFn: fetchTradeOrders,
   });
+  const orders = tradeOrdersQuery.data ?? [];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -27,6 +79,15 @@ export default function TransactionsPage() {
             <Link href="/assets" className="hover:text-foreground transition-colors">Investment</Link>
             <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">Wealth Allocation</Link>
             <Link href="/excel" className="hover:text-foreground transition-colors">Excel</Link>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              disabled={!orders.length}
+              onClick={() => exportTradeOrdersCSV(orders)}
+            >
+              Export CSV
+            </Button>
           </nav>
         </div>
       </header>
@@ -38,7 +99,7 @@ export default function TransactionsPage() {
           </div>
         ) : (
           <TradeOrdersTable
-            orders={tradeOrdersQuery.data ?? []}
+            orders={orders}
             isLoading={tradeOrdersQuery.isLoading}
             limit={0}
           />

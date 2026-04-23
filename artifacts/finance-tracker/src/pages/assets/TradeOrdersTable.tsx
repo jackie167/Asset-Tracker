@@ -11,9 +11,12 @@ export type TradeOrder = {
   quantity: number;
   totalValue: number;
   unitPrice: number | null;
+  realizedInterest?: number | null;
   note?: string | null;
   status: string;
   executedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 type TradeOrdersTableProps = {
