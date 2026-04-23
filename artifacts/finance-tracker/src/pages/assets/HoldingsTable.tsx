@@ -212,11 +212,9 @@ export default function HoldingsTable({
                 >
                   <div className="overflow-hidden">
                     <p className="text-sm font-medium truncate">{holding.symbol}</p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <ChangeChip change={holding.change} changePercent={holding.changePercent} />
-                      {readOnly ? (
-                        <span className="text-[10px] text-muted-foreground">Synced from Investment</span>
-                      ) : (
+                    {!readOnly && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <ChangeChip change={holding.change} changePercent={holding.changePercent} />
                         <>
                           <button
                             onClick={() => onEdit?.(holding)}
@@ -232,8 +230,8 @@ export default function HoldingsTable({
                             Delete
                           </button>
                         </>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate block">
@@ -261,7 +259,7 @@ export default function HoldingsTable({
                       : "—"}
                   </span>
 
-                  <span className="text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
+                  <span className="text-sm font-semibold text-right tabular-nums whitespace-nowrap">
                     {formatMoney(holding.currentValue, true)}
                   </span>
                 </div>
