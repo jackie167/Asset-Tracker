@@ -84,11 +84,12 @@ async function adjustCash(tx: any, delta: number) {
 }
 
 async function increaseAsset(tx: any, input: { symbol: string; assetType: string; quantity: number; costIncrease: number; interestDelta?: number }) {
+  const symbol = input.symbol.toUpperCase();
   const holding = await getHoldingBySymbol(tx, input.symbol);
   if (!holding) {
     await tx.insert(holdingsTable).values({
       type: input.assetType,
-      symbol: input.symbol.toUpperCase(),
+      symbol,
       quantity: String(input.quantity),
       manualPrice: null,
       costOfCapital: String(input.costIncrease),
@@ -97,10 +98,11 @@ async function increaseAsset(tx: any, input: { symbol: string; assetType: string
     return;
   }
 
+  const shouldRepairCashType = holding.type === "cash" && symbol !== "CASH" && input.assetType !== "cash";
   await tx
     .update(holdingsTable)
     .set({
-      type: input.assetType,
+      type: shouldRepairCashType ? input.assetType : holding.type,
       quantity: String(toNumber(holding.quantity) + input.quantity),
       costOfCapital: String(toNumber(holding.costOfCapital) + input.costIncrease),
       interest: String(toNumber(holding.interest) + (input.interestDelta ?? 0)),

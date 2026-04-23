@@ -47,7 +47,20 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
   const [note, setNote] = useState("");
 
   const assetTypes = useMemo(
-    () => [...new Set(holdings.map((holding) => holding.type.toLowerCase()))].sort(),
+    () => {
+      const types = [...new Set(holdings.map((holding) => holding.type.toLowerCase()))];
+      return types.sort((a, b) => {
+        if (a === "stock") return -1;
+        if (b === "stock") return 1;
+        if (a === "gold") return -1;
+        if (b === "gold") return 1;
+        if (a === "crypto") return -1;
+        if (b === "crypto") return 1;
+        if (a === "cash") return 1;
+        if (b === "cash") return -1;
+        return a.localeCompare(b);
+      });
+    },
     [holdings]
   );
 
@@ -55,7 +68,8 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
     if (!open) return;
     if (editingOrder) {
       setSide(editingOrder.side);
-      setAssetType(editingOrder.assetType);
+      const existingHolding = holdings.find((holding) => holding.symbol.toUpperCase() === editingOrder.symbol.toUpperCase());
+      setAssetType(existingHolding?.type.toLowerCase() ?? editingOrder.assetType);
       setSymbol(editingOrder.symbol);
       setQuantity(String(editingOrder.quantity));
       setTotalValue(String(editingOrder.totalValue));
@@ -64,13 +78,13 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
       return;
     }
     setSide("buy");
-    setAssetType(assetTypes[0] ?? "stock");
+    setAssetType(assetTypes.includes("stock") ? "stock" : assetTypes[0] ?? "stock");
     setSymbol("");
     setQuantity("");
     setTotalValue("");
     setExecutedAt(formatDateInputValue(new Date()));
     setNote("");
-  }, [assetTypes, editingOrder, open]);
+  }, [assetTypes, editingOrder, holdings, open]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -144,7 +158,14 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
               <label className="text-sm text-muted-foreground mb-1 block">Asset Symbol</label>
               <Input
                 value={symbol}
-                onChange={(event) => setSymbol(event.target.value.toUpperCase())}
+                onChange={(event) => {
+                  const nextSymbol = event.target.value.toUpperCase();
+                  setSymbol(nextSymbol);
+                  const existingHolding = holdings.find((holding) => holding.symbol.toUpperCase() === nextSymbol);
+                  if (existingHolding && existingHolding.symbol.toUpperCase() !== "CASH") {
+                    setAssetType(existingHolding.type.toLowerCase());
+                  }
+                }}
                 placeholder="MWG"
               />
             </div>
