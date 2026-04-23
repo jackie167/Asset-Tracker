@@ -215,8 +215,9 @@ export default function ExcelPage() {
         queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() }),
       ]);
+      const warning = typeof data?.warning === "string" && data.warning ? ` Warning: ${data.warning}` : "";
       setExcelNotice(
-        `${data?.message || "Đồng bộ thành công."} Tạo mới: ${data?.created ?? 0}, cập nhật: ${data?.updated ?? 0}, xóa: ${data?.removed ?? 0}.`
+        `${data?.message || "Sync completed."} Created: ${data?.created ?? 0}, updated: ${data?.updated ?? 0}, removed: ${data?.removed ?? 0}.${warning}`
       );
     } catch (err) {
       setExcelError(err instanceof Error ? err.message : "Unable to sync Investment to assets.");

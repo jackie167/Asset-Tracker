@@ -6,7 +6,7 @@ import { createSign } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import { db, holdingsTable } from "../../../lib/db/src/index.ts";
+import { db, holdingsTable, transactionsTable } from "../../../lib/db/src/index.ts";
 
 const router: IRouter = Router();
 
@@ -1100,7 +1100,11 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       return;
     }
 
-    const existingHoldings = await db.select().from(holdingsTable);
+    const [existingHoldings, existingTransactions] = await Promise.all([
+      db.select().from(holdingsTable),
+      db.select({ id: transactionsTable.id }).from(transactionsTable).limit(1),
+    ]);
+    const hasTransactions = existingTransactions.length > 0;
     const existingBySymbol = new Map(existingHoldings.map((holding) => [holding.symbol.toUpperCase(), holding]));
     const syncedSymbols = new Set(rows.map((row) => row.symbol));
 
@@ -1161,6 +1165,9 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       updated,
       removed,
       skipped,
+      warning: hasTransactions
+        ? "Sync overwrote holdings from the Investment sheet. Existing trade history is still stored, but portfolio quantity/cost now follows the sheet."
+        : null,
       message: `Đã sync ${rows.length} dòng từ "${investmentSheetName}" sang Tài sản.`,
     });
   } catch (error) {
