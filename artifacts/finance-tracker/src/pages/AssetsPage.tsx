@@ -237,13 +237,15 @@ export default function AssetsPage() {
   const handleExportCSV = () => {
     if (!holdings.length) return;
     const formatNumber = (value: number) => value.toLocaleString("vi-VN");
-    const header = ["symbol", "type", "quantity", "current_price", "total_value"];
+    const header = ["symbol", "type", "quantity", "current_price", "total_value", "cost_of_capital", "interest"];
     const rows = holdings.map((holding) => [
       holding.symbol,
       holding.type,
       holding.quantity != null ? formatNumber(holding.quantity) : "",
       holding.currentPrice != null ? formatNumber(holding.currentPrice) : "",
       holding.currentValue != null ? formatNumber(Math.round(holding.currentValue)) : "",
+      holding.costOfCapital != null ? formatNumber(Math.round(holding.costOfCapital)) : "",
+      holding.interest != null ? formatNumber(Math.round(holding.interest)) : "",
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
