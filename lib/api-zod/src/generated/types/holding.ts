@@ -12,6 +12,8 @@ export interface Holding {
   symbol: string;
   quantity: number;
   manualPrice?: number | null;
+  costOfCapital?: number | null;
+  interest?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

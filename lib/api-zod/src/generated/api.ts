@@ -24,6 +24,8 @@ export const ListHoldingsResponseItem = zod.object({
   symbol: zod.string(),
   quantity: zod.number(),
   manualPrice: zod.number().nullish(),
+  costOfCapital: zod.number().nullish(),
+  interest: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -57,6 +59,8 @@ export const ImportHoldingsResponse = zod.object({
       symbol: zod.string(),
       quantity: zod.number(),
       manualPrice: zod.number().nullish(),
+      costOfCapital: zod.number().nullish(),
+      interest: zod.number().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     }),
@@ -82,6 +86,8 @@ export const UpdateHoldingResponse = zod.object({
   symbol: zod.string(),
   quantity: zod.number(),
   manualPrice: zod.number().nullish(),
+  costOfCapital: zod.number().nullish(),
+  interest: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -148,6 +154,8 @@ export const GetPortfolioSummaryResponse = zod.object({
       change: zod.number().nullable(),
       changePercent: zod.number().nullable(),
       manualPrice: zod.number().nullable(),
+      costOfCapital: zod.number().nullable(),
+      interest: zod.number().nullable(),
     }),
   ),
 });

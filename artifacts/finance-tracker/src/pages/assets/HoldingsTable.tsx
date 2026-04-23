@@ -40,10 +40,14 @@ type HoldingsTableProps = {
   holdingsCollapsed: boolean;
   showQtyCol: boolean;
   showPriceCol: boolean;
+  showCostOfCapitalCol?: boolean;
+  showInterestCol?: boolean;
   formatMoney: (value: number | null | undefined, full?: boolean) => string;
   onToggleHoldingsCollapsed: () => void;
   onToggleQtyCol: () => void;
   onTogglePriceCol: () => void;
+  onToggleCostOfCapitalCol?: () => void;
+  onToggleInterestCol?: () => void;
   onFilterTypeChange: (value: string) => void;
   onCycleSortOrder: () => void;
   onAdd?: () => void;
@@ -64,10 +68,14 @@ export default function HoldingsTable({
   holdingsCollapsed,
   showQtyCol,
   showPriceCol,
+  showCostOfCapitalCol = false,
+  showInterestCol = false,
   formatMoney,
   onToggleHoldingsCollapsed,
   onToggleQtyCol,
   onTogglePriceCol,
+  onToggleCostOfCapitalCol,
+  onToggleInterestCol,
   onFilterTypeChange,
   onCycleSortOrder,
   onAdd,
@@ -80,11 +88,14 @@ export default function HoldingsTable({
     "minmax(52px, 0.85fr)",
     showQtyCol ? "minmax(50px, 0.65fr)" : null,
     showPriceCol ? "minmax(64px, 0.9fr)" : null,
+    showCostOfCapitalCol ? "minmax(82px, 0.95fr)" : null,
+    showInterestCol ? "minmax(82px, 0.95fr)" : null,
     "minmax(40px, 0.55fr)",
     "minmax(132px, 1.25fr)",
   ]
     .filter(Boolean)
     .join(" ");
+  const totalColumns = 4 + (showQtyCol ? 1 : 0) + (showPriceCol ? 1 : 0) + (showCostOfCapitalCol ? 1 : 0) + (showInterestCol ? 1 : 0);
 
   return (
     <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -122,7 +133,13 @@ export default function HoldingsTable({
             {[
               { label: "Qty", active: showQtyCol, onToggle: onToggleQtyCol },
               { label: "Price", active: showPriceCol, onToggle: onTogglePriceCol },
-            ].map(({ label, active, onToggle }) => (
+              onToggleCostOfCapitalCol
+                ? { label: "Cost", active: showCostOfCapitalCol, onToggle: onToggleCostOfCapitalCol }
+                : null,
+              onToggleInterestCol
+                ? { label: "Interest", active: showInterestCol, onToggle: onToggleInterestCol }
+                : null,
+            ].filter((item): item is { label: string; active: boolean; onToggle: () => void } => item !== null).map(({ label, active, onToggle }) => (
               <button
                 key={label}
                 onClick={onToggle}
@@ -194,6 +211,8 @@ export default function HoldingsTable({
                 <span className="text-center">Type</span>
                 {showQtyCol && <span className="text-right">Qty</span>}
                 {showPriceCol && <span className="text-right">Price</span>}
+                {showCostOfCapitalCol && <span className="text-right whitespace-nowrap">Cost</span>}
+                {showInterestCol && <span className="text-right whitespace-nowrap">Interest</span>}
                 <span className="text-right">%</span>
                 <span className="text-right whitespace-nowrap">Total Value</span>
               </div>
@@ -250,6 +269,20 @@ export default function HoldingsTable({
                     </span>
                   )}
 
+                  {showCostOfCapitalCol && (
+                    <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                      {formatMoney(holding.costOfCapital)}
+                    </span>
+                  )}
+
+                  {showInterestCol && (
+                    <span className={`text-[11px] text-right tabular-nums ${
+                      (holding.interest ?? 0) >= 0 ? "text-muted-foreground" : "text-red-300"
+                    }`}>
+                      {formatMoney(holding.interest)}
+                    </span>
+                  )}
+
                   <span className="text-[10px] text-right tabular-nums text-muted-foreground">
                     {(filterType === "all" ? totalValue : filteredTotal) > 0 && holding.currentValue != null
                       ? `${(
@@ -272,7 +305,7 @@ export default function HoldingsTable({
                 >
                   <span
                     className="text-[10px] text-muted-foreground uppercase tracking-wider"
-                    style={{ gridColumn: `1 / ${3 + (showQtyCol ? 1 : 0) + (showPriceCol ? 1 : 0) + 1}` }}
+                    style={{ gridColumn: `1 / ${totalColumns}` }}
                   >
                     {filterType === "all"
                       ? "Portfolio Total"

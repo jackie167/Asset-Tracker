@@ -15,6 +15,8 @@ export type HoldingItem = {
   change?: number | null;
   changePercent?: number | null;
   manualPrice?: number | null;
+  costOfCapital?: number | null;
+  interest?: number | null;
 };
 
 export type SortOrder = "none" | "asc" | "desc";

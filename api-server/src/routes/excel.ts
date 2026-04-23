@@ -225,6 +225,8 @@ type InvestmentRow = {
   type: string;
   quantity: number;
   manualPrice: number | null;
+  costOfCapital: number | null;
+  interest: number | null;
 };
 
 function isInvestmentSheetName(name: string): boolean {
@@ -334,6 +336,8 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
   const assetIndex = header.findIndex((value) => value === "tai_san" || value === "symbol" || value === "asset");
   const typeIndex = header.findIndex((value) => value === "loai" || value === "type");
   const currentIndex = header.findIndex((value) => value === "current" || value === "current_value");
+  const interestIndex = header.findIndex((value) => value === "interest");
+  const costOfCapitalIndex = header.findIndex((value) => value === "cost_of_capital");
   const quantityIndex = header.findIndex((value) => value === "ql" || value === "qi" || value === "quantity");
   const currentPriceIndex = header.findIndex((value) => value === "current_price" || value === "price");
 
@@ -350,6 +354,10 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
     const type = normalizeInvestmentType(typeIndex >= 0 ? row[typeIndex] : "");
     const parsedCurrentValue =
       currentIndex >= 0 ? (parseVNNumber(row[currentIndex]) ?? null) : null;
+    const parsedInterest =
+      interestIndex >= 0 ? (parseVNNumber(row[interestIndex]) ?? null) : null;
+    const parsedCostOfCapital =
+      costOfCapitalIndex >= 0 ? (parseVNNumber(row[costOfCapitalIndex]) ?? null) : null;
     const parsedCurrentPrice =
       currentPriceIndex >= 0 ? (parseVNNumber(row[currentPriceIndex]) ?? null) : null;
     let quantity = parseVNNumber(row[quantityIndex]);
@@ -373,6 +381,8 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
       type,
       quantity,
       manualPrice,
+      costOfCapital: parsedCostOfCapital,
+      interest: parsedInterest,
     });
   }
 
@@ -1113,6 +1123,8 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
                 ? String(row.manualPrice)
                 : null
               : null,
+            costOfCapital: row.costOfCapital != null ? String(row.costOfCapital) : null,
+            interest: row.interest != null ? String(row.interest) : null,
             updatedAt: new Date(),
           })
           .where(eq(holdingsTable.id, existing.id));
@@ -1129,6 +1141,8 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
             ? String(row.manualPrice)
             : null
           : null,
+        costOfCapital: row.costOfCapital != null ? String(row.costOfCapital) : null,
+        interest: row.interest != null ? String(row.interest) : null,
       });
       created += 1;
     }

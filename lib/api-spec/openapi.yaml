@@ -237,6 +237,12 @@ components:
         manualPrice:
           type: number
           nullable: true
+        costOfCapital:
+          type: number
+          nullable: true
+        interest:
+          type: number
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -386,6 +392,10 @@ components:
           type: ["number", "null"]
         manualPrice:
           type: ["number", "null"]
+        costOfCapital:
+          type: ["number", "null"]
+        interest:
+          type: ["number", "null"]
       required:
         - id
         - type
@@ -396,6 +406,8 @@ components:
         - change
         - changePercent
         - manualPrice
+        - costOfCapital
+        - interest
 
     PortfolioSummary:
       type: object

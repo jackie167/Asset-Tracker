@@ -19,6 +19,8 @@ export interface Holding {
   symbol: string;
   quantity: number;
   manualPrice?: number | null;
+  costOfCapital?: number | null;
+  interest?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -85,6 +87,10 @@ export interface HoldingWithValue {
   changePercent: number | null;
   /** @nullable */
   manualPrice: number | null;
+  /** @nullable */
+  costOfCapital: number | null;
+  /** @nullable */
+  interest: number | null;
 }
 
 export interface PortfolioSummary {

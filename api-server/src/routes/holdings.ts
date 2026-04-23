@@ -28,6 +28,8 @@ router.get("/holdings", async (_req, res): Promise<void> => {
         ...h,
         quantity: parseFloat(String(h.quantity)),
         manualPrice: h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null,
+        costOfCapital: h.costOfCapital != null ? parseFloat(String(h.costOfCapital)) : null,
+        interest: h.interest != null ? parseFloat(String(h.interest)) : null,
       }))
     )
   );
@@ -57,6 +59,8 @@ router.post("/holdings", async (req, res): Promise<void> => {
     ...holding,
     quantity: parseFloat(String(holding.quantity)),
     manualPrice: holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null,
+    costOfCapital: holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null,
+    interest: holding.interest != null ? parseFloat(String(holding.interest)) : null,
   });
 });
 
@@ -97,6 +101,8 @@ router.put("/holdings/:id", async (req, res): Promise<void> => {
     ...holding,
     quantity: parseFloat(String(holding.quantity)),
     manualPrice: holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null,
+    costOfCapital: holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null,
+    interest: holding.interest != null ? parseFloat(String(holding.interest)) : null,
   }));
 });
 
@@ -181,6 +187,8 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
       change: priceData?.change ?? null,
       changePercent: priceData?.changePercent ?? null,
       manualPrice: manualUnitPrice,
+      costOfCapital: h.costOfCapital != null ? parseFloat(String(h.costOfCapital)) : null,
+      interest: h.interest != null ? parseFloat(String(h.interest)) : null,
     };
   });
 

@@ -19,4 +19,10 @@ export interface HoldingWithValue {
   change: number | null;
   /** @nullable */
   changePercent: number | null;
+  /** @nullable */
+  manualPrice: number | null;
+  /** @nullable */
+  costOfCapital: number | null;
+  /** @nullable */
+  interest: number | null;
 }

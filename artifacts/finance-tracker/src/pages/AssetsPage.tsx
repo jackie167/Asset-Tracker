@@ -22,6 +22,12 @@ export default function AssetsPage() {
   const [hideValues, setHideValues] = useState<boolean>(() => localStorage.getItem("hide_values") === "1");
   const [showQtyCol, setShowQtyCol] = useState<boolean>(() => localStorage.getItem("col_sl") !== "0");
   const [showPriceCol, setShowPriceCol] = useState<boolean>(() => localStorage.getItem("col_gia") !== "0");
+  const [showCostOfCapitalCol, setShowCostOfCapitalCol] = useState<boolean>(
+    () => localStorage.getItem("col_cost_of_capital") !== "0"
+  );
+  const [showInterestCol, setShowInterestCol] = useState<boolean>(
+    () => localStorage.getItem("col_interest") !== "0"
+  );
 
   const holdings: HoldingItem[] = (summary?.holdings ?? holdingsFromApi) as HoldingItem[];
   const totalValue = summary?.totalValue ?? 0;
@@ -144,6 +150,18 @@ export default function AssetsPage() {
     localStorage.setItem("col_gia", value ? "1" : "0");
   };
 
+  const toggleCostOfCapitalCol = () => {
+    const value = !showCostOfCapitalCol;
+    setShowCostOfCapitalCol(value);
+    localStorage.setItem("col_cost_of_capital", value ? "1" : "0");
+  };
+
+  const toggleInterestCol = () => {
+    const value = !showInterestCol;
+    setShowInterestCol(value);
+    localStorage.setItem("col_interest", value ? "1" : "0");
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AssetsHeader
@@ -198,10 +216,14 @@ export default function AssetsPage() {
               holdingsCollapsed={holdingsCollapsed}
               showQtyCol={showQtyCol}
               showPriceCol={showPriceCol}
+              showCostOfCapitalCol={showCostOfCapitalCol}
+              showInterestCol={showInterestCol}
               formatMoney={formatMoney}
               onToggleHoldingsCollapsed={toggleHoldingsCollapsed}
               onToggleQtyCol={toggleQtyCol}
               onTogglePriceCol={togglePriceCol}
+              onToggleCostOfCapitalCol={toggleCostOfCapitalCol}
+              onToggleInterestCol={toggleInterestCol}
               onFilterTypeChange={setFilterType}
               onCycleSortOrder={cycleSortOrder}
               readOnly
