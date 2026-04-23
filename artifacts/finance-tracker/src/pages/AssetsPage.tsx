@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { usePortfolioData, usePortfolioMutations } from "@/hooks/use-portfolio";
+import { usePortfolioData } from "@/hooks/use-portfolio";
 import AllocationChart from "@/pages/assets/AllocationChart";
 import AssetsHeader from "@/pages/assets/AssetsHeader";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
@@ -14,7 +14,6 @@ export default function AssetsPage() {
   const [, navigate] = useLocation();
   const [snapshotRange, setSnapshotRange] = useState<SnapshotRange>("1m");
   const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData(snapshotRange);
-  const { refreshPrices } = usePortfolioMutations();
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState<boolean>(
     () => localStorage.getItem("holdings_collapsed") !== "0"
@@ -123,10 +122,6 @@ export default function AssetsPage() {
   const sortLabel =
     sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
 
-  const handleRefresh = () => {
-    refreshPrices.mutate();
-  };
-
   const handleOpenAssetType = (type: string) => {
     navigate(`/assets/type/${encodeURIComponent(type)}`);
   };
@@ -154,10 +149,7 @@ export default function AssetsPage() {
       <AssetsHeader
         lastUpdated={lastUpdated}
         hasHoldings={holdings.length > 0}
-        isRefreshing={refreshPrices.isPending}
-        onRefresh={handleRefresh}
         onExport={handleExportCSV}
-        readOnly
       />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">

@@ -1,77 +1,73 @@
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type AssetsHeaderProps = {
   lastUpdated?: string | null;
   hasHoldings: boolean;
-  isRefreshing: boolean;
-  onRefresh: () => void;
   onExport: () => void;
   onImport?: () => void;
   onAdd?: () => void;
-  readOnly?: boolean;
 };
 
 export default function AssetsHeader({
   lastUpdated,
   hasHoldings,
-  isRefreshing,
-  onRefresh,
   onExport,
   onImport,
   onAdd,
-  readOnly = false,
 }: AssetsHeaderProps) {
   return (
     <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
-      <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto space-y-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Tài sản</h1>
-            {lastUpdated && (
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Cập nhật: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
-              </p>
+      <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-semibold tracking-[0.18em]">INVESTMENT</h1>
+          {lastUpdated && (
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Cập nhật: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
+            </p>
+          )}
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 text-xs">
+              Menu
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem asChild>
+              <Link href="/">Trang chính</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/assets">Tài sản</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/excel">Excel</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={!hasHoldings} onSelect={onExport}>
+              Export
+            </DropdownMenuItem>
+            {onImport && (
+              <DropdownMenuItem onSelect={onImport}>
+                Import
+              </DropdownMenuItem>
             )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <Link href="/" className="hover:text-foreground transition-colors">
-              Trang chính
-            </Link>
-            <Link href="/assets" className="hover:text-foreground transition-colors">
-              Tài sản
-            </Link>
-            <Link href="/excel" className="hover:text-foreground transition-colors">
-              Excel
-            </Link>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onRefresh} disabled={isRefreshing} className="text-xs h-8">
-            {isRefreshing ? "..." : "↻ Làm mới"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={onExport} disabled={!hasHoldings} className="text-xs h-8">
-            ↓ Export
-          </Button>
-          {!readOnly && onImport && (
-            <Button variant="outline" size="sm" onClick={onImport} className="text-xs h-8">
-              ↑ Import
-            </Button>
-          )}
-          {!readOnly && onAdd && (
-            <Button size="sm" onClick={onAdd} className="text-xs h-8">
-              + Thêm
-            </Button>
-          )}
-          {readOnly && (
-            <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-              Nguồn dữ liệu: Investment sheet
-            </span>
-          )}
-        </div>
+            {onAdd && (
+              <DropdownMenuItem onSelect={onAdd}>
+                Thêm
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
