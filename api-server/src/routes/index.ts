@@ -5,6 +5,7 @@ import pricesRouter from "./prices.js";
 import snapshotsRouter from "./snapshots.js";
 import importRouter from "./import.js";
 import excelRouter from "./excel.js";
+import transactionsRouter from "./transactions.js";
 
 const router: IRouter = Router();
 
@@ -12,6 +13,7 @@ router.use(healthRouter);
 router.use(importRouter);
 router.use(excelRouter);
 router.use(holdingsRouter);
+router.use(transactionsRouter);
 router.use(pricesRouter);
 router.use(snapshotsRouter);
 

@@ -1,19 +1,35 @@
 import { useState, useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { usePortfolioData } from "@/hooks/use-portfolio";
+import { useToast } from "@/hooks/use-toast";
 import AllocationChart from "@/pages/assets/AllocationChart";
 import AssetsHeader from "@/pages/assets/AssetsHeader";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
 import PerformanceChart from "@/pages/assets/PerformanceChart";
 import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
+import TradeDialog from "@/pages/assets/TradeDialog";
+import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTable";
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
+async function fetchTradeOrders(): Promise<TradeOrder[]> {
+  const res = await fetch("/api/transactions");
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
 export default function AssetsPage() {
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [snapshotRange, setSnapshotRange] = useState<SnapshotRange>("1m");
   const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData(snapshotRange);
+  const tradeOrdersQuery = useQuery({
+    queryKey: ["transactions"],
+    queryFn: fetchTradeOrders,
+  });
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState<boolean>(
     () => localStorage.getItem("holdings_collapsed") !== "0"
@@ -28,6 +44,40 @@ export default function AssetsPage() {
   const [showInterestCol, setShowInterestCol] = useState<boolean>(
     () => localStorage.getItem("col_interest") !== "0"
   );
+  const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
+
+  const createTradeMutation = useMutation({
+    mutationFn: async (body: {
+      side: "buy" | "sell";
+      fundingSource: string;
+      assetType: string;
+      symbol: string;
+      quantity: number;
+      totalValue: number;
+      note?: string;
+    }) => {
+      const res = await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Unable to save trade.");
+      return data as TradeOrder;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      setTradeDialogOpen(false);
+      toast({ title: "Trade saved", description: "The order was recorded in the database." });
+    },
+    onError: (err) => {
+      toast({
+        title: "Trade save failed",
+        description: err instanceof Error ? err.message : "Unable to save trade.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const holdings: HoldingItem[] = (summary?.holdings ?? holdingsFromApi) as HoldingItem[];
   const totalValue = summary?.totalValue ?? 0;
@@ -168,6 +218,7 @@ export default function AssetsPage() {
         lastUpdated={lastUpdated}
         hasHoldings={holdings.length > 0}
         onExport={handleExportCSV}
+        onTrade={() => setTradeDialogOpen(true)}
       />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
@@ -228,9 +279,21 @@ export default function AssetsPage() {
               onCycleSortOrder={cycleSortOrder}
               readOnly
             />
+
+            <TradeOrdersTable
+              orders={tradeOrdersQuery.data ?? []}
+              isLoading={tradeOrdersQuery.isLoading}
+            />
           </>
         )}
       </main>
+      <TradeDialog
+        open={tradeDialogOpen}
+        holdings={holdings}
+        isSaving={createTradeMutation.isPending}
+        onClose={() => setTradeDialogOpen(false)}
+        onSubmit={(body) => createTradeMutation.mutate(body)}
+      />
     </div>
   );
 }

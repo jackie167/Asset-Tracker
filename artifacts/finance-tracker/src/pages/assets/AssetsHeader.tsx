@@ -14,6 +14,7 @@ type AssetsHeaderProps = {
   lastUpdated?: string | null;
   hasHoldings: boolean;
   onExport: () => void;
+  onTrade?: () => void;
   onImport?: () => void;
   onAdd?: () => void;
 };
@@ -23,6 +24,7 @@ export default function AssetsHeader({
   lastUpdated,
   hasHoldings,
   onExport,
+  onTrade,
   onImport,
   onAdd,
 }: AssetsHeaderProps) {
@@ -58,6 +60,11 @@ export default function AssetsHeader({
               <Link href="/excel">Excel</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            {onTrade && (
+              <DropdownMenuItem onSelect={onTrade}>
+                Trade
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem disabled={!hasHoldings} onSelect={onExport}>
               Export
             </DropdownMenuItem>
