@@ -316,4 +316,56 @@ router.get("/portfolio/returns/stock/:symbol", async (req, res): Promise<void> =
   });
 });
 
+router.get("/portfolio/returns", async (_req, res): Promise<void> => {
+  const [holdings, prices] = await Promise.all([
+    db.select().from(holdingsTable).orderBy(holdingsTable.createdAt),
+    getLatestPrices(),
+  ]);
+  const priceMap = latestPriceMap(prices);
+  const goldBenchmark = prices.find((price) => price.type === "gold");
+  const goldPrice = goldBenchmark ? parseFloat(String(goldBenchmark.price)) : null;
+  const today = new Date();
+
+  const rows = holdings.map((holding) => {
+    const symbol = holding.symbol.toUpperCase();
+    const quantity = parseFloat(String(holding.quantity));
+    const costOfCapital = holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null;
+    const manualPrice = holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null;
+    const currentPrice = priceMap.get(symbol) ?? (holding.type === "gold" ? goldPrice : null) ?? manualPrice;
+    const currentValue = currentPrice != null ? quantity * currentPrice : null;
+    const unrealizedPnL =
+      costOfCapital != null && currentValue != null ? currentValue - costOfCapital : null;
+    const unrealizedPnLPercent =
+      costOfCapital != null && costOfCapital > 0 && unrealizedPnL != null
+        ? unrealizedPnL / costOfCapital
+        : null;
+
+    const xirrAnnual =
+      costOfCapital != null && costOfCapital > 0 && currentValue != null
+        ? calculateXirr([
+            { date: STOCK_RETURN_INITIAL_AT, amount: -costOfCapital },
+            { date: today, amount: currentValue },
+          ])
+        : null;
+    const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
+
+    return {
+      symbol,
+      type: holding.type,
+      initialAt: STOCK_RETURN_INITIAL_AT,
+      asOf: today,
+      quantity,
+      costOfCapital,
+      currentPrice,
+      currentValue,
+      unrealizedPnL,
+      unrealizedPnLPercent,
+      xirrAnnual,
+      xirrMonthly,
+    };
+  });
+
+  res.json(rows);
+});
+
 export default router;
