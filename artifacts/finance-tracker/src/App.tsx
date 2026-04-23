@@ -7,6 +7,7 @@ import AssetTypePage from "@/pages/AssetTypePage";
 import ExcelPage from "@/pages/ExcelPage";
 import Home from "@/pages/Home";
 import NotFound from "@/pages/not-found";
+import WealthAllocationPage from "@/pages/WealthAllocationPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/assets" component={AssetsPage} />
       <Route path="/assets/type/:type" component={AssetTypePage} />
+      <Route path="/wealth-allocation" component={WealthAllocationPage} />
       <Route path="/excel" component={ExcelPage} />
       <Route component={NotFound} />
     </Switch>

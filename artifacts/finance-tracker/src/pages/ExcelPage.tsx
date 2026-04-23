@@ -209,7 +209,7 @@ export default function ExcelPage() {
         }),
       });
       const data = await readJsonSafe(res);
-      if (!res.ok) throw new Error(data?.error || "Không thể sync Investment sang Tài sản.");
+      if (!res.ok) throw new Error(data?.error || "Unable to sync Investment to assets.");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() }),
@@ -219,7 +219,7 @@ export default function ExcelPage() {
         `${data?.message || "Đồng bộ thành công."} Tạo mới: ${data?.created ?? 0}, cập nhật: ${data?.updated ?? 0}, xóa: ${data?.removed ?? 0}.`
       );
     } catch (err) {
-      setExcelError(err instanceof Error ? err.message : "Không thể sync Investment sang Tài sản.");
+      setExcelError(err instanceof Error ? err.message : "Unable to sync Investment to assets.");
     } finally {
       setExcelSyncingInvestment(false);
     }
@@ -245,10 +245,13 @@ export default function ExcelPage() {
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <Link href="/" className="hover:text-foreground transition-colors">
-                Trang chính
+                Home
               </Link>
               <Link href="/assets" className="hover:text-foreground transition-colors">
-                Tài sản
+                Investment
+              </Link>
+              <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">
+                Wealth Allocation
               </Link>
               <Link href="/excel" className="hover:text-foreground transition-colors">
                 Excel
@@ -332,7 +335,7 @@ export default function ExcelPage() {
                       : "border-primary/60 text-primary bg-primary/5 hover:border-primary"
                   }`}
                 >
-                  {excelSyncingInvestment ? "Đang sync..." : "Sync Investment -> Tài sản"}
+                  {excelSyncingInvestment ? "Syncing..." : "Sync Investment -> Assets"}
                 </button>
               )}
             </div>

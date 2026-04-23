@@ -166,6 +166,9 @@ export default function AssetTypePage() {
               <Link href="/assets" className="hover:text-foreground transition-colors">
                 Investment
               </Link>
+              <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">
+                Wealth Allocation
+              </Link>
               <Link href="/excel" className="hover:text-foreground transition-colors">
                 Excel
               </Link>

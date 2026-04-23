@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type AssetsHeaderProps = {
+  title?: string;
   lastUpdated?: string | null;
   hasHoldings: boolean;
   onExport: () => void;
@@ -18,6 +19,7 @@ type AssetsHeaderProps = {
 };
 
 export default function AssetsHeader({
+  title = "INVESTMENT",
   lastUpdated,
   hasHoldings,
   onExport,
@@ -28,7 +30,7 @@ export default function AssetsHeader({
     <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
       <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-semibold tracking-[0.18em]">INVESTMENT</h1>
+          <h1 className="text-lg sm:text-xl font-semibold tracking-[0.18em]">{title}</h1>
           {lastUpdated && (
             <p className="text-xs text-muted-foreground leading-relaxed">
               Updated: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
@@ -48,6 +50,9 @@ export default function AssetsHeader({
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/assets">Investment</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/wealth-allocation">Wealth Allocation</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/excel">Excel</Link>
