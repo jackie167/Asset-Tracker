@@ -48,7 +48,7 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-muted-foreground uppercase tracking-widest">Phân bổ tài sản</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-widest">Asset Allocation</p>
         <div className="flex gap-1">
           <button
             onClick={() => setSortDir("desc")}
@@ -58,7 +58,7 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
                 : "border-border text-muted-foreground hover:border-primary/50"
             }`}
           >
-            Cao → Thấp
+            High → Low
           </button>
           <button
             onClick={() => setSortDir("asc")}
@@ -68,7 +68,7 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
                 : "border-border text-muted-foreground hover:border-primary/50"
             }`}
           >
-            Thấp → Cao
+            Low → High
           </button>
         </div>
       </div>
@@ -124,9 +124,9 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
         <table style={{ borderCollapse: "collapse", display: "inline-table" }}>
           <thead>
             <tr className="text-[9px] text-muted-foreground uppercase tracking-wider">
-              <th className="py-1.5 pr-6 text-left font-normal border-b border-border">Loại tài sản</th>
-              <th className="py-1.5 px-4 text-center font-normal border-b border-border">Tỷ lệ</th>
-              <th className="py-1.5 pl-6 text-right font-normal border-b border-border">Giá trị</th>
+              <th className="py-1.5 pr-6 text-left font-normal border-b border-border">Asset Type</th>
+              <th className="py-1.5 px-4 text-center font-normal border-b border-border">Share</th>
+              <th className="py-1.5 pl-6 text-right font-normal border-b border-border">Value</th>
             </tr>
           </thead>
           <tbody>

@@ -31,7 +31,7 @@ export default function AssetsHeader({
           <h1 className="text-lg sm:text-xl font-semibold tracking-[0.18em]">INVESTMENT</h1>
           {lastUpdated && (
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Cập nhật: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
+              Updated: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
             </p>
           )}
         </div>
@@ -44,10 +44,10 @@ export default function AssetsHeader({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem asChild>
-              <Link href="/">Trang chính</Link>
+              <Link href="/">Home</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/assets">Tài sản</Link>
+              <Link href="/assets">Investment</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/excel">Excel</Link>
@@ -63,7 +63,7 @@ export default function AssetsHeader({
             )}
             {onAdd && (
               <DropdownMenuItem onSelect={onAdd}>
-                Thêm
+                Add
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

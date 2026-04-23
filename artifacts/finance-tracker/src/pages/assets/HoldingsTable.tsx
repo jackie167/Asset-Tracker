@@ -100,7 +100,7 @@ export default function HoldingsTable({
             >
               ▾
             </span>
-            Danh mục
+            Portfolio
             {holdings.length > 0 && (
               <span className="ml-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-normal">
                 {holdings.length}
@@ -111,7 +111,7 @@ export default function HoldingsTable({
             type="button"
             onClick={onToggleHoldingsCollapsed}
             className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors"
-            aria-label={holdingsCollapsed ? "Hiện danh mục" : "Ẩn danh mục"}
+            aria-label={holdingsCollapsed ? "Show portfolio" : "Hide portfolio"}
           >
             {holdingsCollapsed ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
@@ -120,8 +120,8 @@ export default function HoldingsTable({
         {!holdingsCollapsed && holdings.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {[
-              { label: "SL", active: showQtyCol, onToggle: onToggleQtyCol },
-              { label: "Giá", active: showPriceCol, onToggle: onTogglePriceCol },
+              { label: "Qty", active: showQtyCol, onToggle: onToggleQtyCol },
+              { label: "Price", active: showPriceCol, onToggle: onTogglePriceCol },
             ].map(({ label, active, onToggle }) => (
               <button
                 key={label}
@@ -131,7 +131,7 @@ export default function HoldingsTable({
                     ? "border-border text-muted-foreground hover:border-primary/40"
                     : "border-dashed border-border/50 text-muted-foreground/40 line-through"
                 }`}
-                title={active ? `Ẩn cột ${label}` : `Hiện cột ${label}`}
+                title={active ? `Hide ${label} column` : `Show ${label} column`}
               >
                 {label}
               </button>
@@ -143,7 +143,7 @@ export default function HoldingsTable({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Tất cả</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   {availableTypes.map((type) => (
                     <SelectItem key={type} value={type}>
                       {formatTypeLabel(type)}
@@ -173,14 +173,14 @@ export default function HoldingsTable({
         <>
           {holdings.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-muted-foreground text-sm">Chưa có tài sản nào</p>
+              <p className="text-muted-foreground text-sm">No assets yet</p>
               {readOnly ? (
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Danh mục này chỉ đồng bộ từ sheet Investment.
+                  This portfolio is synced from the Investment sheet.
                 </p>
               ) : (
                 <Button variant="outline" size="sm" className="mt-3" onClick={onAdd}>
-                  Thêm tài sản đầu tiên
+                  Add first asset
                 </Button>
               )}
             </div>
@@ -190,17 +190,17 @@ export default function HoldingsTable({
                 className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
                 style={{ gridTemplateColumns: colTemplate }}
               >
-                <span>Tài sản</span>
-                <span className="text-center">Loại</span>
-                {showQtyCol && <span className="text-right">SL</span>}
-                {showPriceCol && <span className="text-right">Giá</span>}
+                <span>Asset</span>
+                <span className="text-center">Type</span>
+                {showQtyCol && <span className="text-right">Qty</span>}
+                {showPriceCol && <span className="text-right">Price</span>}
                 <span className="text-right">%</span>
-                <span className="text-right whitespace-nowrap">Tổng giá trị</span>
+                <span className="text-right whitespace-nowrap">Total Value</span>
               </div>
 
               {filteredHoldings.length === 0 && filterType !== "all" && (
                 <p className="text-sm text-muted-foreground text-center py-6">
-                  Không có tài sản nào thuộc loại này.
+                  No assets in this type.
                 </p>
               )}
 
@@ -215,21 +215,21 @@ export default function HoldingsTable({
                     <div className="flex items-center gap-1 mt-0.5">
                       <ChangeChip change={holding.change} changePercent={holding.changePercent} />
                       {readOnly ? (
-                        <span className="text-[10px] text-muted-foreground">Đồng bộ từ Investment</span>
+                        <span className="text-[10px] text-muted-foreground">Synced from Investment</span>
                       ) : (
                         <>
                           <button
                             onClick={() => onEdit?.(holding)}
                             className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                           >
-                            Sửa
+                            Edit
                           </button>
                           <span className="text-[10px] text-muted-foreground">·</span>
                           <button
                             onClick={() => onDelete?.(holding.id)}
                             className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
                           >
-                            Xóa
+                            Delete
                           </button>
                         </>
                       )}
@@ -277,16 +277,8 @@ export default function HoldingsTable({
                     style={{ gridColumn: `1 / ${3 + (showQtyCol ? 1 : 0) + (showPriceCol ? 1 : 0) + 1}` }}
                   >
                     {filterType === "all"
-                      ? "Tổng danh mục"
-                      : `Tổng ${
-                          filterType === "stock"
-                            ? "cổ phiếu"
-                            : filterType === "gold"
-                              ? "vàng"
-                              : filterType === "crypto"
-                                ? "crypto"
-                                : filterType
-                        }`}
+                      ? "Portfolio Total"
+                      : `${formatTypeLabel(filterType)} Total`}
                   </span>
                   <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
                     {formatMoney(filteredTotal, true)}

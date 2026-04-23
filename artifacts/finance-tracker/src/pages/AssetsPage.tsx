@@ -120,7 +120,7 @@ export default function AssetsPage() {
   };
 
   const sortLabel =
-    sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
+    sortOrder === "desc" ? "↓ High → Low" : sortOrder === "asc" ? "↑ Low → High" : "Sort";
 
   const handleOpenAssetType = (type: string) => {
     navigate(`/assets/type/${encodeURIComponent(type)}`);
@@ -155,11 +155,11 @@ export default function AssetsPage() {
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
         {isError ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-            {error instanceof Error ? error.message : "Không thể tải dữ liệu."}
+            {error instanceof Error ? error.message : "Unable to load data."}
           </div>
         ) : isLoading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-            Đang tải...
+            Loading...
           </div>
         ) : (
           <>
@@ -179,7 +179,7 @@ export default function AssetsPage() {
 
             {holdings.length > 0 && (
               <PerformanceChart
-                title="Biến động"
+                title="Performance"
                 chartData={chartData}
                 hideValues={hideValues}
                 selectedRange={snapshotRange}

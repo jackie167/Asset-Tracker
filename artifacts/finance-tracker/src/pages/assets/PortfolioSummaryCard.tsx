@@ -9,7 +9,7 @@ type PortfolioSummaryCardProps = {
 };
 
 export default function PortfolioSummaryCard({
-  title = "Tổng tài sản",
+  title = "Portfolio Value",
   totalValueLabel,
   hideValues,
   onToggleHideValues,
@@ -22,7 +22,7 @@ export default function PortfolioSummaryCard({
           type="button"
           onClick={onToggleHideValues}
           className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors"
-          aria-label={hideValues ? "Hiện giá trị" : "Ẩn giá trị"}
+          aria-label={hideValues ? "Show values" : "Hide values"}
         >
           {hideValues ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>

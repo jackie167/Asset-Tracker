@@ -17,7 +17,7 @@ import { formatVND, resolveMode } from "@/pages/assets/utils";
 const holdingSchema = z.object({
   type: z.string().min(1, "Bắt buộc"),
   symbol: z.string().min(1, "Bắt buộc"),
-  quantity: z.coerce.number().positive("Số lượng phải > 0"),
+  quantity: z.coerce.number().positive("Quantity must be greater than 0"),
   manualPrice: z.coerce.number().min(0).optional().nullable(),
 });
 
@@ -168,8 +168,8 @@ export default function AddEditDialog({
   });
 
   const goldSymbols = [
-    { value: "SJC_1L", label: "Vàng SJC 1 lượng" },
-    { value: "SJC_1C", label: "Vàng SJC 1 chỉ" },
+    { value: "SJC_1L", label: "SJC Gold 1 tael" },
+    { value: "SJC_1C", label: "SJC Gold 1 mace" },
   ];
 
   const selectValue =
@@ -184,15 +184,15 @@ export default function AddEditDialog({
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Sửa tài sản" : "Thêm tài sản"}</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Asset" : "Add Asset"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div>
-            <label className="text-sm text-muted-foreground mb-1.5 block">Loại tài sản</label>
+            <label className="text-sm text-muted-foreground mb-1.5 block">Asset Type</label>
             <div className="flex flex-wrap gap-1.5">
               {[
-                { value: "stock", label: "📈 Cổ phiếu" },
-                { value: "gold", label: "🥇 Vàng" },
+                { value: "stock", label: "📈 Stock" },
+                { value: "gold", label: "🥇 Gold" },
                 { value: "crypto", label: "🪙 Crypto" },
               ].map(({ value, label }) => (
                 <button
@@ -232,7 +232,7 @@ export default function AddEditDialog({
                       className={`px-1.5 py-1.5 rounded-r-md text-sm border-y border-r transition-colors text-destructive hover:bg-destructive/10 ${
                         selectValue === type ? "border-primary" : "border-border"
                       }`}
-                      title={`Xóa loại "${type}"`}
+                      title={`Remove type "${type}"`}
                     >
                       ×
                     </button>
@@ -246,7 +246,7 @@ export default function AddEditDialog({
                   onClick={() => setShowNewInput(true)}
                   className="px-3 py-1.5 rounded-md text-sm border border-dashed border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
                 >
-                  + Thêm
+                  + Add
                 </button>
               )}
             </div>
@@ -257,7 +257,7 @@ export default function AddEditDialog({
                   ref={newTypeInputRef}
                   value={newTypeName}
                   onChange={(event) => setNewTypeName(event.target.value)}
-                  placeholder="VD: Bất động sản, Trái phiếu..."
+                  placeholder="Example: Real Estate, Bond..."
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
@@ -267,7 +267,7 @@ export default function AddEditDialog({
                   className="flex-1"
                 />
                 <Button type="button" size="sm" onClick={handleConfirmNewType} disabled={!newTypeName.trim()}>
-                  Lưu
+                  Save
                 </Button>
                 <Button
                   type="button"
@@ -286,7 +286,7 @@ export default function AddEditDialog({
 
           {typeMode === "stock" && (
             <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Mã cổ phiếu</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Stock Symbol</label>
               <Input
                 {...form.register("symbol")}
                 placeholder="VD: VNM, HPG, VIC"
@@ -302,7 +302,7 @@ export default function AddEditDialog({
 
           {typeMode === "gold" && (
             <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Loại vàng</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Gold Type</label>
               <div className="flex flex-col gap-2">
                 {goldSymbols.map((goldSymbol) => (
                   <button
@@ -324,10 +324,10 @@ export default function AddEditDialog({
 
           {typeMode === "other" && (
             <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Tên / Mã tài sản</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Asset Name / Symbol</label>
               <Input
                 {...form.register("symbol")}
-                placeholder="VD: BTC, ETH, Căn hộ Q7..."
+                placeholder="Example: BTC, ETH, Apartment Q7..."
                 disabled={isEditing}
                 className="uppercase"
                 onChange={(event) => form.setValue("symbol", event.target.value.toUpperCase())}
@@ -340,13 +340,13 @@ export default function AddEditDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Số lượng</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Quantity</label>
               <Input
                 {...form.register("quantity", { valueAsNumber: true })}
                 type="number"
                 step="any"
                 min="0"
-                placeholder="Nhập số lượng"
+                placeholder="Enter quantity"
                 onFocus={(event) => {
                   if (event.target.value === "0") event.target.value = "";
                 }}
@@ -358,7 +358,7 @@ export default function AddEditDialog({
 
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">
-                Giá trị tổng (₫)
+                Total Value (₫)
                 {watchQty > 0 && totalValueStr && (
                   <span className="ml-1 text-xs text-primary/70">
                     = {formatVND(parseFloat(totalValueStr.replace(/\./g, "").replace(",", ".")) / watchQty)}/đv
@@ -370,17 +370,17 @@ export default function AddEditDialog({
                 onChange={(event) => setTotalValueStr(event.target.value)}
                 type="number"
                 step="1000"
-                placeholder="Tuỳ chọn"
+                placeholder="Optional"
               />
             </div>
           </div>
 
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
-              Hủy
+              Cancel
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Đang lưu..." : isEditing ? "Cập nhật" : "Thêm"}
+              {isLoading ? "Saving..." : isEditing ? "Update" : "Add"}
             </Button>
           </DialogFooter>
         </form>

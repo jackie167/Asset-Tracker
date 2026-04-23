@@ -75,7 +75,7 @@ export default function AssetTypePage() {
   }, [normalizedType, snapshots]);
 
   const supportsHistoricalChart = typeHoldings.length > 0;
-  const typeLabel = normalizedType ? formatTypeLabel(normalizedType) : "Loại tài sản";
+  const typeLabel = normalizedType ? formatTypeLabel(normalizedType) : "Asset Type";
   const lastUpdated = summary?.lastUpdated;
 
   const formatMoney = (value: number | null | undefined, full = false) =>
@@ -141,7 +141,7 @@ export default function AssetTypePage() {
   };
 
   const sortLabel =
-    sortOrder === "desc" ? "↓ Cao → Thấp" : sortOrder === "asc" ? "↑ Thấp → Cao" : "Sắp xếp";
+    sortOrder === "desc" ? "↓ High → Low" : sortOrder === "asc" ? "↑ Low → High" : "Sort";
 
   const isMissingType = !isLoading && !isError && normalizedType !== "" && typeHoldings.length === 0;
 
@@ -154,17 +154,17 @@ export default function AssetTypePage() {
               <h1 className="text-lg sm:text-xl font-semibold tracking-tight">{typeLabel}</h1>
               {lastUpdated && (
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Cập nhật: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
+                  Updated: {format(new Date(lastUpdated), "HH:mm dd/MM/yyyy")}
                 </p>
               )}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <Link href="/" className="hover:text-foreground transition-colors">
-                Trang chính
+                Home
               </Link>
               <Link href="/assets" className="hover:text-foreground transition-colors">
-                Tài sản
+                Investment
               </Link>
               <Link href="/excel" className="hover:text-foreground transition-colors">
                 Excel
@@ -174,16 +174,16 @@ export default function AssetTypePage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/assets")} className="text-xs h-8">
-              ← Quay lại
+              ← Back
             </Button>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshPrices.isPending} className="text-xs h-8">
-              {refreshPrices.isPending ? "..." : "↻ Làm mới"}
+              {refreshPrices.isPending ? "..." : "↻ Refresh"}
             </Button>
             <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={!typeHoldings.length} className="text-xs h-8">
               ↓ Export
             </Button>
             <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-              Nguồn dữ liệu: Investment sheet
+              Source: Investment sheet
             </span>
           </div>
         </div>
@@ -192,15 +192,15 @@ export default function AssetTypePage() {
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
         {isError ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-            {error instanceof Error ? error.message : "Không thể tải dữ liệu."}
+            {error instanceof Error ? error.message : "Unable to load data."}
           </div>
         ) : isLoading ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Đang tải...</div>
+          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
         ) : isMissingType ? (
           <div className="rounded-lg border bg-card p-6 text-center space-y-3">
-            <p className="text-sm text-muted-foreground">Không tìm thấy loại tài sản này trong danh mục.</p>
+            <p className="text-sm text-muted-foreground">This asset type was not found in the portfolio.</p>
             <Button variant="outline" size="sm" onClick={() => navigate("/assets")}>
-              Quay lại trang tài sản
+              Back to Investment
             </Button>
           </div>
         ) : (
@@ -213,7 +213,7 @@ export default function AssetTypePage() {
             />
 
             <PerformanceChart
-              title="Biến động"
+              title="Performance"
               seriesLabel=""
               chartData={supportsHistoricalChart ? chartData : []}
               hideValues={hideValues}
@@ -221,8 +221,8 @@ export default function AssetTypePage() {
               onRangeChange={setSnapshotRange}
               emptyMessage={
                 supportsHistoricalChart
-                  ? 'Chưa có dữ liệu lịch sử. Nhấn "Làm mới" để cập nhật giá.'
-                  : "Hiện hệ thống chưa lưu lịch sử riêng theo loại tài sản này."
+                  ? "No historical data yet."
+                  : "No separate history is available for this asset type yet."
               }
             />
 

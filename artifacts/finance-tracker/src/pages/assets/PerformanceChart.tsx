@@ -12,10 +12,10 @@ import type { ChartPoint, SnapshotRange } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
 const RANGE_OPTIONS: Array<{ value: SnapshotRange; label: string }> = [
-  { value: "1m", label: "1 tháng" },
-  { value: "3m", label: "3 tháng" },
-  { value: "6m", label: "6 tháng" },
-  { value: "1y", label: "1 năm" },
+  { value: "1m", label: "1 month" },
+  { value: "3m", label: "3 months" },
+  { value: "6m", label: "6 months" },
+  { value: "1y", label: "1 year" },
 ];
 
 type PerformanceChartProps = {
@@ -29,9 +29,9 @@ type PerformanceChartProps = {
 };
 
 export default function PerformanceChart({
-  title = "Biến động",
-  seriesLabel = "Tổng",
-  emptyMessage = 'Chưa có dữ liệu lịch sử. Nhấn "Làm mới" để cập nhật giá.',
+  title = "Performance",
+  seriesLabel = "Total",
+  emptyMessage = "No historical data yet.",
   chartData,
   hideValues,
   selectedRange,
