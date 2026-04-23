@@ -249,7 +249,8 @@ function isInvestmentSheetName(name: string): boolean {
 }
 
 function isTransactionsSheetName(name: string): boolean {
-  return normalizeHeaderName(name) === "transactions";
+  const normalized = normalizeHeaderName(name);
+  return normalized === "transactions" || normalized.startsWith("transactions_");
 }
 
 function normalizeSheetLookupName(name: string): string {
