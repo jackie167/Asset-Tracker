@@ -1,5 +1,10 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  getGetPortfolioSummaryQueryKey,
+  getListHoldingsQueryKey,
+  getListSnapshotsQueryKey,
+} from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { usePortfolioData } from "@/hooks/use-portfolio";
@@ -45,6 +50,27 @@ export default function AssetsPage() {
     () => localStorage.getItem("col_interest") !== "0"
   );
   const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
+  const [editingTradeOrder, setEditingTradeOrder] = useState<TradeOrder | null>(null);
+
+  const invalidatePortfolioAfterTrade = () => {
+    queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
+  };
+
+  const tradeBodyToRequest = (body: {
+    side: "buy" | "sell";
+    fundingSource: string;
+    assetType: string;
+    symbol: string;
+    quantity: number;
+    totalValue: number;
+    note?: string;
+  }) => ({
+    ...body,
+    fundingSource: "CASH",
+  });
 
   const createTradeMutation = useMutation({
     mutationFn: async (body: {
@@ -59,14 +85,14 @@ export default function AssetsPage() {
       const res = await fetch("/api/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(tradeBodyToRequest(body)),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Unable to save trade.");
       return data as TradeOrder;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      invalidatePortfolioAfterTrade();
       setTradeDialogOpen(false);
       toast({ title: "Trade saved", description: "The order was recorded in the database." });
     },
@@ -74,6 +100,62 @@ export default function AssetsPage() {
       toast({
         title: "Trade save failed",
         description: err instanceof Error ? err.message : "Unable to save trade.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateTradeMutation = useMutation({
+    mutationFn: async (body: {
+      side: "buy" | "sell";
+      fundingSource: string;
+      assetType: string;
+      symbol: string;
+      quantity: number;
+      totalValue: number;
+      note?: string;
+    }) => {
+      if (!editingTradeOrder) throw new Error("No trade selected.");
+      const res = await fetch(`/api/transactions/${editingTradeOrder.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tradeBodyToRequest(body)),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Unable to update trade.");
+      return data as TradeOrder;
+    },
+    onSuccess: () => {
+      invalidatePortfolioAfterTrade();
+      setTradeDialogOpen(false);
+      setEditingTradeOrder(null);
+      toast({ title: "Trade updated", description: "The order content was updated." });
+    },
+    onError: (err) => {
+      toast({
+        title: "Trade update failed",
+        description: err instanceof Error ? err.message : "Unable to update trade.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteTradeMutation = useMutation({
+    mutationFn: async (order: TradeOrder) => {
+      const res = await fetch(`/api/transactions/${order.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Unable to delete trade.");
+      }
+    },
+    onSuccess: () => {
+      invalidatePortfolioAfterTrade();
+      toast({ title: "Trade deleted", description: "The order was removed." });
+    },
+    onError: (err) => {
+      toast({
+        title: "Trade delete failed",
+        description: err instanceof Error ? err.message : "Unable to delete trade.",
         variant: "destructive",
       });
     },
@@ -218,7 +300,10 @@ export default function AssetsPage() {
         lastUpdated={lastUpdated}
         hasHoldings={holdings.length > 0}
         onExport={handleExportCSV}
-        onTrade={() => setTradeDialogOpen(true)}
+        onTrade={() => {
+          setEditingTradeOrder(null);
+          setTradeDialogOpen(true);
+        }}
       />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
@@ -283,6 +368,15 @@ export default function AssetsPage() {
             <TradeOrdersTable
               orders={tradeOrdersQuery.data ?? []}
               isLoading={tradeOrdersQuery.isLoading}
+              onEdit={(order) => {
+                setEditingTradeOrder(order);
+                setTradeDialogOpen(true);
+              }}
+              onDelete={(order) => {
+                if (window.confirm(`Delete ${order.side.toUpperCase()} ${order.symbol}?`)) {
+                  deleteTradeMutation.mutate(order);
+                }
+              }}
             />
           </>
         )}
@@ -290,9 +384,19 @@ export default function AssetsPage() {
       <TradeDialog
         open={tradeDialogOpen}
         holdings={holdings}
-        isSaving={createTradeMutation.isPending}
-        onClose={() => setTradeDialogOpen(false)}
-        onSubmit={(body) => createTradeMutation.mutate(body)}
+        editingOrder={editingTradeOrder}
+        isSaving={createTradeMutation.isPending || updateTradeMutation.isPending}
+        onClose={() => {
+          setTradeDialogOpen(false);
+          setEditingTradeOrder(null);
+        }}
+        onSubmit={(body) => {
+          if (editingTradeOrder) {
+            updateTradeMutation.mutate(body);
+          } else {
+            createTradeMutation.mutate(body);
+          }
+        }}
       />
     </div>
   );

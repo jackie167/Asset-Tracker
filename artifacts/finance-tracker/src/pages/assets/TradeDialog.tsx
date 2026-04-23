@@ -11,10 +11,12 @@ import {
 } from "@/components/ui/select";
 import type { HoldingItem } from "@/pages/assets/types";
 import { formatTypeLabel } from "@/pages/assets/utils";
+import type { TradeOrder } from "@/pages/assets/TradeOrdersTable";
 
 type TradeDialogProps = {
   open: boolean;
   holdings: HoldingItem[];
+  editingOrder?: TradeOrder | null;
   isSaving: boolean;
   onClose: () => void;
   onSubmit: (body: {
@@ -28,7 +30,7 @@ type TradeDialogProps = {
   }) => void;
 };
 
-export default function TradeDialog({ open, holdings, isSaving, onClose, onSubmit }: TradeDialogProps) {
+export default function TradeDialog({ open, holdings, editingOrder, isSaving, onClose, onSubmit }: TradeDialogProps) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [assetType, setAssetType] = useState("stock");
   const [symbol, setSymbol] = useState("");
@@ -43,13 +45,22 @@ export default function TradeDialog({ open, holdings, isSaving, onClose, onSubmi
 
   useEffect(() => {
     if (!open) return;
+    if (editingOrder) {
+      setSide(editingOrder.side);
+      setAssetType(editingOrder.assetType);
+      setSymbol(editingOrder.symbol);
+      setQuantity(String(editingOrder.quantity));
+      setTotalValue(String(editingOrder.totalValue));
+      setNote(editingOrder.note ?? "");
+      return;
+    }
     setSide("buy");
     setAssetType(assetTypes[0] ?? "stock");
     setSymbol("");
     setQuantity("");
     setTotalValue("");
     setNote("");
-  }, [assetTypes, open]);
+  }, [assetTypes, editingOrder, open]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -74,7 +85,7 @@ export default function TradeDialog({ open, holdings, isSaving, onClose, onSubmi
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record Trade</DialogTitle>
+          <DialogTitle>{editingOrder ? "Edit Trade" : "Record Trade"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
@@ -163,7 +174,7 @@ export default function TradeDialog({ open, holdings, isSaving, onClose, onSubmi
               Cancel
             </Button>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Trade"}
+              {isSaving ? "Saving..." : editingOrder ? "Update Trade" : "Save Trade"}
             </Button>
           </DialogFooter>
         </form>

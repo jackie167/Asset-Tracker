@@ -10,6 +10,7 @@ export type TradeOrder = {
   quantity: number;
   totalValue: number;
   unitPrice: number | null;
+  note?: string | null;
   status: string;
   executedAt: string;
 };
@@ -18,10 +19,13 @@ type TradeOrdersTableProps = {
   orders: TradeOrder[];
   isLoading: boolean;
   limit?: number;
+  onEdit?: (order: TradeOrder) => void;
+  onDelete?: (order: TradeOrder) => void;
 };
 
-export default function TradeOrdersTable({ orders, isLoading, limit = 10 }: TradeOrdersTableProps) {
+export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit, onDelete }: TradeOrdersTableProps) {
   const visibleOrders = limit > 0 ? orders.slice(0, limit) : orders;
+  const hasActions = Boolean(onEdit || onDelete);
 
   return (
     <Card className="p-4">
@@ -47,6 +51,7 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10 }: Trad
                 <th className="py-1.5 px-3 text-right font-normal">Total</th>
                 <th className="py-1.5 px-3 text-left font-normal">Source</th>
                 <th className="py-1.5 pl-3 text-right font-normal">Date</th>
+                {hasActions && <th className="py-1.5 pl-3 text-right font-normal">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -69,6 +74,29 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10 }: Trad
                   <td className="py-2 pl-3 text-right tabular-nums text-muted-foreground">
                     {new Date(order.executedAt).toLocaleDateString("vi-VN")}
                   </td>
+                  {hasActions && (
+                    <td className="py-2 pl-3 text-right whitespace-nowrap">
+                      {onEdit && (
+                        <button
+                          type="button"
+                          onClick={() => onEdit(order)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {onEdit && onDelete && <span className="mx-1.5 text-muted-foreground">·</span>}
+                      {onDelete && (
+                        <button
+                          type="button"
+                          onClick={() => onDelete(order)}
+                          className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
