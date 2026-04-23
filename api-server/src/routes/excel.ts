@@ -927,7 +927,8 @@ function evaluateWorkbook(workbook: XLSX.WorkBook) {
         const addr = XLSX.utils.encode_cell({ r, c });
         const cell = sheet[addr] as XLSX.CellObject | undefined;
         if (cell?.f) {
-          const v = getCellValue(ctx, name, addr);
+          const cachedValue = cell.v !== undefined && cell.v !== null ? normalizeCellValue(cell.v as RawCellValue) : null;
+          const v = cachedValue ?? getCellValue(ctx, name, addr);
           row.push(v);
           errRow.push("");
         } else if (cell?.v !== undefined && cell?.v !== null) {
