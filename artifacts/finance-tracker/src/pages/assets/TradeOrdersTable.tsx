@@ -80,7 +80,7 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
                         <button
                           type="button"
                           onClick={() => onEdit(order)}
-                          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                          className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                         >
                           Edit
                         </button>
@@ -90,7 +90,7 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
                         <button
                           type="button"
                           onClick={() => onDelete(order)}
-                          className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                          className="cursor-pointer text-[10px] font-medium text-destructive hover:text-destructive/80 transition-colors"
                         >
                           Delete
                         </button>

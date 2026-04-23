@@ -373,9 +373,7 @@ export default function AssetsPage() {
                 setTradeDialogOpen(true);
               }}
               onDelete={(order) => {
-                if (window.confirm(`Delete ${order.side.toUpperCase()} ${order.symbol}?`)) {
-                  deleteTradeMutation.mutate(order);
-                }
+                deleteTradeMutation.mutate(order);
               }}
             />
           </>
