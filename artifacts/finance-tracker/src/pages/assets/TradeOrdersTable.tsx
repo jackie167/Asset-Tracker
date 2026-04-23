@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { formatVNDFull } from "@/pages/assets/utils";
 
@@ -26,6 +27,7 @@ type TradeOrdersTableProps = {
 export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit, onDelete }: TradeOrdersTableProps) {
   const visibleOrders = limit > 0 ? orders.slice(0, limit) : orders;
   const hasActions = Boolean(onEdit || onDelete);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   return (
     <Card className="p-4">
@@ -89,10 +91,17 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
                       {onDelete && (
                         <button
                           type="button"
-                          onClick={() => onDelete(order)}
+                          onClick={() => {
+                            if (confirmDeleteId === order.id) {
+                              onDelete(order);
+                              setConfirmDeleteId(null);
+                              return;
+                            }
+                            setConfirmDeleteId(order.id);
+                          }}
                           className="cursor-pointer text-[10px] font-medium text-destructive hover:text-destructive/80 transition-colors"
                         >
-                          Delete
+                          {confirmDeleteId === order.id ? "Confirm?" : "Delete"}
                         </button>
                       )}
                     </td>
