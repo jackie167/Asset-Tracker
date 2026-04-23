@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
+import { Card } from "@/components/ui/card";
 import { usePortfolioData } from "@/hooks/use-portfolio";
 import { useToast } from "@/hooks/use-toast";
 import AllocationChart from "@/pages/assets/AllocationChart";
@@ -25,6 +26,32 @@ async function fetchTradeOrders(): Promise<TradeOrder[]> {
   return res.json();
 }
 
+type StockReturnEstimate = {
+  symbol: string;
+  initialAt: string;
+  asOf: string;
+  quantity: number;
+  costOfCapital: number;
+  currentPrice: number;
+  currentValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number | null;
+  xirrAnnual: number | null;
+  xirrMonthly: number | null;
+};
+
+async function fetchMwgReturnEstimate(): Promise<StockReturnEstimate> {
+  const res = await fetch("/api/portfolio/returns/stock/MWG");
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status} ${res.statusText}`);
+  return data as StockReturnEstimate;
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${(value * 100).toFixed(2)}%`;
+}
+
 export default function AssetsPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -34,6 +61,10 @@ export default function AssetsPage() {
   const tradeOrdersQuery = useQuery({
     queryKey: ["transactions"],
     queryFn: fetchTradeOrders,
+  });
+  const mwgReturnQuery = useQuery({
+    queryKey: ["stock-return-estimate", "MWG"],
+    queryFn: fetchMwgReturnEstimate,
   });
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState<boolean>(
@@ -57,6 +88,7 @@ export default function AssetsPage() {
     queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["stock-return-estimate", "MWG"] });
   };
 
   const tradeBodyToRequest = (body: {
@@ -324,6 +356,64 @@ export default function AssetsPage() {
               hideValues={hideValues}
               onToggleHideValues={toggleHideValues}
             />
+
+            <Card className="p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-widest">MWG XIRR Estimate</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Basic estimate: 01/01/2026 capital to current market value
+                  </p>
+                </div>
+                <span className="rounded border border-border px-2 py-1 text-[10px] text-muted-foreground">Debug</span>
+              </div>
+
+              {mwgReturnQuery.isLoading ? (
+                <p className="text-xs text-muted-foreground">Loading MWG return...</p>
+              ) : mwgReturnQuery.isError ? (
+                <p className="text-xs text-muted-foreground">
+                  {mwgReturnQuery.error instanceof Error ? mwgReturnQuery.error.message : "Unable to load MWG return."}
+                </p>
+              ) : mwgReturnQuery.data ? (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Capital</p>
+                    <p className="mt-1 text-sm font-semibold tabular-nums">
+                      {formatMoney(mwgReturnQuery.data.costOfCapital, true)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Current Value</p>
+                    <p className="mt-1 text-sm font-semibold tabular-nums">
+                      {formatMoney(mwgReturnQuery.data.currentValue, true)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Unrealized P/L</p>
+                    <p className={`mt-1 text-sm font-semibold tabular-nums ${
+                      mwgReturnQuery.data.unrealizedPnL >= 0 ? "text-emerald-400" : "text-red-300"
+                    }`}>
+                      {formatMoney(mwgReturnQuery.data.unrealizedPnL, true)}
+                      <span className="ml-1 text-[11px] text-muted-foreground">
+                        ({formatPercent(mwgReturnQuery.data.unrealizedPnLPercent)})
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">XIRR</p>
+                    <p className="mt-1 text-sm font-semibold tabular-nums">
+                      {formatPercent(mwgReturnQuery.data.xirrAnnual)}
+                      <span className="ml-1 text-[11px] text-muted-foreground">
+                        / year
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground tabular-nums">
+                      {formatPercent(mwgReturnQuery.data.xirrMonthly)} / month
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </Card>
 
             {totalValue > 0 && (
               <AllocationChart

@@ -13,11 +13,65 @@ import {
 import { getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
+const STOCK_RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
 
 function rejectManualPortfolioWrite(res: { status: (code: number) => { json: (body: unknown) => void } }): void {
   res.status(403).json({
     error: "Danh muc Tai san dang dong bo tu Investment sheet. Hay cap nhat Excel roi bam Sync.",
   });
+}
+
+function yearFraction(from: Date, to: Date): number {
+  return (to.getTime() - from.getTime()) / (365 * 24 * 60 * 60 * 1000);
+}
+
+function calculateXirr(cashFlows: Array<{ date: Date; amount: number }>): number | null {
+  const sorted = [...cashFlows].sort((a, b) => a.date.getTime() - b.date.getTime());
+  if (!sorted.some((flow) => flow.amount < 0) || !sorted.some((flow) => flow.amount > 0)) {
+    return null;
+  }
+
+  const startDate = sorted[0].date;
+  const npv = (rate: number) =>
+    sorted.reduce((sum, flow) => {
+      const years = yearFraction(startDate, flow.date);
+      return sum + flow.amount / Math.pow(1 + rate, years);
+    }, 0);
+
+  let low = -0.9999;
+  let high = 1;
+  let lowValue = npv(low);
+  let highValue = npv(high);
+
+  for (let i = 0; i < 20 && lowValue * highValue > 0; i += 1) {
+    high *= 2;
+    highValue = npv(high);
+  }
+
+  if (lowValue * highValue > 0) return null;
+
+  for (let i = 0; i < 100; i += 1) {
+    const mid = (low + high) / 2;
+    const midValue = npv(mid);
+    if (Math.abs(midValue) < 0.0001) return mid;
+    if (lowValue * midValue <= 0) {
+      high = mid;
+      highValue = midValue;
+    } else {
+      low = mid;
+      lowValue = midValue;
+    }
+  }
+
+  return (low + high) / 2;
+}
+
+function latestPriceMap(latestPrices: Awaited<ReturnType<typeof getLatestPrices>>) {
+  const priceMap = new Map<string, number>();
+  for (const price of latestPrices) {
+    priceMap.set(price.symbol.toUpperCase(), parseFloat(String(price.price)));
+  }
+  return priceMap;
 }
 
 router.get("/holdings", async (_req, res): Promise<void> => {
@@ -201,6 +255,65 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
       holdings: holdingsWithValue,
     })
   );
+});
+
+router.get("/portfolio/returns/stock/:symbol", async (req, res): Promise<void> => {
+  const symbol = String(req.params.symbol ?? "").trim().toUpperCase();
+  if (!symbol) {
+    res.status(400).json({ error: "Missing stock symbol" });
+    return;
+  }
+
+  const [holding] = await db
+    .select()
+    .from(holdingsTable)
+    .where(eq(holdingsTable.symbol, symbol))
+    .limit(1);
+
+  if (!holding || holding.type !== "stock") {
+    res.status(404).json({ error: `Stock ${symbol} not found` });
+    return;
+  }
+
+  const qty = parseFloat(String(holding.quantity));
+  const costOfCapital = holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null;
+  if (costOfCapital == null || costOfCapital <= 0) {
+    res.status(400).json({ error: `Stock ${symbol} does not have cost of capital` });
+    return;
+  }
+
+  const prices = await getLatestPrices();
+  const priceMap = latestPriceMap(prices);
+  const currentPrice = priceMap.get(symbol) ?? (holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null);
+  if (currentPrice == null) {
+    res.status(400).json({ error: `Stock ${symbol} does not have a current price` });
+    return;
+  }
+
+  const currentValue = qty * currentPrice;
+  const today = new Date();
+  const cashFlows = [
+    { date: STOCK_RETURN_INITIAL_AT, amount: -costOfCapital },
+    { date: today, amount: currentValue },
+  ];
+  const xirrAnnual = calculateXirr(cashFlows);
+  const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
+
+  res.json({
+    symbol,
+    mode: "basic_current_value_estimate",
+    initialAt: STOCK_RETURN_INITIAL_AT,
+    asOf: today,
+    quantity: qty,
+    costOfCapital,
+    currentPrice,
+    currentValue,
+    unrealizedPnL: currentValue - costOfCapital,
+    unrealizedPnLPercent: costOfCapital > 0 ? (currentValue - costOfCapital) / costOfCapital : null,
+    xirrAnnual,
+    xirrMonthly,
+    cashFlows,
+  });
 });
 
 export default router;
