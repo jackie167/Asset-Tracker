@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { formatVNDFull } from "@/pages/assets/utils";
@@ -26,9 +27,19 @@ type TradeOrdersTableProps = {
   limit?: number;
   onEdit?: (order: TradeOrder) => void;
   onDelete?: (order: TradeOrder) => void;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 };
 
-export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit, onDelete }: TradeOrdersTableProps) {
+export default function TradeOrdersTable({
+  orders,
+  isLoading,
+  limit = 10,
+  onEdit,
+  onDelete,
+  collapsed = false,
+  onToggleCollapsed,
+}: TradeOrdersTableProps) {
   const visibleOrders = limit > 0 ? orders.slice(0, limit) : orders;
   const hasActions = Boolean(onEdit || onDelete);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -36,12 +47,38 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-muted-foreground uppercase tracking-widest">Trade Orders</p>
-        {orders.length > 0 && (
-          <span className="px-1.5 py-0.5 rounded bg-muted text-xs text-muted-foreground">{orders.length}</span>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
+          >
+            <span
+              className="inline-block transition-transform duration-200"
+              style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+            >
+              ▾
+            </span>
+            Trade Orders
+            {orders.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-normal">
+                {orders.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={collapsed ? "Show trade orders" : "Hide trade orders"}
+          >
+            {collapsed ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
       </div>
 
+      {!collapsed && (
+        <>
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading trades...</p>
       ) : orders.length === 0 ? (
@@ -121,6 +158,8 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </Card>
   );

@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatTypeShortLabel, formatVNDFull } from "@/pages/assets/utils";
 
@@ -17,6 +18,8 @@ type ProfitLossTableProps = {
   isLoading: boolean;
   error?: unknown;
   hideValues: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 };
 
 function formatPercent(value: number | null | undefined) {
@@ -38,7 +41,14 @@ function typeRank(type: string) {
   return ranks[type.toLowerCase()] ?? 10;
 }
 
-export default function ProfitLossTable({ rows, isLoading, error, hideValues }: ProfitLossTableProps) {
+export default function ProfitLossTable({
+  rows,
+  isLoading,
+  error,
+  hideValues,
+  collapsed = false,
+  onToggleCollapsed,
+}: ProfitLossTableProps) {
   const sortedRows = [...rows].sort((a, b) => {
     const rankDiff = typeRank(a.type) - typeRank(b.type);
     if (rankDiff !== 0) return rankDiff;
@@ -48,16 +58,41 @@ export default function ProfitLossTable({ rows, isLoading, error, hideValues }: 
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <div>
-          <p className="text-xs text-muted-foreground uppercase tracking-widest">Profit & Loss</p>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            Basic estimate: 01/01/2026 capital to current market value
-          </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
+          >
+            <span
+              className="inline-block transition-transform duration-200"
+              style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+            >
+              ▾
+            </span>
+            Profit & Loss
+            {rows.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-normal">
+                {rows.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={collapsed ? "Show profit and loss" : "Hide profit and loss"}
+          >
+            {collapsed ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
         </div>
-        {rows.length > 0 && (
-          <span className="px-1.5 py-0.5 rounded bg-muted text-xs text-muted-foreground">{rows.length}</span>
-        )}
       </div>
+
+      {!collapsed && (
+        <>
+      <p className="text-[11px] text-muted-foreground mb-3">
+        Basic estimate: 01/01/2026 capital to current market value
+      </p>
 
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading returns...</p>
@@ -117,6 +152,8 @@ export default function ProfitLossTable({ rows, isLoading, error, hideValues }: 
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </Card>
   );

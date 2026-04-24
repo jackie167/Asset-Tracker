@@ -61,6 +61,12 @@ export default function AssetsPage() {
   const [showInterestCol, setShowInterestCol] = useState<boolean>(
     () => localStorage.getItem("col_interest") !== "0"
   );
+  const [profitLossCollapsed, setProfitLossCollapsed] = useState<boolean>(
+    () => localStorage.getItem("profit_loss_collapsed") === "1"
+  );
+  const [tradeOrdersCollapsed, setTradeOrdersCollapsed] = useState<boolean>(
+    () => localStorage.getItem("trade_orders_collapsed") === "1"
+  );
   const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
   const [editingTradeOrder, setEditingTradeOrder] = useState<TradeOrder | null>(null);
 
@@ -312,6 +318,18 @@ export default function AssetsPage() {
     localStorage.setItem("col_interest", value ? "1" : "0");
   };
 
+  const toggleProfitLossCollapsed = () => {
+    const value = !profitLossCollapsed;
+    setProfitLossCollapsed(value);
+    localStorage.setItem("profit_loss_collapsed", value ? "1" : "0");
+  };
+
+  const toggleTradeOrdersCollapsed = () => {
+    const value = !tradeOrdersCollapsed;
+    setTradeOrdersCollapsed(value);
+    localStorage.setItem("trade_orders_collapsed", value ? "1" : "0");
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AssetsHeader
@@ -339,13 +357,6 @@ export default function AssetsPage() {
               totalValueLabel={formatMoney(totalValue, true)}
               hideValues={hideValues}
               onToggleHideValues={toggleHideValues}
-            />
-
-            <ProfitLossTable
-              rows={portfolioReturnsQuery.data ?? []}
-              isLoading={portfolioReturnsQuery.isLoading}
-              error={portfolioReturnsQuery.error}
-              hideValues={hideValues}
             />
 
             {totalValue > 0 && (
@@ -390,9 +401,20 @@ export default function AssetsPage() {
               readOnly
             />
 
+            <ProfitLossTable
+              rows={portfolioReturnsQuery.data ?? []}
+              isLoading={portfolioReturnsQuery.isLoading}
+              error={portfolioReturnsQuery.error}
+              hideValues={hideValues}
+              collapsed={profitLossCollapsed}
+              onToggleCollapsed={toggleProfitLossCollapsed}
+            />
+
             <TradeOrdersTable
               orders={tradeOrdersQuery.data ?? []}
               isLoading={tradeOrdersQuery.isLoading}
+              collapsed={tradeOrdersCollapsed}
+              onToggleCollapsed={toggleTradeOrdersCollapsed}
               onEdit={(order) => {
                 setEditingTradeOrder(order);
                 setTradeDialogOpen(true);
