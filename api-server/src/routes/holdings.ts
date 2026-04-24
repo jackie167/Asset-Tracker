@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 import { z } from "zod/v4";
-import { db, holdingsTable, portfolioCashFlowsTable } from "../../../lib/db/src/index.ts";
+import { db, holdingsTable, portfolioCashFlowsTable, transactionsTable } from "../../../lib/db/src/index.ts";
 import {
   ListHoldingsResponse,
   CreateHoldingBody,
@@ -213,14 +213,28 @@ async function getPortfolioCurrentValueSnapshot() {
 }
 
 async function buildPortfolioXirrSnapshot() {
-  const portfolioSnapshot = await getPortfolioCurrentValueSnapshot();
+  const [portfolioSnapshot, transactions] = await Promise.all([
+    getPortfolioCurrentValueSnapshot(),
+    db
+      .select()
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.side, "buy"),
+          eq(transactionsTable.status, "applied"),
+          gte(transactionsTable.executedAt, STOCK_RETURN_INITIAL_AT),
+        )
+      ),
+  ]);
   const asOf = new Date();
   const eligibleHoldings = portfolioSnapshot.holdingsWithValue.filter((holding) =>
     (holding.costOfCapital ?? 0) > 0
     && (holding.currentValue ?? 0) > 0
   );
 
-  const initialCapital = eligibleHoldings.reduce((sum, holding) => sum + (holding.costOfCapital ?? 0), 0);
+  const rawInitialCapital = eligibleHoldings.reduce((sum, holding) => sum + (holding.costOfCapital ?? 0), 0);
+  const buyTransactionTotal = transactions.reduce((sum, transaction) => sum + parseFloat(String(transaction.totalValue)), 0);
+  const initialCapital = Math.max(0, rawInitialCapital - buyTransactionTotal);
   const currentValue = eligibleHoldings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
 
   const cashFlows = [
@@ -249,6 +263,8 @@ async function buildPortfolioXirrSnapshot() {
     asOf,
     currentValue,
     initialCapital,
+    rawInitialCapital,
+    buyTransactionTotal,
     cashFlowCount: eligibleHoldings.length,
     hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
     hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),

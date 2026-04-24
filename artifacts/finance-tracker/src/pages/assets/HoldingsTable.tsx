@@ -197,8 +197,8 @@ export default function HoldingsTable({
 
   const filteredCostTotal = sortedFilteredHoldings.reduce((sum, row) => sum + (row.holding.costOfCapital ?? 0), 0);
   const colTemplate = [
-    "minmax(100px, 1.08fr)",
-    "minmax(64px, 0.62fr)",
+    "fit-content(84px)",
+    "fit-content(72px)",
     "minmax(48px, 0.5fr)",
     "minmax(118px, 1.05fr)",
     showQtyCol ? "minmax(52px, 0.58fr)" : null,
