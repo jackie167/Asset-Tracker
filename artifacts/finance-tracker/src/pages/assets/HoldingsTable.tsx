@@ -197,8 +197,8 @@ export default function HoldingsTable({
 
   const filteredCostTotal = sortedFilteredHoldings.reduce((sum, row) => sum + (row.holding.costOfCapital ?? 0), 0);
   const colTemplate = [
-    "minmax(118px, 1.4fr)",
-    "minmax(74px, 0.78fr)",
+    "minmax(100px, 1.08fr)",
+    "minmax(64px, 0.62fr)",
     "minmax(48px, 0.5fr)",
     "minmax(118px, 1.05fr)",
     showQtyCol ? "minmax(52px, 0.58fr)" : null,
@@ -325,7 +325,7 @@ export default function HoldingsTable({
             <div className="overflow-x-auto">
               <div className="min-w-full" style={{ width: "max-content" }}>
                 <div
-                  className="grid gap-x-1.5 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
+                  className="grid gap-x-1 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
                   style={{ gridTemplateColumns: colTemplate }}
                 >
                   <button type="button" onClick={() => handleSort("symbol")} className="text-left hover:text-foreground transition-colors">Asset{sortIndicator("symbol")}</button>
@@ -350,7 +350,7 @@ export default function HoldingsTable({
                 {sortedFilteredHoldings.map(({ holding, unrealizedPnL, unrealizedPnLPercent, xirrAnnual, xirrMonthly, weight }) => (
                   <div
                     key={holding.id}
-                    className="grid gap-x-1.5 items-center py-2.5 border-b border-border last:border-0"
+                    className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
                     style={{ gridTemplateColumns: colTemplate }}
                   >
                     <div className="overflow-hidden">
@@ -453,7 +453,7 @@ export default function HoldingsTable({
 
                 {filteredHoldings.length > 0 && (
                   <div
-                    className="grid gap-x-1.5 items-center pt-2.5 mt-0.5"
+                    className="grid gap-x-1 items-center pt-2.5 mt-0.5"
                     style={{ gridTemplateColumns: colTemplate }}
                   >
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
