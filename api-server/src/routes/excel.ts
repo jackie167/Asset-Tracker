@@ -1266,97 +1266,107 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       return;
     }
 
-    const [existingHoldings, deletedTransactions] = await Promise.all([
-      db.select().from(holdingsTable),
-      db.delete(transactionsTable).returning({ id: transactionsTable.id }),
-    ]);
-    const clearedTransactions = deletedTransactions.length;
-    const existingBySymbol = new Map(existingHoldings.map((holding) => [holding.symbol.toUpperCase(), holding]));
-    const syncedSymbols = new Set(rows.map((row) => row.symbol));
+    const syncResult = await db.transaction(async (tx) => {
+      const [existingHoldings, deletedTransactions] = await Promise.all([
+        tx.select().from(holdingsTable),
+        tx.delete(transactionsTable).returning({ id: transactionsTable.id }),
+      ]);
+      const clearedTransactions = deletedTransactions.length;
+      const existingBySymbol = new Map(existingHoldings.map((holding) => [holding.symbol.toUpperCase(), holding]));
+      const syncedSymbols = new Set(rows.map((row) => row.symbol));
 
-    let created = 0;
-    let updated = 0;
-    let removed = 0;
-    const skipped: string[] = [];
+      let created = 0;
+      let updated = 0;
+      let removed = 0;
+      const skipped: string[] = [];
 
-    for (const row of rows) {
-      const existing = existingBySymbol.get(row.symbol);
+      for (const row of rows) {
+        const existing = existingBySymbol.get(row.symbol);
 
-      if (existing) {
-        await db
-          .update(holdingsTable)
-          .set({
-            type: row.type,
-            quantity: String(row.quantity),
-            manualPrice: shouldSyncManualPrice(row.type)
-              ? row.manualPrice != null
-                ? String(row.manualPrice)
-                : null
-              : null,
-            costOfCapital: row.costOfCapital != null ? String(row.costOfCapital) : null,
-            interest: row.interest != null ? String(row.interest) : null,
-            updatedAt: new Date(),
-          })
-          .where(eq(holdingsTable.id, existing.id));
-        updated += 1;
-        continue;
+        if (existing) {
+          await tx
+            .update(holdingsTable)
+            .set({
+              type: row.type,
+              quantity: String(row.quantity),
+              manualPrice: shouldSyncManualPrice(row.type)
+                ? row.manualPrice != null
+                  ? String(row.manualPrice)
+                  : null
+                : null,
+              costOfCapital: row.costOfCapital != null ? String(row.costOfCapital) : null,
+              interest: row.interest != null ? String(row.interest) : null,
+              updatedAt: new Date(),
+            })
+            .where(eq(holdingsTable.id, existing.id));
+          updated += 1;
+          continue;
+        }
+
+        await tx.insert(holdingsTable).values({
+          symbol: row.symbol,
+          type: row.type,
+          quantity: String(row.quantity),
+          manualPrice: shouldSyncManualPrice(row.type)
+            ? row.manualPrice != null
+              ? String(row.manualPrice)
+              : null
+            : null,
+          costOfCapital: row.costOfCapital != null ? String(row.costOfCapital) : null,
+          interest: row.interest != null ? String(row.interest) : null,
+        });
+        created += 1;
       }
 
-      await db.insert(holdingsTable).values({
-        symbol: row.symbol,
-        type: row.type,
-        quantity: String(row.quantity),
-        manualPrice: shouldSyncManualPrice(row.type)
-          ? row.manualPrice != null
-            ? String(row.manualPrice)
-            : null
-          : null,
-        costOfCapital: row.costOfCapital != null ? String(row.costOfCapital) : null,
-        interest: row.interest != null ? String(row.interest) : null,
-      });
-      created += 1;
-    }
+      for (const holding of existingHoldings) {
+        if (syncedSymbols.has(holding.symbol.toUpperCase())) continue;
+        await tx.delete(holdingsTable).where(eq(holdingsTable.id, holding.id));
+        removed += 1;
+      }
 
-    for (const holding of existingHoldings) {
-      if (syncedSymbols.has(holding.symbol.toUpperCase())) continue;
-      await db.delete(holdingsTable).where(eq(holdingsTable.id, holding.id));
-      removed += 1;
-    }
+      if (transactionRows.length > 0) {
+        await tx.insert(transactionsTable).values(
+          transactionRows.map((transaction) => ({
+            side: transaction.side,
+            origin: "excel_sync",
+            fundingSource: transaction.fundingSource,
+            assetType: transaction.assetType,
+            symbol: transaction.symbol,
+            quantity: String(transaction.quantity),
+            totalValue: String(transaction.totalValue),
+            unitPrice: String(transaction.unitPrice),
+            realizedInterest: String(transaction.realizedInterest),
+            note: transaction.note,
+            status: "applied",
+            executedAt: transaction.executedAt,
+            createdAt: transaction.createdAt,
+            updatedAt: transaction.updatedAt,
+          }))
+        );
+      }
 
-    if (transactionRows.length > 0) {
-      await db.insert(transactionsTable).values(
-        transactionRows.map((transaction) => ({
-          side: transaction.side,
-          origin: "excel_sync",
-          fundingSource: transaction.fundingSource,
-          assetType: transaction.assetType,
-          symbol: transaction.symbol,
-          quantity: String(transaction.quantity),
-          totalValue: String(transaction.totalValue),
-          unitPrice: String(transaction.unitPrice),
-          realizedInterest: String(transaction.realizedInterest),
-          note: transaction.note,
-          status: "applied",
-          executedAt: transaction.executedAt,
-          createdAt: transaction.createdAt,
-          updatedAt: transaction.updatedAt,
-        }))
-      );
-    }
+      return {
+        clearedTransactions,
+        created,
+        updated,
+        removed,
+        skipped,
+      };
+    });
 
     res.json({
       success: true,
       sheet: investmentSheetName,
       transactionsSheet: transactionsSheetName,
       total: rows.length,
-      created,
-      updated,
-      removed,
-      skipped,
-      clearedTransactions,
+      created: syncResult.created,
+      updated: syncResult.updated,
+      removed: syncResult.removed,
+      skipped: syncResult.skipped,
+      clearedTransactions: syncResult.clearedTransactions,
       importedTransactions: transactionRows.length,
-      warning: clearedTransactions > 0
-        ? `Sync overwrote holdings from the Investment sheet, cleared ${clearedTransactions} trade order(s), and imported ${transactionRows.length} transaction row(s).`
+      warning: syncResult.clearedTransactions > 0
+        ? `Sync overwrote holdings from the Investment sheet, cleared ${syncResult.clearedTransactions} trade order(s), and imported ${transactionRows.length} transaction row(s).`
         : null,
       message: `Đã sync ${rows.length} dòng từ "${investmentSheetName}" sang Tài sản.`,
     });
