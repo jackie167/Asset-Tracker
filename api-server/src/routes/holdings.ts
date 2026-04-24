@@ -215,48 +215,47 @@ async function getPortfolioCurrentValueSnapshot() {
 }
 
 async function buildPortfolioXirrSnapshot() {
-  const [cashFlowsFromDb, portfolioSnapshot] = await Promise.all([
-    db.select().from(portfolioCashFlowsTable).orderBy(portfolioCashFlowsTable.occurredAt),
-    getPortfolioCurrentValueSnapshot(),
-  ]);
-
+  const portfolioSnapshot = await getPortfolioCurrentValueSnapshot();
   const asOf = new Date();
-  const cashFlows = cashFlowsFromDb
-    .filter((flow) => flow.occurredAt <= asOf)
-    .map((flow) => ({
-      date: flow.occurredAt,
-      amount: flow.kind === "contribution"
-        ? -parseFloat(String(flow.amount))
-        : parseFloat(String(flow.amount)),
-      kind: flow.kind,
-      source: flow.source,
-      note: flow.note,
-      rowType: "cash_flow" as const,
-    }));
+  const eligibleHoldings = portfolioSnapshot.holdingsWithValue.filter((holding) => {
+    const type = holding.type.trim().toLowerCase();
+    return type !== "cash"
+      && (holding.costOfCapital ?? 0) > 0
+      && (holding.currentValue ?? 0) > 0;
+  });
 
-  if (portfolioSnapshot.totalValue > 0) {
-    cashFlows.push({
+  const cashFlows = eligibleHoldings.flatMap((holding) => ([
+    {
+      date: STOCK_RETURN_INITIAL_AT,
+      amount: -(holding.costOfCapital ?? 0),
+      kind: "initial_capital",
+      source: "asset_snapshot",
+      note: holding.symbol,
+      rowType: "asset_start_capital" as const,
+    },
+    {
       date: asOf,
-      amount: portfolioSnapshot.totalValue,
+      amount: holding.currentValue ?? 0,
       kind: "current_value",
-      source: "system",
-      note: "Current portfolio value",
-      rowType: "current_portfolio_value" as const,
-    });
-  }
+      source: "asset_snapshot",
+      note: holding.symbol,
+      rowType: "asset_current_value" as const,
+    },
+  ]));
 
   const xirrAnnual = calculateXirr(cashFlows);
   const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
+  const includedCurrentValue = eligibleHoldings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
 
   return {
     asOf,
-    currentValue: portfolioSnapshot.totalValue,
-    cashFlowCount: cashFlows.length > 0 ? cashFlows.length - 1 : 0,
+    currentValue: includedCurrentValue,
+    cashFlowCount: eligibleHoldings.length,
     hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
     hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
-    mode: "external_cash_flows_only" as const,
-    reason: cashFlowsFromDb.length === 0
-      ? "Portfolio XIRR needs contribution/withdrawal cash flows. Internal asset trades are not used."
+    mode: "asset_capital_snapshot_excluding_cash" as const,
+    reason: eligibleHoldings.length === 0
+      ? "Portfolio XIRR needs assets with both cost of capital and current value. Cash is excluded."
       : null,
     xirrAnnual,
     xirrMonthly,
