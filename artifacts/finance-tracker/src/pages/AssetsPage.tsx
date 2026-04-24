@@ -391,6 +391,7 @@ export default function AssetsPage() {
               showQtyCol={showQtyCol}
               showPriceCol={showPriceCol}
               showCostOfCapitalCol={showCostOfCapitalCol}
+              showReturnCols
               metrics={[
                 {
                   label: "P/L",

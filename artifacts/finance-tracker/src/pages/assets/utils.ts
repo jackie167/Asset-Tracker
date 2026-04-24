@@ -47,6 +47,11 @@ export function formatVNDFull(value: number | null | undefined): string {
   return `${VND_INT.format(value)} ₫`;
 }
 
+export function formatPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${(value * 100).toFixed(2)}%`;
+}
+
 export function resolveMode(type: string): TypeMode {
   if (type === "stock") return "stock";
   if (type === "gold") return "gold";

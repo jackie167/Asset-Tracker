@@ -8,7 +8,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { HoldingItem, SortOrder } from "@/pages/assets/types";
-import { formatTypeLabel, formatTypeShortLabel } from "@/pages/assets/utils";
+import { formatPercent, formatTypeLabel, formatTypeShortLabel, formatVNDFull } from "@/pages/assets/utils";
+
+const RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
+
+function yearFraction(from: Date, to: Date) {
+  return (to.getTime() - from.getTime()) / (365 * 24 * 60 * 60 * 1000);
+}
+
+function calculateSnapshotXirr(costOfCapital: number | null | undefined, currentValue: number | null | undefined) {
+  if (costOfCapital == null || currentValue == null || costOfCapital <= 0 || currentValue <= 0) return null;
+  const years = yearFraction(RETURN_INITIAL_AT, new Date());
+  if (!Number.isFinite(years) || years <= 0) return null;
+  return Math.pow(currentValue / costOfCapital, 1 / years) - 1;
+}
 
 function ChangeChip({
   change,
@@ -41,6 +54,7 @@ type HoldingsTableProps = {
   showQtyCol: boolean;
   showPriceCol: boolean;
   showCostOfCapitalCol?: boolean;
+  showReturnCols?: boolean;
   metrics?: Array<{
     label: string;
     value: string;
@@ -72,6 +86,7 @@ export default function HoldingsTable({
   showQtyCol,
   showPriceCol,
   showCostOfCapitalCol = false,
+  showReturnCols = false,
   metrics = [],
   formatMoney,
   onToggleHoldingsCollapsed,
@@ -92,12 +107,21 @@ export default function HoldingsTable({
     showQtyCol ? "minmax(50px, 0.65fr)" : null,
     showPriceCol ? "minmax(64px, 0.9fr)" : null,
     showCostOfCapitalCol ? "minmax(82px, 0.95fr)" : null,
+    showReturnCols ? "minmax(88px, 0.9fr)" : null,
+    showReturnCols ? "minmax(62px, 0.8fr)" : null,
+    showReturnCols ? "minmax(72px, 0.85fr)" : null,
+    showReturnCols ? "minmax(72px, 0.85fr)" : null,
     "minmax(40px, 0.55fr)",
     "minmax(132px, 1.25fr)",
   ]
     .filter(Boolean)
     .join(" ");
-  const totalColumns = 4 + (showQtyCol ? 1 : 0) + (showPriceCol ? 1 : 0) + (showCostOfCapitalCol ? 1 : 0);
+  const totalColumns =
+    4 +
+    (showQtyCol ? 1 : 0) +
+    (showPriceCol ? 1 : 0) +
+    (showCostOfCapitalCol ? 1 : 0) +
+    (showReturnCols ? 4 : 0);
 
   return (
     <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -233,6 +257,10 @@ export default function HoldingsTable({
                   {showQtyCol && <span className="text-right">Qty</span>}
                   {showPriceCol && <span className="text-right">Price</span>}
                   {showCostOfCapitalCol && <span className="text-right whitespace-nowrap">Cost</span>}
+                  {showReturnCols && <span className="text-right whitespace-nowrap">P/L</span>}
+                  {showReturnCols && <span className="text-right whitespace-nowrap">P/L %</span>}
+                  {showReturnCols && <span className="text-right whitespace-nowrap">XIRR Y</span>}
+                  {showReturnCols && <span className="text-right whitespace-nowrap">XIRR M</span>}
                   <span className="text-right">%</span>
                   <span className="text-right whitespace-nowrap">Total Value</span>
                 </div>
@@ -244,70 +272,126 @@ export default function HoldingsTable({
                 )}
 
                 {filteredHoldings.map((holding) => (
-                  <div
-                    key={holding.id}
-                    className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
-                    style={{ gridTemplateColumns: colTemplate }}
-                  >
-                    <div className="overflow-hidden">
-                      <p className="text-sm font-medium truncate">{holding.symbol}</p>
-                      {!readOnly && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <ChangeChip change={holding.change} changePercent={holding.changePercent} />
-                          <>
-                            <button
-                              onClick={() => onEdit?.(holding)}
-                              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <span className="text-[10px] text-muted-foreground">·</span>
-                            <button
-                              onClick={() => onDelete?.(holding.id)}
-                              className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              Delete
-                            </button>
-                          </>
+                  (() => {
+                    const unrealizedPnL =
+                      holding.currentValue != null && holding.costOfCapital != null
+                        ? holding.currentValue - holding.costOfCapital
+                        : null;
+                    const unrealizedPnLPercent =
+                      unrealizedPnL != null && (holding.costOfCapital ?? 0) > 0
+                        ? unrealizedPnL / (holding.costOfCapital ?? 0)
+                        : null;
+                    const xirrAnnual = calculateSnapshotXirr(holding.costOfCapital, holding.currentValue);
+                    const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
+
+                    return (
+                      <div
+                        key={holding.id}
+                        className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
+                        style={{ gridTemplateColumns: colTemplate }}
+                      >
+                        <div className="overflow-hidden">
+                          <p className="text-sm font-medium truncate">{holding.symbol}</p>
+                          {!readOnly && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <ChangeChip change={holding.change} changePercent={holding.changePercent} />
+                              <>
+                                <button
+                                  onClick={() => onEdit?.(holding)}
+                                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  Edit
+                                </button>
+                                <span className="text-[10px] text-muted-foreground">·</span>
+                                <button
+                                  onClick={() => onDelete?.(holding.id)}
+                                  className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
 
-                    <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate block">
-                      {formatTypeShortLabel(holding.type)}
-                    </span>
+                        <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate block">
+                          {formatTypeShortLabel(holding.type)}
+                        </span>
 
-                    {showQtyCol && (
-                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                        {holding.quantity.toLocaleString("vi-VN")}
-                      </span>
-                    )}
+                        {showQtyCol && (
+                          <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                            {holding.quantity.toLocaleString("vi-VN")}
+                          </span>
+                        )}
 
-                    {showPriceCol && (
-                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                        {formatMoney(holding.currentPrice, true)}
-                      </span>
-                    )}
+                        {showPriceCol && (
+                          <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                            {formatMoney(holding.currentPrice, true)}
+                          </span>
+                        )}
 
-                    {showCostOfCapitalCol && (
-                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                        {formatMoney(holding.costOfCapital, true)}
-                      </span>
-                    )}
+                        {showCostOfCapitalCol && (
+                          <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                            {formatMoney(holding.costOfCapital, true)}
+                          </span>
+                        )}
 
-                    <span className="text-[10px] text-right tabular-nums text-muted-foreground">
-                      {(filterType === "all" ? totalValue : filteredTotal) > 0 && holding.currentValue != null
-                        ? `${(
-                            (holding.currentValue / (filterType === "all" ? totalValue : filteredTotal)) *
-                            100
-                          ).toFixed(1)}%`
-                        : "—"}
-                    </span>
+                        {showReturnCols && (
+                          <span className={`text-[11px] text-right tabular-nums ${(
+                            unrealizedPnL ?? 0
+                          ) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                            {formatVNDFull(unrealizedPnL)}
+                          </span>
+                        )}
+                        {showReturnCols && (
+                          <span className={`text-[11px] text-right tabular-nums ${
+                            unrealizedPnLPercent == null
+                              ? "text-muted-foreground"
+                              : unrealizedPnLPercent >= 0
+                                ? "text-emerald-400"
+                                : "text-red-300"
+                          }`}>
+                            {formatPercent(unrealizedPnLPercent)}
+                          </span>
+                        )}
+                        {showReturnCols && (
+                          <span className={`text-[11px] text-right tabular-nums ${
+                            xirrAnnual == null
+                              ? "text-muted-foreground"
+                              : xirrAnnual >= 0
+                                ? "text-emerald-400"
+                                : "text-red-300"
+                          }`}>
+                            {formatPercent(xirrAnnual)}
+                          </span>
+                        )}
+                        {showReturnCols && (
+                          <span className={`text-[11px] text-right tabular-nums ${
+                            xirrMonthly == null
+                              ? "text-muted-foreground"
+                              : xirrMonthly >= 0
+                                ? "text-emerald-400"
+                                : "text-red-300"
+                          }`}>
+                            {formatPercent(xirrMonthly)}
+                          </span>
+                        )}
 
-                    <span className="text-sm font-semibold text-right tabular-nums whitespace-nowrap">
-                      {formatMoney(holding.currentValue, true)}
-                    </span>
-                  </div>
+                        <span className="text-[10px] text-right tabular-nums text-muted-foreground">
+                          {(filterType === "all" ? totalValue : filteredTotal) > 0 && holding.currentValue != null
+                            ? `${(
+                                (holding.currentValue / (filterType === "all" ? totalValue : filteredTotal)) *
+                                100
+                              ).toFixed(1)}%`
+                            : "—"}
+                        </span>
+
+                        <span className="text-sm font-semibold text-right tabular-nums whitespace-nowrap">
+                          {formatMoney(holding.currentValue, true)}
+                        </span>
+                      </div>
+                    );
+                  })()
                 ))}
 
                 {filteredHoldings.length > 0 && (
@@ -328,6 +412,10 @@ export default function HoldingsTable({
                         {formatMoney(filteredCostTotal, true)}
                       </span>
                     )}
+                    {showReturnCols && <span />}
+                    {showReturnCols && <span />}
+                    {showReturnCols && <span />}
+                    {showReturnCols && <span />}
                     <span />
                     <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
                       {formatMoney(filteredTotal, true)}
