@@ -5,6 +5,7 @@ import { formatVNDFull } from "@/pages/assets/utils";
 export type TradeOrder = {
   id: number;
   side: "buy" | "sell";
+  origin?: string;
   fundingSource: string;
   assetType: string;
   symbol: string;
@@ -67,7 +68,10 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
                   </td>
                   <td className="py-2 px-3">
                     <div className="font-medium">{order.symbol}</div>
-                    <div className="text-[10px] text-muted-foreground">{order.assetType}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {order.assetType}
+                      {order.origin === "excel_sync" ? " · Sheet sync" : ""}
+                    </div>
                   </td>
                   <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">
                     {order.quantity.toLocaleString("vi-VN")}
@@ -84,8 +88,9 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
                       {onEdit && (
                         <button
                           type="button"
+                          disabled={order.origin === "excel_sync"}
                           onClick={() => onEdit(order)}
-                          className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                          className="cursor-pointer disabled:cursor-not-allowed text-[10px] text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground/60 disabled:opacity-60 transition-colors"
                         >
                           Edit
                         </button>
@@ -94,7 +99,9 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
                       {onDelete && (
                         <button
                           type="button"
+                          disabled={order.origin === "excel_sync"}
                           onClick={() => {
+                            if (order.origin === "excel_sync") return;
                             if (confirmDeleteId === order.id) {
                               onDelete(order);
                               setConfirmDeleteId(null);
@@ -102,7 +109,7 @@ export default function TradeOrdersTable({ orders, isLoading, limit = 10, onEdit
                             }
                             setConfirmDeleteId(order.id);
                           }}
-                          className="cursor-pointer text-[10px] font-medium text-destructive hover:text-destructive/80 transition-colors"
+                          className="cursor-pointer disabled:cursor-not-allowed text-[10px] font-medium text-destructive hover:text-destructive/80 disabled:hover:text-destructive disabled:opacity-60 transition-colors"
                         >
                           {confirmDeleteId === order.id ? "Confirm?" : "Delete"}
                         </button>

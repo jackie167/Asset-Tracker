@@ -18,6 +18,7 @@ function exportTradeOrdersCSV(orders: TradeOrder[]) {
   const headers = [
     "id",
     "side",
+    "origin",
     "asset",
     "asset_type",
     "quantity",
@@ -34,6 +35,7 @@ function exportTradeOrdersCSV(orders: TradeOrder[]) {
   const rows = orders.map((order) => [
     order.id,
     order.side,
+    order.origin ?? "",
     order.symbol,
     order.assetType,
     order.quantity,

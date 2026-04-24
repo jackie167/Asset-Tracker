@@ -11,6 +11,7 @@ export async function ensureDatabaseSchema() {
     CREATE TABLE IF NOT EXISTS transactions (
       id serial PRIMARY KEY,
       side text NOT NULL,
+      origin text NOT NULL DEFAULT 'manual',
       funding_source text NOT NULL,
       asset_type text NOT NULL,
       symbol text NOT NULL,
@@ -24,5 +25,10 @@ export async function ensureDatabaseSchema() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE transactions
+      ADD COLUMN IF NOT EXISTS origin text NOT NULL DEFAULT 'manual'
   `);
 }

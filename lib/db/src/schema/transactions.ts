@@ -3,6 +3,7 @@ import { pgTable, serial, text, numeric, timestamp } from "drizzle-orm/pg-core";
 export const transactionsTable = pgTable("transactions", {
   id: serial("id").primaryKey(),
   side: text("side").notNull(),
+  origin: text("origin").notNull().default("manual"),
   fundingSource: text("funding_source").notNull(),
   assetType: text("asset_type").notNull(),
   symbol: text("symbol").notNull(),

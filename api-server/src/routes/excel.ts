@@ -1327,6 +1327,7 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       await db.insert(transactionsTable).values(
         transactionRows.map((transaction) => ({
           side: transaction.side,
+          origin: "excel_sync",
           fundingSource: transaction.fundingSource,
           assetType: transaction.assetType,
           symbol: transaction.symbol,

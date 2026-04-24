@@ -27,6 +27,7 @@ function serializeTransaction(transaction: typeof transactionsTable.$inferSelect
   return {
     id: transaction.id,
     side: transaction.side,
+    origin: transaction.origin,
     fundingSource: transaction.fundingSource,
     assetType: transaction.assetType,
     symbol: transaction.symbol,
@@ -40,6 +41,12 @@ function serializeTransaction(transaction: typeof transactionsTable.$inferSelect
     createdAt: transaction.createdAt,
     updatedAt: transaction.updatedAt,
   };
+}
+
+function rejectImportedTransactionMutation(res: { status: (code: number) => { json: (body: unknown) => void } }): void {
+  res.status(409).json({
+    error: "This transaction was imported from the Excel sheet. Update the sheet and sync again instead of editing or deleting it here.",
+  });
 }
 
 function toNumber(value: unknown): number {
@@ -229,6 +236,7 @@ router.post("/transactions", async (req, res): Promise<void> => {
         .insert(transactionsTable)
         .values({
           side: parsed.data.side,
+          origin: "manual",
           fundingSource: "CASH",
           assetType,
           symbol,
@@ -272,6 +280,10 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
         .limit(1);
 
       if (!existing) return null;
+      if (existing.origin === "excel_sync") {
+        rejectImportedTransactionMutation(res);
+        return "__blocked__" as const;
+      }
 
       await reverseTransactionEffect(tx, existing);
 
@@ -307,6 +319,10 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
       return updated;
     });
 
+    if (transaction === "__blocked__") {
+      return;
+    }
+
     if (!transaction) {
       res.status(404).json({ error: "Transaction not found" });
       return;
@@ -334,6 +350,10 @@ router.delete("/transactions/:id", async (req, res): Promise<void> => {
         .limit(1);
 
       if (!existing) return null;
+      if (existing.origin === "excel_sync") {
+        rejectImportedTransactionMutation(res);
+        return "__blocked__" as const;
+      }
 
       await reverseTransactionEffect(tx, existing);
       const [removed] = await tx
@@ -342,6 +362,10 @@ router.delete("/transactions/:id", async (req, res): Promise<void> => {
         .returning();
       return removed;
     });
+
+    if (deleted === "__blocked__") {
+      return;
+    }
 
     if (!deleted) {
       res.status(404).json({ error: "Transaction not found" });
