@@ -14,6 +14,7 @@ import { getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
 const STOCK_RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
+const CASH_FIXED_ANNUAL_RATE = 0.06;
 
 function usesManualPortfolioValue(type: string): boolean {
   const normalized = type.trim().toLowerCase();
@@ -74,6 +75,12 @@ function calculateXirr(cashFlows: Array<{ date: Date; amount: number }>): number
   }
 
   return (low + high) / 2;
+}
+
+function deriveCashPrincipalFromCurrentValue(currentValue: number, asOf: Date): number | null {
+  const years = yearFraction(STOCK_RETURN_INITIAL_AT, asOf);
+  if (!(years > 0) || !(currentValue > 0)) return currentValue > 0 ? currentValue : null;
+  return currentValue / Math.pow(1 + CASH_FIXED_ANNUAL_RATE, years);
 }
 
 function latestPriceMap(latestPrices: Awaited<ReturnType<typeof getLatestPrices>>) {
@@ -339,10 +346,14 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
   const rows = holdings.map((holding) => {
     const symbol = holding.symbol.toUpperCase();
     const quantity = parseFloat(String(holding.quantity));
-    const costOfCapital = holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null;
+    const storedCostOfCapital = holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null;
     const manualPrice = holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null;
     const currentPrice = priceMap.get(symbol) ?? (holding.type === "gold" ? goldPrice : null) ?? manualPrice;
     const currentValue = resolveHoldingCurrentValue({ type: holding.type, quantity, currentPrice });
+    const costOfCapital =
+      holding.type === "cash" && currentValue != null
+        ? deriveCashPrincipalFromCurrentValue(currentValue, today)
+        : storedCostOfCapital;
     const unrealizedPnL =
       costOfCapital != null && currentValue != null ? currentValue - costOfCapital : null;
     const unrealizedPnLPercent =
@@ -351,12 +362,14 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
         : null;
 
     const xirrAnnual =
-      costOfCapital != null && costOfCapital > 0 && currentValue != null
-        ? calculateXirr([
-            { date: STOCK_RETURN_INITIAL_AT, amount: -costOfCapital },
-            { date: today, amount: currentValue },
-          ])
-        : null;
+      holding.type === "cash" && currentValue != null && currentValue > 0
+        ? CASH_FIXED_ANNUAL_RATE
+        : costOfCapital != null && costOfCapital > 0 && currentValue != null
+          ? calculateXirr([
+              { date: STOCK_RETURN_INITIAL_AT, amount: -costOfCapital },
+              { date: today, amount: currentValue },
+            ])
+          : null;
     const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
 
     return {
