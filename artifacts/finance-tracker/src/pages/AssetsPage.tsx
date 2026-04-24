@@ -20,6 +20,20 @@ import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTab
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
+function calculateXirrFromSummary(costOfCapital: number, currentValue: number) {
+  if (!(costOfCapital > 0) || !(currentValue > 0)) return null;
+
+  const years = (new Date().getTime() - new Date("2026-01-01T00:00:00.000Z").getTime()) / (365 * 24 * 60 * 60 * 1000);
+  if (!(years > 0)) return null;
+
+  return Math.pow(currentValue / costOfCapital, 1 / years) - 1;
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${(value * 100).toFixed(2)}%`;
+}
+
 async function fetchTradeOrders(): Promise<TradeOrder[]> {
   const res = await fetch("/api/transactions");
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
@@ -239,6 +253,23 @@ export default function AssetsPage() {
     [filteredHoldings]
   );
 
+  const portfolioReturnSummary = useMemo(() => {
+    const rows = portfolioReturnsQuery.data ?? [];
+    const totalCapital = rows.reduce((sum, row) => sum + (row.costOfCapital ?? 0), 0);
+    const totalCurrent = rows.reduce((sum, row) => sum + (row.currentValue ?? 0), 0);
+    const totalPnL = totalCurrent - totalCapital;
+    const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
+    const xirrAnnual = totalCapital > 0 && totalCurrent > 0 ? calculateXirrFromSummary(totalCapital, totalCurrent) : null;
+    const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
+
+    return {
+      totalPnL,
+      totalPnLPercent,
+      xirrAnnual,
+      xirrMonthly,
+    };
+  }, [portfolioReturnsQuery.data]);
+
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
 
@@ -357,6 +388,43 @@ export default function AssetsPage() {
               totalValueLabel={formatMoney(totalValue, true)}
               hideValues={hideValues}
               onToggleHideValues={toggleHideValues}
+              metrics={[
+                {
+                  label: "P/L",
+                  value: formatVNDFull(portfolioReturnSummary.totalPnL),
+                  tone: portfolioReturnSummary.totalPnL >= 0 ? "positive" : "negative",
+                },
+                {
+                  label: "P/L %",
+                  value: formatPercent(portfolioReturnSummary.totalPnLPercent),
+                  tone:
+                    portfolioReturnSummary.totalPnLPercent == null
+                      ? "neutral"
+                      : portfolioReturnSummary.totalPnLPercent >= 0
+                        ? "positive"
+                        : "negative",
+                },
+                {
+                  label: "XIRR / Year",
+                  value: formatPercent(portfolioReturnSummary.xirrAnnual),
+                  tone:
+                    portfolioReturnSummary.xirrAnnual == null
+                      ? "neutral"
+                      : portfolioReturnSummary.xirrAnnual >= 0
+                        ? "positive"
+                        : "negative",
+                },
+                {
+                  label: "XIRR / Month",
+                  value: formatPercent(portfolioReturnSummary.xirrMonthly),
+                  tone:
+                    portfolioReturnSummary.xirrMonthly == null
+                      ? "neutral"
+                      : portfolioReturnSummary.xirrMonthly >= 0
+                        ? "positive"
+                        : "negative",
+                },
+              ]}
             />
 
             {totalValue > 0 && (

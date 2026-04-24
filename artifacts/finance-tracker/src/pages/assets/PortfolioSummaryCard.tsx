@@ -1,11 +1,18 @@
 import { Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
+type SummaryMetric = {
+  label: string;
+  value: string;
+  tone?: "positive" | "negative" | "neutral";
+};
+
 type PortfolioSummaryCardProps = {
   title?: string;
   totalValueLabel: string;
   hideValues: boolean;
   onToggleHideValues: () => void;
+  metrics?: SummaryMetric[];
 };
 
 export default function PortfolioSummaryCard({
@@ -13,6 +20,7 @@ export default function PortfolioSummaryCard({
   totalValueLabel,
   hideValues,
   onToggleHideValues,
+  metrics = [],
 }: PortfolioSummaryCardProps) {
   return (
     <Card className="p-4 space-y-3">
@@ -28,6 +36,26 @@ export default function PortfolioSummaryCard({
         </button>
       </div>
       <p className="text-3xl font-bold tracking-tight">{totalValueLabel}</p>
+      {metrics.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+          {metrics.map((metric) => (
+            <div key={metric.label} className="space-y-1">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{metric.label}</p>
+              <p
+                className={`text-sm font-semibold tabular-nums ${
+                  metric.tone === "positive"
+                    ? "text-emerald-400"
+                    : metric.tone === "negative"
+                      ? "text-red-300"
+                      : "text-foreground"
+                }`}
+              >
+                {hideValues ? "****" : metric.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
