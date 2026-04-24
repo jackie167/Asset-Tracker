@@ -202,120 +202,122 @@ export default function HoldingsTable({
               )}
             </div>
           ) : (
-            <div>
-              <div
-                className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
-                style={{ gridTemplateColumns: colTemplate }}
-              >
-                <span>Asset</span>
-                <span className="text-center">Type</span>
-                {showQtyCol && <span className="text-right">Qty</span>}
-                {showPriceCol && <span className="text-right">Price</span>}
-                {showCostOfCapitalCol && <span className="text-right whitespace-nowrap">Cost</span>}
-                {showInterestCol && <span className="text-right whitespace-nowrap">Interest</span>}
-                <span className="text-right">%</span>
-                <span className="text-right whitespace-nowrap">Total Value</span>
-              </div>
-
-              {filteredHoldings.length === 0 && filterType !== "all" && (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  No assets in this type.
-                </p>
-              )}
-
-              {filteredHoldings.map((holding) => (
+            <div className="overflow-x-auto">
+              <div className="min-w-full" style={{ width: "max-content" }}>
                 <div
-                  key={holding.id}
-                  className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
+                  className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
                   style={{ gridTemplateColumns: colTemplate }}
                 >
-                  <div className="overflow-hidden">
-                    <p className="text-sm font-medium truncate">{holding.symbol}</p>
-                    {!readOnly && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <ChangeChip change={holding.change} changePercent={holding.changePercent} />
-                        <>
-                          <button
-                            onClick={() => onEdit?.(holding)}
-                            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <span className="text-[10px] text-muted-foreground">·</span>
-                          <button
-                            onClick={() => onDelete?.(holding.id)}
-                            className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
-                          >
-                            Delete
-                          </button>
-                        </>
-                      </div>
-                    )}
-                  </div>
-
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate block">
-                    {formatTypeShortLabel(holding.type)}
-                  </span>
-
-                  {showQtyCol && (
-                    <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                      {holding.quantity.toLocaleString("vi-VN")}
-                    </span>
-                  )}
-
-                  {showPriceCol && (
-                    <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                      {formatMoney(holding.currentPrice)}
-                    </span>
-                  )}
-
-                  {showCostOfCapitalCol && (
-                    <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                      {formatMoney(holding.costOfCapital)}
-                    </span>
-                  )}
-
-                  {showInterestCol && (
-                    <span className={`text-[11px] text-right tabular-nums ${
-                      (holding.interest ?? 0) >= 0 ? "text-muted-foreground" : "text-red-300"
-                    }`}>
-                      {formatMoney(holding.interest)}
-                    </span>
-                  )}
-
-                  <span className="text-[10px] text-right tabular-nums text-muted-foreground">
-                    {(filterType === "all" ? totalValue : filteredTotal) > 0 && holding.currentValue != null
-                      ? `${(
-                          (holding.currentValue / (filterType === "all" ? totalValue : filteredTotal)) *
-                          100
-                        ).toFixed(1)}%`
-                      : "—"}
-                  </span>
-
-                  <span className="text-sm font-semibold text-right tabular-nums whitespace-nowrap">
-                    {formatMoney(holding.currentValue, true)}
-                  </span>
+                  <span>Asset</span>
+                  <span className="text-center">Type</span>
+                  {showQtyCol && <span className="text-right">Qty</span>}
+                  {showPriceCol && <span className="text-right">Price</span>}
+                  {showCostOfCapitalCol && <span className="text-right whitespace-nowrap">Cost</span>}
+                  {showInterestCol && <span className="text-right whitespace-nowrap">Interest</span>}
+                  <span className="text-right">%</span>
+                  <span className="text-right whitespace-nowrap">Total Value</span>
                 </div>
-              ))}
 
-              {filteredHoldings.length > 0 && (
-                <div
-                  className="grid gap-x-2 items-center pt-2.5 mt-0.5"
-                  style={{ gridTemplateColumns: colTemplate }}
-                >
-                  <span
-                    className="text-[10px] text-muted-foreground uppercase tracking-wider"
-                    style={{ gridColumn: `1 / ${totalColumns}` }}
+                {filteredHoldings.length === 0 && filterType !== "all" && (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No assets in this type.
+                  </p>
+                )}
+
+                {filteredHoldings.map((holding) => (
+                  <div
+                    key={holding.id}
+                    className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
+                    style={{ gridTemplateColumns: colTemplate }}
                   >
-                    {filterType === "all"
-                      ? "Portfolio Total"
-                      : `${formatTypeLabel(filterType)} Total`}
-                  </span>
-                  <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
-                    {formatMoney(filteredTotal, true)}
-                  </span>
-                </div>
-              )}
+                    <div className="overflow-hidden">
+                      <p className="text-sm font-medium truncate">{holding.symbol}</p>
+                      {!readOnly && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <ChangeChip change={holding.change} changePercent={holding.changePercent} />
+                          <>
+                            <button
+                              onClick={() => onEdit?.(holding)}
+                              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <span className="text-[10px] text-muted-foreground">·</span>
+                            <button
+                              onClick={() => onDelete?.(holding.id)}
+                              className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate block">
+                      {formatTypeShortLabel(holding.type)}
+                    </span>
+
+                    {showQtyCol && (
+                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                        {holding.quantity.toLocaleString("vi-VN")}
+                      </span>
+                    )}
+
+                    {showPriceCol && (
+                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                        {formatMoney(holding.currentPrice)}
+                      </span>
+                    )}
+
+                    {showCostOfCapitalCol && (
+                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                        {formatMoney(holding.costOfCapital)}
+                      </span>
+                    )}
+
+                    {showInterestCol && (
+                      <span className={`text-[11px] text-right tabular-nums ${
+                        (holding.interest ?? 0) >= 0 ? "text-muted-foreground" : "text-red-300"
+                      }`}>
+                        {formatMoney(holding.interest)}
+                      </span>
+                    )}
+
+                    <span className="text-[10px] text-right tabular-nums text-muted-foreground">
+                      {(filterType === "all" ? totalValue : filteredTotal) > 0 && holding.currentValue != null
+                        ? `${(
+                            (holding.currentValue / (filterType === "all" ? totalValue : filteredTotal)) *
+                            100
+                          ).toFixed(1)}%`
+                        : "—"}
+                    </span>
+
+                    <span className="text-sm font-semibold text-right tabular-nums whitespace-nowrap">
+                      {formatMoney(holding.currentValue, true)}
+                    </span>
+                  </div>
+                ))}
+
+                {filteredHoldings.length > 0 && (
+                  <div
+                    className="grid gap-x-2 items-center pt-2.5 mt-0.5"
+                    style={{ gridTemplateColumns: colTemplate }}
+                  >
+                    <span
+                      className="text-[10px] text-muted-foreground uppercase tracking-wider"
+                      style={{ gridColumn: `1 / ${totalColumns}` }}
+                    >
+                      {filterType === "all"
+                        ? "Portfolio Total"
+                        : `${formatTypeLabel(filterType)} Total`}
+                    </span>
+                    <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
+                      {formatMoney(filteredTotal, true)}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </>
