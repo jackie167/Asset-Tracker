@@ -571,14 +571,10 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
   const rows = holdings.map((holding) => {
     const symbol = holding.symbol.toUpperCase();
     const quantity = parseFloat(String(holding.quantity));
-    const storedCostOfCapital = holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null;
+    const costOfCapital = holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null;
     const manualPrice = holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null;
     const currentPrice = priceMap.get(symbol) ?? (holding.type === "gold" ? goldPrice : null) ?? manualPrice;
     const currentValue = resolveHoldingCurrentValue({ type: holding.type, quantity, currentPrice });
-    const costOfCapital =
-      holding.type === "cash" && currentValue != null
-        ? currentValue
-        : storedCostOfCapital;
     const unrealizedPnL =
       costOfCapital != null && currentValue != null ? currentValue - costOfCapital : null;
     const unrealizedPnLPercent =
@@ -587,14 +583,12 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
         : null;
 
     const xirrAnnual =
-      holding.type === "cash"
-        ? 0
-        : costOfCapital != null && costOfCapital > 0 && currentValue != null
-          ? calculateXirr([
-              { date: STOCK_RETURN_INITIAL_AT, amount: -costOfCapital },
-              { date: today, amount: currentValue },
-            ])
-          : null;
+      costOfCapital != null && costOfCapital > 0 && currentValue != null
+        ? calculateXirr([
+            { date: STOCK_RETURN_INITIAL_AT, amount: -costOfCapital },
+            { date: today, amount: currentValue },
+          ])
+        : null;
     const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
 
     return {
