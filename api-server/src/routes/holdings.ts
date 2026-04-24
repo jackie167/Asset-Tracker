@@ -37,44 +37,95 @@ function yearFraction(from: Date, to: Date): number {
 }
 
 function calculateXirr(cashFlows: Array<{ date: Date; amount: number }>): number | null {
-  const sorted = [...cashFlows].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const merged = new Map<number, number>();
+  for (const flow of cashFlows) {
+    const time = flow.date.getTime();
+    if (!Number.isFinite(time) || !Number.isFinite(flow.amount) || Math.abs(flow.amount) < 1e-9) continue;
+    merged.set(time, (merged.get(time) ?? 0) + flow.amount);
+  }
+
+  const sorted = [...merged.entries()]
+    .map(([time, amount]) => ({ date: new Date(time), amount }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
   if (!sorted.some((flow) => flow.amount < 0) || !sorted.some((flow) => flow.amount > 0)) {
     return null;
   }
 
   const startDate = sorted[0].date;
-  const npv = (rate: number) =>
-    sorted.reduce((sum, flow) => {
+  const npv = (rate: number) => {
+    if (rate <= -0.999999999) return Number.NaN;
+    return sorted.reduce((sum, flow) => {
       const years = yearFraction(startDate, flow.date);
       return sum + flow.amount / Math.pow(1 + rate, years);
     }, 0);
+  };
+  const dNpv = (rate: number) => {
+    if (rate <= -0.999999999) return Number.NaN;
+    return sorted.reduce((sum, flow) => {
+      const years = yearFraction(startDate, flow.date);
+      if (years === 0) return sum;
+      return sum - (years * flow.amount) / Math.pow(1 + rate, years + 1);
+    }, 0);
+  };
 
-  let low = -0.9999;
-  let high = 1;
-  let lowValue = npv(low);
-  let highValue = npv(high);
-
-  for (let i = 0; i < 20 && lowValue * highValue > 0; i += 1) {
-    high *= 2;
-    highValue = npv(high);
-  }
-
-  if (lowValue * highValue > 0) return null;
-
-  for (let i = 0; i < 100; i += 1) {
-    const mid = (low + high) / 2;
-    const midValue = npv(mid);
-    if (Math.abs(midValue) < 0.0001) return mid;
-    if (lowValue * midValue <= 0) {
-      high = mid;
-      highValue = midValue;
-    } else {
-      low = mid;
-      lowValue = midValue;
+  const guesses = [-0.9, -0.5, -0.2, -0.05, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10];
+  for (const guess of guesses) {
+    let rate = guess;
+    for (let i = 0; i < 100; i += 1) {
+      const value = npv(rate);
+      if (!Number.isFinite(value)) break;
+      if (Math.abs(value) < 0.0001) return rate;
+      const derivative = dNpv(rate);
+      if (!Number.isFinite(derivative) || Math.abs(derivative) < 1e-10) break;
+      const next = rate - value / derivative;
+      if (!Number.isFinite(next) || next <= -0.999999999) break;
+      if (Math.abs(next - rate) < 1e-10) return next;
+      rate = next;
     }
   }
 
-  return (low + high) / 2;
+  const brackets = [
+    [-0.9999, -0.9],
+    [-0.9, -0.5],
+    [-0.5, -0.2],
+    [-0.2, -0.05],
+    [-0.05, 0.05],
+    [0.05, 0.2],
+    [0.2, 0.5],
+    [0.5, 1],
+    [1, 2],
+    [2, 5],
+    [5, 10],
+    [10, 50],
+    [50, 200],
+  ] as const;
+
+  for (const [lowStart, highStart] of brackets) {
+    let low = lowStart;
+    let high = highStart;
+    let lowValue = npv(low);
+    let highValue = npv(high);
+    if (!Number.isFinite(lowValue) || !Number.isFinite(highValue) || lowValue * highValue > 0) continue;
+
+    for (let i = 0; i < 120; i += 1) {
+      const mid = (low + high) / 2;
+      const midValue = npv(mid);
+      if (!Number.isFinite(midValue)) break;
+      if (Math.abs(midValue) < 0.0001) return mid;
+      if (lowValue * midValue <= 0) {
+        high = mid;
+        highValue = midValue;
+      } else {
+        low = mid;
+        lowValue = midValue;
+      }
+    }
+
+    return (low + high) / 2;
+  }
+
+  return null;
 }
 
 function deriveCashPrincipalFromCurrentValue(currentValue: number, asOf: Date): number | null {
@@ -292,8 +343,9 @@ router.get("/portfolio/xirr", async (_req, res): Promise<void> => {
     getPortfolioCurrentValueSnapshot(),
   ]);
 
+  const asOf = new Date();
   const cashFlows = transactions
-    .filter((transaction) => transaction.status === "applied")
+    .filter((transaction) => transaction.status === "applied" && transaction.executedAt <= asOf)
     .map((transaction) => ({
       date: transaction.executedAt,
       amount: transaction.side === "buy"
@@ -301,7 +353,6 @@ router.get("/portfolio/xirr", async (_req, res): Promise<void> => {
         : parseFloat(String(transaction.totalValue)),
     }));
 
-  const asOf = new Date();
   if (portfolioSnapshot.totalValue > 0) {
     cashFlows.push({ date: asOf, amount: portfolioSnapshot.totalValue });
   }
@@ -313,6 +364,8 @@ router.get("/portfolio/xirr", async (_req, res): Promise<void> => {
     asOf,
     currentValue: portfolioSnapshot.totalValue,
     transactionCount: cashFlows.length > 0 ? cashFlows.length - 1 : 0,
+    hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
+    hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
     xirrAnnual,
     xirrMonthly,
     cashFlows,
