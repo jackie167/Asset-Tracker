@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, holdingsTable } from "../../../lib/db/src/index.ts";
+import { db, holdingsTable, transactionsTable } from "../../../lib/db/src/index.ts";
 import {
   ListHoldingsResponse,
   CreateHoldingBody,
@@ -89,6 +89,77 @@ function latestPriceMap(latestPrices: Awaited<ReturnType<typeof getLatestPrices>
     priceMap.set(price.symbol.toUpperCase(), parseFloat(String(price.price)));
   }
   return priceMap;
+}
+
+async function getPortfolioCurrentValueSnapshot() {
+  const [holdings, latestPrices] = await Promise.all([
+    db.select().from(holdingsTable).orderBy(holdingsTable.createdAt),
+    getLatestPrices(),
+  ]);
+
+  const priceMap = new Map<string, { price: number; change: number | null; changePercent: number | null }>();
+  for (const p of latestPrices) {
+    priceMap.set(p.symbol.toUpperCase(), {
+      price: parseFloat(String(p.price)),
+      change: p.change != null ? parseFloat(String(p.change)) : null,
+      changePercent: p.changePercent != null ? parseFloat(String(p.changePercent)) : null,
+    });
+  }
+  const goldBenchmark = latestPrices.find((price) => price.type === "gold");
+
+  let stockValue = 0;
+  let goldValue = 0;
+  let otherValue = 0;
+  let lastUpdatedDate: Date | null = null;
+
+  if (latestPrices.length > 0) {
+    lastUpdatedDate = latestPrices.reduce((max, p) =>
+      p.fetchedAt > max ? p.fetchedAt : max, latestPrices[0].fetchedAt
+    );
+  }
+
+  const holdingsWithValue = holdings.map((h) => {
+    const qty = parseFloat(String(h.quantity));
+    const sym = h.symbol.toUpperCase();
+    const priceData = priceMap.get(sym) ?? (h.type === "gold" && goldBenchmark
+      ? {
+          price: parseFloat(String(goldBenchmark.price)),
+          change: goldBenchmark.change != null ? parseFloat(String(goldBenchmark.change)) : null,
+          changePercent: goldBenchmark.changePercent != null ? parseFloat(String(goldBenchmark.changePercent)) : null,
+        }
+      : undefined);
+    const manualUnitPrice = h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null;
+    const currentPrice = priceData?.price ?? manualUnitPrice;
+    const currentValue = resolveHoldingCurrentValue({ type: h.type, quantity: qty, currentPrice });
+
+    if (currentValue != null) {
+      if (h.type === "stock") stockValue += currentValue;
+      else if (h.type === "gold") goldValue += currentValue;
+      else otherValue += currentValue;
+    }
+
+    return {
+      id: h.id,
+      type: h.type,
+      symbol: h.symbol,
+      quantity: qty,
+      currentPrice,
+      currentValue,
+      change: priceData?.change ?? null,
+      changePercent: priceData?.changePercent ?? null,
+      manualPrice: manualUnitPrice,
+      costOfCapital: h.costOfCapital != null ? parseFloat(String(h.costOfCapital)) : null,
+      interest: h.interest != null ? parseFloat(String(h.interest)) : null,
+    };
+  });
+
+  return {
+    totalValue: stockValue + goldValue + otherValue,
+    stockValue,
+    goldValue,
+    lastUpdatedDate,
+    holdingsWithValue,
+  };
 }
 
 router.get("/holdings", async (_req, res): Promise<void> => {
@@ -202,76 +273,50 @@ router.delete("/holdings/:id", async (req, res): Promise<void> => {
 });
 
 router.get("/portfolio/summary", async (_req, res): Promise<void> => {
-  const [holdings, latestPrices] = await Promise.all([
-    db.select().from(holdingsTable).orderBy(holdingsTable.createdAt),
-    getLatestPrices(),
-  ]);
-
-  const priceMap = new Map<string, { price: number; change: number | null; changePercent: number | null }>();
-  for (const p of latestPrices) {
-    priceMap.set(p.symbol.toUpperCase(), {
-      price: parseFloat(String(p.price)),
-      change: p.change != null ? parseFloat(String(p.change)) : null,
-      changePercent: p.changePercent != null ? parseFloat(String(p.changePercent)) : null,
-    });
-  }
-  const goldBenchmark = latestPrices.find((price) => price.type === "gold");
-
-  let stockValue = 0;
-  let goldValue = 0;
-  let otherValue = 0;
-  let lastUpdatedDate: Date | null = null;
-
-  if (latestPrices.length > 0) {
-    lastUpdatedDate = latestPrices.reduce((max, p) =>
-      p.fetchedAt > max ? p.fetchedAt : max, latestPrices[0].fetchedAt
-    );
-  }
-
-  const holdingsWithValue = holdings.map((h) => {
-    const qty = parseFloat(String(h.quantity));
-    const sym = h.symbol.toUpperCase();
-    const priceData = priceMap.get(sym) ?? (h.type === "gold" && goldBenchmark
-      ? {
-          price: parseFloat(String(goldBenchmark.price)),
-          change: goldBenchmark.change != null ? parseFloat(String(goldBenchmark.change)) : null,
-          changePercent: goldBenchmark.changePercent != null ? parseFloat(String(goldBenchmark.changePercent)) : null,
-        }
-      : undefined);
-    const manualUnitPrice = h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null;
-    const currentPrice = priceData?.price ?? manualUnitPrice;
-    const currentValue = resolveHoldingCurrentValue({ type: h.type, quantity: qty, currentPrice });
-
-    if (currentValue != null) {
-      if (h.type === "stock") stockValue += currentValue;
-      else if (h.type === "gold") goldValue += currentValue;
-      else otherValue += currentValue;
-    }
-
-    return {
-      id: h.id,
-      type: h.type,
-      symbol: h.symbol,
-      quantity: qty,
-      currentPrice,
-      currentValue,
-      change: priceData?.change ?? null,
-      changePercent: priceData?.changePercent ?? null,
-      manualPrice: manualUnitPrice,
-      costOfCapital: h.costOfCapital != null ? parseFloat(String(h.costOfCapital)) : null,
-      interest: h.interest != null ? parseFloat(String(h.interest)) : null,
-    };
-  });
+  const { totalValue, stockValue, goldValue, lastUpdatedDate, holdingsWithValue } = await getPortfolioCurrentValueSnapshot();
 
   res.json(
     GetPortfolioSummaryResponse.parse({
-      totalValue: stockValue + goldValue + otherValue,
+      totalValue,
       stockValue,
       goldValue,
       lastUpdated: lastUpdatedDate,
       holdings: holdingsWithValue,
     })
   );
+});
+
+router.get("/portfolio/xirr", async (_req, res): Promise<void> => {
+  const [transactions, portfolioSnapshot] = await Promise.all([
+    db.select().from(transactionsTable).orderBy(transactionsTable.executedAt),
+    getPortfolioCurrentValueSnapshot(),
+  ]);
+
+  const cashFlows = transactions
+    .filter((transaction) => transaction.status === "applied")
+    .map((transaction) => ({
+      date: transaction.executedAt,
+      amount: transaction.side === "buy"
+        ? -parseFloat(String(transaction.totalValue))
+        : parseFloat(String(transaction.totalValue)),
+    }));
+
+  const asOf = new Date();
+  if (portfolioSnapshot.totalValue > 0) {
+    cashFlows.push({ date: asOf, amount: portfolioSnapshot.totalValue });
+  }
+
+  const xirrAnnual = calculateXirr(cashFlows);
+  const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
+
+  res.json({
+    asOf,
+    currentValue: portfolioSnapshot.totalValue,
+    transactionCount: cashFlows.length > 0 ? cashFlows.length - 1 : 0,
+    xirrAnnual,
+    xirrMonthly,
+    cashFlows,
+  });
 });
 
 router.get("/portfolio/returns/stock/:symbol", async (req, res): Promise<void> => {

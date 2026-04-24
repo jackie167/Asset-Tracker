@@ -20,15 +20,6 @@ import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTab
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
-function calculateXirrFromSummary(costOfCapital: number, currentValue: number) {
-  if (!(costOfCapital > 0) || !(currentValue > 0)) return null;
-
-  const years = (new Date().getTime() - new Date("2026-01-01T00:00:00.000Z").getTime()) / (365 * 24 * 60 * 60 * 1000);
-  if (!(years > 0)) return null;
-
-  return Math.pow(currentValue / costOfCapital, 1 / years) - 1;
-}
-
 function formatPercent(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—";
   return `${(value * 100).toFixed(2)}%`;
@@ -47,6 +38,16 @@ async function fetchPortfolioReturns(): Promise<ProfitLossRow[]> {
   return data as ProfitLossRow[];
 }
 
+async function fetchPortfolioXirr(): Promise<{ xirrAnnual: number | null; xirrMonthly: number | null }> {
+  const res = await fetch("/api/portfolio/xirr");
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status} ${res.statusText}`);
+  return {
+    xirrAnnual: typeof data?.xirrAnnual === "number" ? data.xirrAnnual : null,
+    xirrMonthly: typeof data?.xirrMonthly === "number" ? data.xirrMonthly : null,
+  };
+}
+
 export default function AssetsPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -60,6 +61,10 @@ export default function AssetsPage() {
   const portfolioReturnsQuery = useQuery({
     queryKey: ["portfolio-returns"],
     queryFn: fetchPortfolioReturns,
+  });
+  const portfolioXirrQuery = useQuery({
+    queryKey: ["portfolio-xirr"],
+    queryFn: fetchPortfolioXirr,
   });
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState<boolean>(
@@ -90,6 +95,7 @@ export default function AssetsPage() {
     queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
     queryClient.invalidateQueries({ queryKey: ["portfolio-returns"] });
+    queryClient.invalidateQueries({ queryKey: ["portfolio-xirr"] });
   };
 
   const tradeBodyToRequest = (body: {
@@ -259,16 +265,14 @@ export default function AssetsPage() {
     const totalCurrent = rows.reduce((sum, row) => sum + (row.currentValue ?? 0), 0);
     const totalPnL = totalCurrent - totalCapital;
     const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
-    const xirrAnnual = totalCapital > 0 && totalCurrent > 0 ? calculateXirrFromSummary(totalCapital, totalCurrent) : null;
-    const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
 
     return {
       totalPnL,
       totalPnLPercent,
-      xirrAnnual,
-      xirrMonthly,
+      xirrAnnual: portfolioXirrQuery.data?.xirrAnnual ?? null,
+      xirrMonthly: portfolioXirrQuery.data?.xirrMonthly ?? null,
     };
-  }, [portfolioReturnsQuery.data]);
+  }, [portfolioReturnsQuery.data, portfolioXirrQuery.data]);
 
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);

@@ -217,6 +217,7 @@ export default function ExcelPage() {
         queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: ["transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["portfolio-returns"] }),
+        queryClient.invalidateQueries({ queryKey: ["portfolio-xirr"] }),
       ]);
       const warning = typeof data?.warning === "string" && data.warning ? ` Warning: ${data.warning}` : "";
       const clearedCount =
