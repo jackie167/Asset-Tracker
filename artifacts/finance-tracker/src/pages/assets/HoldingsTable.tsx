@@ -112,6 +112,10 @@ export default function HoldingsTable({
 }: HoldingsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("currentValue");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const filteredPnLTotal = filteredHoldings.reduce(
+    (sum, holding) => sum + ((holding.currentValue ?? 0) - (holding.costOfCapital ?? 0)),
+    0
+  );
 
   const sortedFilteredHoldings = useMemo(() => {
     const denominator = filterType === "all" ? totalValue : filteredTotal;
@@ -458,7 +462,9 @@ export default function HoldingsTable({
                         : `${formatTypeLabel(filterType)} Total`}
                     </span>
                     <span />
-                    <span />
+                    <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-muted-foreground">
+                      {filteredHoldings.length > 0 ? "100.0%" : "—"}
+                    </span>
                     <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
                       {formatMoney(filteredTotal, true)}
                     </span>
@@ -469,7 +475,13 @@ export default function HoldingsTable({
                         {formatMoney(filteredCostTotal, true)}
                       </span>
                     )}
-                    {showReturnCols && <span />}
+                    {showReturnCols && (
+                      <span className={`text-sm font-bold text-right tabular-nums whitespace-nowrap ${
+                        filteredPnLTotal >= 0 ? "text-emerald-400" : "text-red-300"
+                      }`}>
+                        {formatVNDFull(filteredPnLTotal)}
+                      </span>
+                    )}
                     {showReturnCols && <span />}
                     {showReturnCols && <span />}
                     {showReturnCols && <span />}
