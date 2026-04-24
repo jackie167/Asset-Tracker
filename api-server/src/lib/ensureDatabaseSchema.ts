@@ -31,4 +31,17 @@ export async function ensureDatabaseSchema() {
     ALTER TABLE transactions
       ADD COLUMN IF NOT EXISTS origin text NOT NULL DEFAULT 'manual'
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS portfolio_cash_flows (
+      id serial PRIMARY KEY,
+      kind text NOT NULL DEFAULT 'contribution',
+      amount numeric(18, 2) NOT NULL,
+      note text,
+      source text NOT NULL DEFAULT 'manual',
+      occurred_at timestamptz NOT NULL DEFAULT now(),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
 }

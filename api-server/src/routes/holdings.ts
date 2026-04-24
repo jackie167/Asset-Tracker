@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, holdingsTable, transactionsTable } from "../../../lib/db/src/index.ts";
+import { z } from "zod/v4";
+import { db, holdingsTable, portfolioCashFlowsTable } from "../../../lib/db/src/index.ts";
 import {
   ListHoldingsResponse,
   CreateHoldingBody,
@@ -213,6 +214,13 @@ async function getPortfolioCurrentValueSnapshot() {
   };
 }
 
+const CreatePortfolioCashFlowBody = z.object({
+  kind: z.enum(["contribution", "withdrawal"]),
+  amount: z.coerce.number().positive(),
+  note: z.string().trim().optional().nullable(),
+  occurredAt: z.coerce.date().optional(),
+});
+
 router.get("/holdings", async (_req, res): Promise<void> => {
   const holdings = await db.select().from(holdingsTable).orderBy(holdingsTable.createdAt);
   res.json(
@@ -338,19 +346,19 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
 });
 
 router.get("/portfolio/xirr", async (_req, res): Promise<void> => {
-  const [transactions, portfolioSnapshot] = await Promise.all([
-    db.select().from(transactionsTable).orderBy(transactionsTable.executedAt),
+  const [cashFlowsFromDb, portfolioSnapshot] = await Promise.all([
+    db.select().from(portfolioCashFlowsTable).orderBy(portfolioCashFlowsTable.occurredAt),
     getPortfolioCurrentValueSnapshot(),
   ]);
 
   const asOf = new Date();
-  const cashFlows = transactions
-    .filter((transaction) => transaction.status === "applied" && transaction.executedAt <= asOf)
-    .map((transaction) => ({
-      date: transaction.executedAt,
-      amount: transaction.side === "buy"
-        ? -parseFloat(String(transaction.totalValue))
-        : parseFloat(String(transaction.totalValue)),
+  const cashFlows = cashFlowsFromDb
+    .filter((flow) => flow.occurredAt <= asOf)
+    .map((flow) => ({
+      date: flow.occurredAt,
+      amount: flow.kind === "contribution"
+        ? -parseFloat(String(flow.amount))
+        : parseFloat(String(flow.amount)),
     }));
 
   if (portfolioSnapshot.totalValue > 0) {
@@ -363,12 +371,60 @@ router.get("/portfolio/xirr", async (_req, res): Promise<void> => {
   res.json({
     asOf,
     currentValue: portfolioSnapshot.totalValue,
-    transactionCount: cashFlows.length > 0 ? cashFlows.length - 1 : 0,
+    cashFlowCount: cashFlows.length > 0 ? cashFlows.length - 1 : 0,
     hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
     hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
+    mode: "external_cash_flows_only",
+    reason: cashFlowsFromDb.length === 0
+      ? "Portfolio XIRR needs contribution/withdrawal cash flows. Internal asset trades are not used."
+      : null,
     xirrAnnual,
     xirrMonthly,
     cashFlows,
+  });
+});
+
+router.get("/portfolio/cash-flows", async (_req, res): Promise<void> => {
+  const rows = await db.select().from(portfolioCashFlowsTable).orderBy(portfolioCashFlowsTable.occurredAt);
+  res.json(rows.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    amount: parseFloat(String(row.amount)),
+    note: row.note,
+    source: row.source,
+    occurredAt: row.occurredAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  })));
+});
+
+router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
+  const parsed = CreatePortfolioCashFlowBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [created] = await db
+    .insert(portfolioCashFlowsTable)
+    .values({
+      kind: parsed.data.kind,
+      amount: String(parsed.data.amount),
+      note: parsed.data.note || null,
+      source: "manual",
+      occurredAt: parsed.data.occurredAt ?? new Date(),
+    })
+    .returning();
+
+  res.status(201).json({
+    id: created.id,
+    kind: created.kind,
+    amount: parseFloat(String(created.amount)),
+    note: created.note,
+    source: created.source,
+    occurredAt: created.occurredAt,
+    createdAt: created.createdAt,
+    updatedAt: created.updatedAt,
   });
 });
 
