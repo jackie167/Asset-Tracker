@@ -206,6 +206,14 @@ interface SJCApiResponse {
   }>;
 }
 
+function normalizeSjcGoldPrice(raw: number): number | null {
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  if (raw >= 50_000_000 && raw <= 500_000_000) return raw;
+  if (raw >= 50_000 && raw <= 500_000) return raw * 1_000;
+  if (raw >= 50 && raw <= 500) return raw * 1_000_000;
+  return null;
+}
+
 /**
  * Fetch gold price from SJC's official JSON API.
  * Primary: https://sjc.com.vn/GoldPrice/Services/PriceService.ashx
@@ -245,9 +253,9 @@ async function fetchGoldPriceSJC(): Promise<PriceData[]> {
       (d.TypeName.toLowerCase().includes("sjc") && d.TypeName.toLowerCase().includes("lượng"))
     ) ?? json.data[0];
 
-    const buyPrice = luong1Entry.BuyValue;
+    const buyPrice = normalizeSjcGoldPrice(luong1Entry.BuyValue);
     if (!buyPrice || buyPrice <= 0) {
-      console.error(`[PriceFetcher] SJC API: invalid BuyValue for ${luong1Entry.TypeName}: ${buyPrice}`);
+      console.error(`[PriceFetcher] SJC API: invalid BuyValue for ${luong1Entry.TypeName}: ${luong1Entry.BuyValue}`);
       return await fetchGoldPriceSJCHtmlFallback();
     }
 
@@ -318,16 +326,15 @@ async function fetchGoldPriceSJCHtmlFallback(): Promise<PriceData[]> {
       const rowText = $(row).text().toLowerCase();
       if (
         rowText.includes("1l") ||
+        rowText.includes("1 lượng") ||
         rowText.includes("10l") ||
         rowText.includes("1kg") ||
         (rowText.includes("sjc") && rowText.includes("miếng"))
       ) {
         const buyCell = $(cells[1]).text().replace(/[^0-9]/g, "");
         const num = parseInt(buyCell, 10);
-        if (!isNaN(num) && num > 50_000 && num < 300_000) {
-          buyPrice = num * 1_000_000;
-        } else if (!isNaN(num) && num > 50_000_000) {
-          buyPrice = num;
+        if (!isNaN(num)) {
+          buyPrice = normalizeSjcGoldPrice(num);
         }
       }
     });
