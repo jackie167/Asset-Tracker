@@ -13,7 +13,6 @@ import AllocationChart from "@/pages/assets/AllocationChart";
 import AssetsHeader from "@/pages/assets/AssetsHeader";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
 import PerformanceChart from "@/pages/assets/PerformanceChart";
-import ProfitLossTable, { type ProfitLossRow } from "@/pages/assets/ProfitLossTable";
 import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
 import TradeDialog from "@/pages/assets/TradeDialog";
 import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTable";
@@ -29,13 +28,6 @@ async function fetchTradeOrders(): Promise<TradeOrder[]> {
   const res = await fetch("/api/transactions");
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   return res.json();
-}
-
-async function fetchPortfolioReturns(): Promise<ProfitLossRow[]> {
-  const res = await fetch("/api/portfolio/returns");
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status} ${res.statusText}`);
-  return data as ProfitLossRow[];
 }
 
 async function fetchPortfolioXirr(): Promise<{ xirrAnnual: number | null; xirrMonthly: number | null }> {
@@ -58,10 +50,6 @@ export default function AssetsPage() {
     queryKey: ["transactions"],
     queryFn: fetchTradeOrders,
   });
-  const portfolioReturnsQuery = useQuery({
-    queryKey: ["portfolio-returns"],
-    queryFn: fetchPortfolioReturns,
-  });
   const portfolioXirrQuery = useQuery({
     queryKey: ["portfolio-xirr"],
     queryFn: fetchPortfolioXirr,
@@ -77,12 +65,6 @@ export default function AssetsPage() {
   const [showCostOfCapitalCol, setShowCostOfCapitalCol] = useState<boolean>(
     () => localStorage.getItem("col_cost_of_capital") !== "0"
   );
-  const [showInterestCol, setShowInterestCol] = useState<boolean>(
-    () => localStorage.getItem("col_interest") !== "0"
-  );
-  const [profitLossCollapsed, setProfitLossCollapsed] = useState<boolean>(
-    () => localStorage.getItem("profit_loss_collapsed") === "1"
-  );
   const [tradeOrdersCollapsed, setTradeOrdersCollapsed] = useState<boolean>(
     () => localStorage.getItem("trade_orders_collapsed") === "1"
   );
@@ -94,7 +76,6 @@ export default function AssetsPage() {
     queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
-    queryClient.invalidateQueries({ queryKey: ["portfolio-returns"] });
     queryClient.invalidateQueries({ queryKey: ["portfolio-xirr"] });
   };
 
@@ -260,9 +241,8 @@ export default function AssetsPage() {
   );
 
   const portfolioReturnSummary = useMemo(() => {
-    const rows = portfolioReturnsQuery.data ?? [];
-    const totalCapital = rows.reduce((sum, row) => sum + (row.costOfCapital ?? 0), 0);
-    const totalCurrent = rows.reduce((sum, row) => sum + (row.currentValue ?? 0), 0);
+    const totalCapital = holdings.reduce((sum, holding) => sum + (holding.costOfCapital ?? 0), 0);
+    const totalCurrent = holdings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
     const totalPnL = totalCurrent - totalCapital;
     const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
 
@@ -272,7 +252,7 @@ export default function AssetsPage() {
       xirrAnnual: portfolioXirrQuery.data?.xirrAnnual ?? null,
       xirrMonthly: portfolioXirrQuery.data?.xirrMonthly ?? null,
     };
-  }, [portfolioReturnsQuery.data, portfolioXirrQuery.data]);
+  }, [holdings, portfolioXirrQuery.data]);
 
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
@@ -294,7 +274,7 @@ export default function AssetsPage() {
   const handleExportCSV = () => {
     if (!holdings.length) return;
     const formatNumber = (value: number) => value.toLocaleString("vi-VN");
-    const header = ["symbol", "type", "quantity", "current_price", "total_value", "cost_of_capital", "interest"];
+    const header = ["symbol", "type", "quantity", "current_price", "total_value", "cost_of_capital"];
     const rows = holdings.map((holding) => [
       holding.symbol,
       holding.type,
@@ -302,7 +282,6 @@ export default function AssetsPage() {
       holding.currentPrice != null ? formatNumber(holding.currentPrice) : "",
       holding.currentValue != null ? formatNumber(Math.round(holding.currentValue)) : "",
       holding.costOfCapital != null ? formatNumber(Math.round(holding.costOfCapital)) : "",
-      holding.interest != null ? formatNumber(Math.round(holding.interest)) : "",
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
@@ -345,18 +324,6 @@ export default function AssetsPage() {
     const value = !showCostOfCapitalCol;
     setShowCostOfCapitalCol(value);
     localStorage.setItem("col_cost_of_capital", value ? "1" : "0");
-  };
-
-  const toggleInterestCol = () => {
-    const value = !showInterestCol;
-    setShowInterestCol(value);
-    localStorage.setItem("col_interest", value ? "1" : "0");
-  };
-
-  const toggleProfitLossCollapsed = () => {
-    const value = !profitLossCollapsed;
-    setProfitLossCollapsed(value);
-    localStorage.setItem("profit_loss_collapsed", value ? "1" : "0");
   };
 
   const toggleTradeOrdersCollapsed = () => {
@@ -461,25 +428,14 @@ export default function AssetsPage() {
               showQtyCol={showQtyCol}
               showPriceCol={showPriceCol}
               showCostOfCapitalCol={showCostOfCapitalCol}
-              showInterestCol={showInterestCol}
               formatMoney={formatMoney}
               onToggleHoldingsCollapsed={toggleHoldingsCollapsed}
               onToggleQtyCol={toggleQtyCol}
               onTogglePriceCol={togglePriceCol}
               onToggleCostOfCapitalCol={toggleCostOfCapitalCol}
-              onToggleInterestCol={toggleInterestCol}
               onFilterTypeChange={setFilterType}
               onCycleSortOrder={cycleSortOrder}
               readOnly
-            />
-
-            <ProfitLossTable
-              rows={portfolioReturnsQuery.data ?? []}
-              isLoading={portfolioReturnsQuery.isLoading}
-              error={portfolioReturnsQuery.error}
-              hideValues={hideValues}
-              collapsed={profitLossCollapsed}
-              onToggleCollapsed={toggleProfitLossCollapsed}
             />
 
             <TradeOrdersTable

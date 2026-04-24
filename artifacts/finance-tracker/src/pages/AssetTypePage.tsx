@@ -29,9 +29,6 @@ export default function AssetTypePage() {
   const [showCostOfCapitalCol, setShowCostOfCapitalCol] = useState<boolean>(
     () => localStorage.getItem("col_cost_of_capital") !== "0"
   );
-  const [showInterestCol, setShowInterestCol] = useState<boolean>(
-    () => localStorage.getItem("col_interest") !== "0"
-  );
 
   const normalizedType = (params?.type ?? "").toLowerCase();
   const holdings: HoldingItem[] = (summary?.holdings ?? holdingsFromApi) as HoldingItem[];
@@ -125,12 +122,6 @@ export default function AssetTypePage() {
     localStorage.setItem("col_cost_of_capital", value ? "1" : "0");
   };
 
-  const toggleInterestCol = () => {
-    const value = !showInterestCol;
-    setShowInterestCol(value);
-    localStorage.setItem("col_interest", value ? "1" : "0");
-  };
-
   const handleRefresh = () => {
     refreshPrices.mutate();
   };
@@ -138,7 +129,7 @@ export default function AssetTypePage() {
   const handleExportCSV = () => {
     if (!typeHoldings.length) return;
     const formatNumber = (value: number) => value.toLocaleString("vi-VN");
-    const header = ["symbol", "type", "quantity", "current_price", "total_value", "cost_of_capital", "interest"];
+    const header = ["symbol", "type", "quantity", "current_price", "total_value", "cost_of_capital"];
     const rows = typeHoldings.map((holding) => [
       holding.symbol,
       holding.type,
@@ -146,7 +137,6 @@ export default function AssetTypePage() {
       holding.currentPrice != null ? formatNumber(holding.currentPrice) : "",
       holding.currentValue != null ? formatNumber(Math.round(holding.currentValue)) : "",
       holding.costOfCapital != null ? formatNumber(Math.round(holding.costOfCapital)) : "",
-      holding.interest != null ? formatNumber(Math.round(holding.interest)) : "",
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
@@ -262,13 +252,11 @@ export default function AssetTypePage() {
               showQtyCol={showQtyCol}
               showPriceCol={showPriceCol}
               showCostOfCapitalCol={showCostOfCapitalCol}
-              showInterestCol={showInterestCol}
               formatMoney={formatMoney}
               onToggleHoldingsCollapsed={toggleHoldingsCollapsed}
               onToggleQtyCol={toggleQtyCol}
               onTogglePriceCol={togglePriceCol}
               onToggleCostOfCapitalCol={toggleCostOfCapitalCol}
-              onToggleInterestCol={toggleInterestCol}
               onFilterTypeChange={() => {}}
               onCycleSortOrder={cycleSortOrder}
               readOnly
