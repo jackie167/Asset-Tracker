@@ -85,6 +85,7 @@ export default function HoldingsTable({
   onDelete,
   readOnly = false,
 }: HoldingsTableProps) {
+  const filteredCostTotal = filteredHoldings.reduce((sum, holding) => sum + (holding.costOfCapital ?? 0), 0);
   const colTemplate = [
     "minmax(96px, 1.45fr)",
     "minmax(52px, 0.85fr)",
@@ -284,13 +285,13 @@ export default function HoldingsTable({
 
                     {showPriceCol && (
                       <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                        {formatMoney(holding.currentPrice)}
+                        {formatMoney(holding.currentPrice, true)}
                       </span>
                     )}
 
                     {showCostOfCapitalCol && (
                       <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                        {formatMoney(holding.costOfCapital)}
+                        {formatMoney(holding.costOfCapital, true)}
                       </span>
                     )}
 
@@ -314,14 +315,20 @@ export default function HoldingsTable({
                     className="grid gap-x-2 items-center pt-2.5 mt-0.5"
                     style={{ gridTemplateColumns: colTemplate }}
                   >
-                    <span
-                      className="text-[10px] text-muted-foreground uppercase tracking-wider"
-                      style={{ gridColumn: `1 / ${totalColumns}` }}
-                    >
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
                       {filterType === "all"
                         ? "Portfolio Total"
                         : `${formatTypeLabel(filterType)} Total`}
                     </span>
+                    <span />
+                    {showQtyCol && <span />}
+                    {showPriceCol && <span />}
+                    {showCostOfCapitalCol && (
+                      <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-muted-foreground">
+                        {formatMoney(filteredCostTotal, true)}
+                      </span>
+                    )}
+                    <span />
                     <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
                       {formatMoney(filteredTotal, true)}
                     </span>
