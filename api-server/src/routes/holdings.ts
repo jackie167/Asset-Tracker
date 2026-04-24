@@ -15,6 +15,16 @@ import { getLatestPrices } from "../lib/priceFetcher.js";
 const router: IRouter = Router();
 const STOCK_RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
 
+function usesManualPortfolioValue(type: string): boolean {
+  const normalized = type.trim().toLowerCase();
+  return normalized !== "stock" && normalized !== "gold" && normalized !== "crypto";
+}
+
+function resolveHoldingCurrentValue(input: { type: string; quantity: number; currentPrice: number | null }): number | null {
+  if (input.currentPrice == null) return null;
+  return usesManualPortfolioValue(input.type) ? input.currentPrice : input.quantity * input.currentPrice;
+}
+
 function rejectManualPortfolioWrite(res: { status: (code: number) => { json: (body: unknown) => void } }): void {
   res.status(403).json({
     error: "Danh muc Tai san dang dong bo tu Investment sheet. Hay cap nhat Excel roi bam Sync.",
@@ -223,7 +233,7 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
       : undefined);
     const manualUnitPrice = h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null;
     const currentPrice = priceData?.price ?? manualUnitPrice;
-    const currentValue = currentPrice != null ? qty * currentPrice : null;
+    const currentValue = resolveHoldingCurrentValue({ type: h.type, quantity: qty, currentPrice });
 
     if (currentValue != null) {
       if (h.type === "stock") stockValue += currentValue;
@@ -332,7 +342,7 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
     const costOfCapital = holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null;
     const manualPrice = holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null;
     const currentPrice = priceMap.get(symbol) ?? (holding.type === "gold" ? goldPrice : null) ?? manualPrice;
-    const currentValue = currentPrice != null ? quantity * currentPrice : null;
+    const currentValue = resolveHoldingCurrentValue({ type: holding.type, quantity, currentPrice });
     const unrealizedPnL =
       costOfCapital != null && currentValue != null ? currentValue - costOfCapital : null;
     const unrealizedPnLPercent =

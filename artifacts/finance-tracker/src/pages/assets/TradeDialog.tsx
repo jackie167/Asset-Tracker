@@ -37,6 +37,11 @@ function formatDateInputValue(value: Date | string) {
   return date.toISOString().slice(0, 10);
 }
 
+function usesManualPortfolioValue(type: string) {
+  const normalized = type.trim().toLowerCase();
+  return normalized !== "stock" && normalized !== "gold" && normalized !== "crypto";
+}
+
 export default function TradeDialog({ open, holdings, editingOrder, isSaving, onClose, onSubmit }: TradeDialogProps) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [assetType, setAssetType] = useState("stock");
@@ -45,6 +50,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
   const [totalValue, setTotalValue] = useState("");
   const [executedAt, setExecutedAt] = useState(formatDateInputValue(new Date()));
   const [note, setNote] = useState("");
+  const isManualAssetType = usesManualPortfolioValue(assetType);
 
   const assetTypes = useMemo(
     () => {
@@ -71,7 +77,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
       const existingHolding = holdings.find((holding) => holding.symbol.toUpperCase() === editingOrder.symbol.toUpperCase());
       setAssetType(existingHolding?.type.toLowerCase() ?? editingOrder.assetType);
       setSymbol(editingOrder.symbol);
-      setQuantity(String(editingOrder.quantity));
+      setQuantity(usesManualPortfolioValue(existingHolding?.type.toLowerCase() ?? editingOrder.assetType) ? "" : String(editingOrder.quantity));
       setTotalValue(String(editingOrder.totalValue));
       setExecutedAt(formatDateInputValue(editingOrder.executedAt));
       setNote(editingOrder.note ?? "");
@@ -91,7 +97,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
     const parsedQuantity = Number(quantity);
     const parsedTotalValue = Number(totalValue);
     if (!symbol.trim() || !assetType.trim()) return;
-    if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) return;
+    if (!isManualAssetType && (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0)) return;
     if (!Number.isFinite(parsedTotalValue) || parsedTotalValue <= 0) return;
 
     onSubmit({
@@ -99,7 +105,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
       fundingSource: "CASH",
       assetType: assetType.trim(),
       symbol: symbol.trim(),
-      quantity: parsedQuantity,
+      quantity: isManualAssetType ? 1 : parsedQuantity,
       totalValue: parsedTotalValue,
       note: note.trim() || undefined,
       executedAt,
@@ -175,13 +181,19 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Quantity</label>
               <Input
-                value={quantity}
+                value={isManualAssetType ? "" : quantity}
                 onChange={(event) => setQuantity(event.target.value)}
                 type="number"
                 min="0"
                 step="any"
-                placeholder="0"
+                placeholder={isManualAssetType ? "Auto for manual asset" : "0"}
+                disabled={isManualAssetType}
               />
+              {isManualAssetType && (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Manual-price assets use total value directly. Quantity is auto-managed.
+                </p>
+              )}
             </div>
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Total Value</label>

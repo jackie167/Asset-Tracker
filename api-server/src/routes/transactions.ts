@@ -10,7 +10,7 @@ const CreateTransactionBody = z.object({
   fundingSource: z.string().trim().min(1),
   assetType: z.string().trim().min(1),
   symbol: z.string().trim().min(1),
-  quantity: z.coerce.number().positive(),
+  quantity: z.coerce.number().positive().optional(),
   totalValue: z.coerce.number().positive(),
   note: z.string().trim().optional().nullable(),
   executedAt: z.coerce.date().optional(),
@@ -55,6 +55,18 @@ function toNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function usesManualPortfolioValue(assetType: string): boolean {
+  const normalized = assetType.trim().toLowerCase();
+  return normalized !== "stock" && normalized !== "gold" && normalized !== "crypto";
+}
+
+function normalizeTradeQuantity(input: { assetType: string; quantity?: number }): number {
+  if (usesManualPortfolioValue(input.assetType)) {
+    return 1;
+  }
+  return input.quantity ?? 0;
+}
+
 async function getHoldingBySymbol(tx: any, symbol: string) {
   const [holding] = await tx
     .select()
@@ -90,15 +102,23 @@ async function adjustCash(tx: any, delta: number) {
     .where(eq(holdingsTable.id, cash.id));
 }
 
-async function increaseAsset(tx: any, input: { symbol: string; assetType: string; quantity: number; costIncrease: number; interestDelta?: number }) {
+async function increaseAsset(tx: any, input: {
+  symbol: string;
+  assetType: string;
+  quantity: number;
+  costIncrease: number;
+  valueIncrease?: number;
+  interestDelta?: number;
+}) {
   const symbol = input.symbol.toUpperCase();
+  const usesManualValue = usesManualPortfolioValue(input.assetType);
   const holding = await getHoldingBySymbol(tx, input.symbol);
   if (!holding) {
     await tx.insert(holdingsTable).values({
       type: input.assetType,
       symbol,
-      quantity: String(input.quantity),
-      manualPrice: null,
+      quantity: String(usesManualValue ? 1 : input.quantity),
+      manualPrice: usesManualValue ? String(input.valueIncrease ?? input.costIncrease) : null,
       costOfCapital: String(input.costIncrease),
       interest: input.interestDelta ? String(input.interestDelta) : null,
     });
@@ -106,11 +126,16 @@ async function increaseAsset(tx: any, input: { symbol: string; assetType: string
   }
 
   const shouldRepairCashType = holding.type === "cash" && symbol !== "CASH" && input.assetType !== "cash";
+  const nextType = shouldRepairCashType ? input.assetType : holding.type;
+  const nextUsesManualValue = usesManualPortfolioValue(nextType);
   await tx
     .update(holdingsTable)
     .set({
-      type: shouldRepairCashType ? input.assetType : holding.type,
-      quantity: String(toNumber(holding.quantity) + input.quantity),
+      type: nextType,
+      quantity: String(nextUsesManualValue ? 1 : toNumber(holding.quantity) + input.quantity),
+      manualPrice: nextUsesManualValue
+        ? String(toNumber(holding.manualPrice) + (input.valueIncrease ?? input.costIncrease))
+        : null,
       costOfCapital: String(toNumber(holding.costOfCapital) + input.costIncrease),
       interest: String(toNumber(holding.interest) + (input.interestDelta ?? 0)),
       updatedAt: new Date(),
@@ -121,6 +146,28 @@ async function increaseAsset(tx: any, input: { symbol: string; assetType: string
 async function decreaseAsset(tx: any, input: { symbol: string; quantity: number; costDecrease: number; interestDelta?: number }) {
   const holding = await getHoldingBySymbol(tx, input.symbol);
   if (!holding) throw new Error(`Asset ${input.symbol} not found`);
+
+  if (usesManualPortfolioValue(holding.type)) {
+    const currentManualValue = toNumber(holding.manualPrice);
+    if (currentManualValue + 1e-9 < input.quantity) {
+      throw new Error(`Not enough value for ${input.symbol}`);
+    }
+
+    const nextManualValue = Math.max(0, currentManualValue - input.quantity);
+    const nextCost = Math.max(0, toNumber(holding.costOfCapital) - input.costDecrease);
+
+    await tx
+      .update(holdingsTable)
+      .set({
+        quantity: String(nextManualValue > 0 ? 1 : 0),
+        manualPrice: String(nextManualValue),
+        costOfCapital: String(nextManualValue === 0 ? 0 : nextCost),
+        interest: String(toNumber(holding.interest) + (input.interestDelta ?? 0)),
+        updatedAt: new Date(),
+      })
+      .where(eq(holdingsTable.id, holding.id));
+    return;
+  }
 
   const currentQuantity = toNumber(holding.quantity);
   if (currentQuantity + 1e-9 < input.quantity) {
@@ -161,6 +208,27 @@ async function applyTransactionEffect(tx: any, input: {
 
   const holding = await getHoldingBySymbol(tx, input.symbol);
   if (!holding) throw new Error(`Asset ${input.symbol} not found`);
+
+  if (usesManualPortfolioValue(input.assetType)) {
+    const currentManualValue = toNumber(holding.manualPrice);
+    if (currentManualValue + 1e-9 < input.totalValue) {
+      throw new Error(`Not enough value for ${input.symbol}`);
+    }
+
+    const costOfCapital = toNumber(holding.costOfCapital);
+    const costDecrease = currentManualValue > 0 ? (costOfCapital * input.totalValue) / currentManualValue : 0;
+    const realizedInterest = input.totalValue - costDecrease;
+
+    await decreaseAsset(tx, {
+      symbol: input.symbol,
+      quantity: input.totalValue,
+      costDecrease,
+      interestDelta: realizedInterest,
+    });
+    await adjustCash(tx, input.totalValue);
+    return realizedInterest;
+  }
+
   const currentQuantity = toNumber(holding.quantity);
   if (currentQuantity + 1e-9 < input.quantity) {
     throw new Error(`Not enough quantity for ${input.symbol}`);
@@ -190,7 +258,7 @@ async function reverseTransactionEffect(tx: any, transaction: typeof transaction
   if (transaction.side === "buy") {
     await decreaseAsset(tx, {
       symbol: transaction.symbol,
-      quantity,
+      quantity: usesManualPortfolioValue(transaction.assetType) ? totalValue : quantity,
       costDecrease: totalValue,
     });
     await adjustCash(tx, totalValue);
@@ -202,6 +270,7 @@ async function reverseTransactionEffect(tx: any, transaction: typeof transaction
     assetType: transaction.assetType,
     quantity,
     costIncrease: totalValue - realizedInterest,
+    valueIncrease: usesManualPortfolioValue(transaction.assetType) ? totalValue : undefined,
     interestDelta: -realizedInterest,
   });
   await adjustCash(tx, -totalValue);
@@ -223,12 +292,16 @@ router.post("/transactions", async (req, res): Promise<void> => {
     const transaction = await db.transaction(async (tx) => {
       const assetType = parsed.data.assetType.toLowerCase();
       const symbol = parsed.data.symbol.toUpperCase();
-      const unitPrice = parsed.data.totalValue / parsed.data.quantity;
+      const quantity = normalizeTradeQuantity(parsed.data);
+      if (!usesManualPortfolioValue(assetType) && quantity <= 0) {
+        throw new Error("Quantity is required for online-priced assets.");
+      }
+      const unitPrice = usesManualPortfolioValue(assetType) ? parsed.data.totalValue : parsed.data.totalValue / quantity;
       const realizedInterest = await applyTransactionEffect(tx, {
         side: parsed.data.side,
         assetType,
         symbol,
-        quantity: parsed.data.quantity,
+        quantity,
         totalValue: parsed.data.totalValue,
       });
 
@@ -240,7 +313,7 @@ router.post("/transactions", async (req, res): Promise<void> => {
           fundingSource: "CASH",
           assetType,
           symbol,
-          quantity: String(parsed.data.quantity),
+          quantity: String(quantity),
           totalValue: String(parsed.data.totalValue),
           unitPrice: String(unitPrice),
           realizedInterest: String(realizedInterest),
@@ -289,12 +362,16 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
 
       const assetType = parsed.data.assetType.toLowerCase();
       const symbol = parsed.data.symbol.toUpperCase();
-      const unitPrice = parsed.data.totalValue / parsed.data.quantity;
+      const quantity = normalizeTradeQuantity(parsed.data);
+      if (!usesManualPortfolioValue(assetType) && quantity <= 0) {
+        throw new Error("Quantity is required for online-priced assets.");
+      }
+      const unitPrice = usesManualPortfolioValue(assetType) ? parsed.data.totalValue : parsed.data.totalValue / quantity;
       const realizedInterest = await applyTransactionEffect(tx, {
         side: parsed.data.side,
         assetType,
         symbol,
-        quantity: parsed.data.quantity,
+        quantity,
         totalValue: parsed.data.totalValue,
       });
 
@@ -305,7 +382,7 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
           fundingSource: "CASH",
           assetType,
           symbol,
-          quantity: String(parsed.data.quantity),
+          quantity: String(quantity),
           totalValue: String(parsed.data.totalValue),
           unitPrice: String(unitPrice),
           realizedInterest: String(realizedInterest),
