@@ -492,8 +492,7 @@ export async function getLatestPrices(): Promise<typeof pricesTable.$inferSelect
   const rows = await db
     .select()
     .from(pricesTable)
-    .orderBy(desc(pricesTable.fetchedAt))
-    .limit(1000);
+    .orderBy(desc(pricesTable.fetchedAt));
 
   const seen = new Set<string>();
   const result: typeof pricesTable.$inferSelect[] = [];
