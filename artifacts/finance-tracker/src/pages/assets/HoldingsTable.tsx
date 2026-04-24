@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,7 +9,35 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { HoldingItem, SortOrder } from "@/pages/assets/types";
-import { formatTypeLabel, formatTypeShortLabel } from "@/pages/assets/utils";
+import { formatPercent, formatTypeLabel, formatTypeShortLabel, formatVNDFull } from "@/pages/assets/utils";
+
+const RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
+
+function yearFraction(from: Date, to: Date) {
+  return (to.getTime() - from.getTime()) / (365 * 24 * 60 * 60 * 1000);
+}
+
+function calculateSnapshotXirr(costOfCapital: number | null | undefined, currentValue: number | null | undefined) {
+  if (costOfCapital == null || currentValue == null || costOfCapital <= 0 || currentValue <= 0) return null;
+  const years = yearFraction(RETURN_INITIAL_AT, new Date());
+  if (!Number.isFinite(years) || years <= 0) return null;
+  return Math.pow(currentValue / costOfCapital, 1 / years) - 1;
+}
+
+type SortKey =
+  | "symbol"
+  | "type"
+  | "weight"
+  | "currentValue"
+  | "quantity"
+  | "currentPrice"
+  | "costOfCapital"
+  | "unrealizedPnL"
+  | "unrealizedPnLPercent"
+  | "xirrAnnual"
+  | "xirrMonthly";
+
+type SortDirection = "asc" | "desc";
 
 function ChangeChip({
   change,
@@ -41,6 +70,7 @@ type HoldingsTableProps = {
   showQtyCol: boolean;
   showPriceCol: boolean;
   showCostOfCapitalCol?: boolean;
+  showReturnCols?: boolean;
   formatMoney: (value: number | null | undefined, full?: boolean) => string;
   onToggleHoldingsCollapsed: () => void;
   onToggleQtyCol: () => void;
@@ -67,6 +97,7 @@ export default function HoldingsTable({
   showQtyCol,
   showPriceCol,
   showCostOfCapitalCol = false,
+  showReturnCols = false,
   formatMoney,
   onToggleHoldingsCollapsed,
   onToggleQtyCol,
@@ -79,15 +110,100 @@ export default function HoldingsTable({
   onDelete,
   readOnly = false,
 }: HoldingsTableProps) {
-  const filteredCostTotal = filteredHoldings.reduce((sum, holding) => sum + (holding.costOfCapital ?? 0), 0);
+  const [sortKey, setSortKey] = useState<SortKey>("currentValue");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const sortedFilteredHoldings = useMemo(() => {
+    const denominator = filterType === "all" ? totalValue : filteredTotal;
+    const rows = filteredHoldings.map((holding) => {
+      const unrealizedPnL =
+        holding.currentValue != null && holding.costOfCapital != null
+          ? holding.currentValue - holding.costOfCapital
+          : null;
+      const unrealizedPnLPercent =
+        unrealizedPnL != null && (holding.costOfCapital ?? 0) > 0
+          ? unrealizedPnL / (holding.costOfCapital ?? 0)
+          : null;
+      const xirrAnnual = calculateSnapshotXirr(holding.costOfCapital, holding.currentValue);
+      const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
+      const weight =
+        denominator > 0 && holding.currentValue != null
+          ? holding.currentValue / denominator
+          : null;
+
+      return {
+        holding,
+        unrealizedPnL,
+        unrealizedPnLPercent,
+        xirrAnnual,
+        xirrMonthly,
+        weight,
+      };
+    });
+
+    const direction = sortDirection === "asc" ? 1 : -1;
+    return rows.sort((left, right) => {
+      const normalizeText = (value: string) => value.trim().toLowerCase();
+
+      if (sortKey === "symbol") {
+        return left.holding.symbol.localeCompare(right.holding.symbol) * direction;
+      }
+
+      if (sortKey === "type") {
+        return normalizeText(left.holding.type).localeCompare(normalizeText(right.holding.type)) * direction;
+      }
+
+      const resolveNumericValue = (row: typeof rows[number]) => {
+        switch (sortKey) {
+          case "weight":
+            return row.weight;
+          case "currentValue":
+            return row.holding.currentValue;
+          case "quantity":
+            return row.holding.quantity;
+          case "currentPrice":
+            return row.holding.currentPrice;
+          case "costOfCapital":
+            return row.holding.costOfCapital;
+          case "unrealizedPnL":
+            return row.unrealizedPnL;
+          case "unrealizedPnLPercent":
+            return row.unrealizedPnLPercent;
+          case "xirrAnnual":
+            return row.xirrAnnual;
+          case "xirrMonthly":
+            return row.xirrMonthly;
+          default:
+            return Number.NEGATIVE_INFINITY;
+        }
+      };
+
+      const leftValue = resolveNumericValue(left);
+      const rightValue = resolveNumericValue(right);
+      const normalizedLeft = typeof leftValue === "number" && Number.isFinite(leftValue) ? leftValue : Number.NEGATIVE_INFINITY;
+      const normalizedRight = typeof rightValue === "number" && Number.isFinite(rightValue) ? rightValue : Number.NEGATIVE_INFINITY;
+
+      if (normalizedLeft !== normalizedRight) {
+        return (normalizedLeft - normalizedRight) * direction;
+      }
+
+      return left.holding.symbol.localeCompare(right.holding.symbol);
+    });
+  }, [filteredHoldings, filterType, filteredTotal, sortDirection, sortKey, totalValue]);
+
+  const filteredCostTotal = sortedFilteredHoldings.reduce((sum, row) => sum + (row.holding.costOfCapital ?? 0), 0);
   const colTemplate = [
     "minmax(96px, 1.45fr)",
     "minmax(52px, 0.85fr)",
-    showQtyCol ? "minmax(50px, 0.65fr)" : null,
-    showPriceCol ? "minmax(64px, 0.9fr)" : null,
-    showCostOfCapitalCol ? "minmax(82px, 0.95fr)" : null,
-    "minmax(40px, 0.55fr)",
+    "minmax(52px, 0.65fr)",
     "minmax(132px, 1.25fr)",
+    showQtyCol ? "minmax(50px, 0.65fr)" : null,
+    showPriceCol ? "minmax(110px, 1fr)" : null,
+    showCostOfCapitalCol ? "minmax(120px, 1fr)" : null,
+    showReturnCols ? "minmax(128px, 1fr)" : null,
+    showReturnCols ? "minmax(68px, 0.75fr)" : null,
+    showReturnCols ? "minmax(78px, 0.8fr)" : null,
+    showReturnCols ? "minmax(78px, 0.8fr)" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -95,7 +211,22 @@ export default function HoldingsTable({
     4 +
     (showQtyCol ? 1 : 0) +
     (showPriceCol ? 1 : 0) +
-    (showCostOfCapitalCol ? 1 : 0);
+    (showCostOfCapitalCol ? 1 : 0) +
+    (showReturnCols ? 4 : 0);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(key === "symbol" || key === "type" ? "asc" : "desc");
+  };
+
+  const sortIndicator = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    return sortDirection === "asc" ? " ↑" : " ↓";
+  };
 
   return (
     <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -167,18 +298,6 @@ export default function HoldingsTable({
               </Select>
             )}
 
-            {holdings.length > 1 && (
-              <button
-                onClick={onCycleSortOrder}
-                className={`text-xs px-2 py-1 rounded border transition-colors ${
-                  sortOrder !== "none"
-                    ? "border-primary/60 text-primary bg-primary/5"
-                    : "border-border text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                {sortLabel}
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -205,13 +324,17 @@ export default function HoldingsTable({
                   className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
                   style={{ gridTemplateColumns: colTemplate }}
                 >
-                  <span>Asset</span>
-                  <span className="text-center">Type</span>
-                  {showQtyCol && <span className="text-right">Qty</span>}
-                  {showPriceCol && <span className="text-right">Price</span>}
-                  {showCostOfCapitalCol && <span className="text-right whitespace-nowrap">Cost</span>}
-                  <span className="text-right">%</span>
-                  <span className="text-right whitespace-nowrap">Total Value</span>
+                  <button type="button" onClick={() => handleSort("symbol")} className="text-left hover:text-foreground transition-colors">Asset{sortIndicator("symbol")}</button>
+                  <button type="button" onClick={() => handleSort("type")} className="text-center hover:text-foreground transition-colors">Type{sortIndicator("type")}</button>
+                  <button type="button" onClick={() => handleSort("weight")} className="text-right hover:text-foreground transition-colors">%{sortIndicator("weight")}</button>
+                  <button type="button" onClick={() => handleSort("currentValue")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Total Value{sortIndicator("currentValue")}</button>
+                  {showQtyCol && <button type="button" onClick={() => handleSort("quantity")} className="text-right hover:text-foreground transition-colors">Qty{sortIndicator("quantity")}</button>}
+                  {showPriceCol && <button type="button" onClick={() => handleSort("currentPrice")} className="text-right hover:text-foreground transition-colors">Price{sortIndicator("currentPrice")}</button>}
+                  {showCostOfCapitalCol && <button type="button" onClick={() => handleSort("costOfCapital")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Cost{sortIndicator("costOfCapital")}</button>}
+                  {showReturnCols && <button type="button" onClick={() => handleSort("unrealizedPnL")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">P/L{sortIndicator("unrealizedPnL")}</button>}
+                  {showReturnCols && <button type="button" onClick={() => handleSort("unrealizedPnLPercent")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">P/L %{sortIndicator("unrealizedPnLPercent")}</button>}
+                  {showReturnCols && <button type="button" onClick={() => handleSort("xirrAnnual")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">XIRR Year{sortIndicator("xirrAnnual")}</button>}
+                  {showReturnCols && <button type="button" onClick={() => handleSort("xirrMonthly")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">XIRR Month{sortIndicator("xirrMonthly")}</button>}
                 </div>
 
                 {filteredHoldings.length === 0 && filterType !== "all" && (
@@ -220,7 +343,7 @@ export default function HoldingsTable({
                   </p>
                 )}
 
-                {filteredHoldings.map((holding) => (
+                {sortedFilteredHoldings.map(({ holding, unrealizedPnL, unrealizedPnLPercent, xirrAnnual, xirrMonthly, weight }) => (
                   <div
                     key={holding.id}
                     className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
@@ -254,6 +377,14 @@ export default function HoldingsTable({
                       {formatTypeShortLabel(holding.type)}
                     </span>
 
+                    <span className="text-[10px] text-right tabular-nums text-muted-foreground">
+                      {weight != null ? `${(weight * 100).toFixed(1)}%` : "—"}
+                    </span>
+
+                    <span className="text-sm font-semibold text-right tabular-nums whitespace-nowrap">
+                      {formatMoney(holding.currentValue, true)}
+                    </span>
+
                     {showQtyCol && (
                       <span className="text-[11px] text-right tabular-nums text-muted-foreground">
                         {holding.quantity.toLocaleString("vi-VN")}
@@ -272,18 +403,47 @@ export default function HoldingsTable({
                       </span>
                     )}
 
-                    <span className="text-[10px] text-right tabular-nums text-muted-foreground">
-                      {(filterType === "all" ? totalValue : filteredTotal) > 0 && holding.currentValue != null
-                        ? `${(
-                            (holding.currentValue / (filterType === "all" ? totalValue : filteredTotal)) *
-                            100
-                          ).toFixed(1)}%`
-                        : "—"}
-                    </span>
+                    {showReturnCols && (
+                      <span className={`text-[11px] text-right tabular-nums ${(unrealizedPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                        {formatVNDFull(unrealizedPnL)}
+                      </span>
+                    )}
 
-                    <span className="text-sm font-semibold text-right tabular-nums whitespace-nowrap">
-                      {formatMoney(holding.currentValue, true)}
-                    </span>
+                    {showReturnCols && (
+                      <span className={`text-[11px] text-right tabular-nums ${
+                        unrealizedPnLPercent == null
+                          ? "text-muted-foreground"
+                          : unrealizedPnLPercent >= 0
+                            ? "text-emerald-400"
+                            : "text-red-300"
+                      }`}>
+                        {formatPercent(unrealizedPnLPercent)}
+                      </span>
+                    )}
+
+                    {showReturnCols && (
+                      <span className={`text-[11px] text-right tabular-nums ${
+                        xirrAnnual == null
+                          ? "text-muted-foreground"
+                          : xirrAnnual >= 0
+                            ? "text-emerald-400"
+                            : "text-red-300"
+                      }`}>
+                        {formatPercent(xirrAnnual)}
+                      </span>
+                    )}
+
+                    {showReturnCols && (
+                      <span className={`text-[11px] text-right tabular-nums ${
+                        xirrMonthly == null
+                          ? "text-muted-foreground"
+                          : xirrMonthly >= 0
+                            ? "text-emerald-400"
+                            : "text-red-300"
+                      }`}>
+                        {formatPercent(xirrMonthly)}
+                      </span>
+                    )}
                   </div>
                 ))}
 
@@ -298,6 +458,10 @@ export default function HoldingsTable({
                         : `${formatTypeLabel(filterType)} Total`}
                     </span>
                     <span />
+                    <span />
+                    <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
+                      {formatMoney(filteredTotal, true)}
+                    </span>
                     {showQtyCol && <span />}
                     {showPriceCol && <span />}
                     {showCostOfCapitalCol && (
@@ -305,10 +469,10 @@ export default function HoldingsTable({
                         {formatMoney(filteredCostTotal, true)}
                       </span>
                     )}
-                    <span />
-                    <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
-                      {formatMoney(filteredTotal, true)}
-                    </span>
+                    {showReturnCols && <span />}
+                    {showReturnCols && <span />}
+                    {showReturnCols && <span />}
+                    {showReturnCols && <span />}
                   </div>
                 )}
               </div>

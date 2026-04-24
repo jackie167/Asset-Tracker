@@ -428,6 +428,7 @@ export default function AssetsPage() {
               showQtyCol={showQtyCol}
               showPriceCol={showPriceCol}
               showCostOfCapitalCol={showCostOfCapitalCol}
+              showReturnCols
               formatMoney={formatMoney}
               onToggleHoldingsCollapsed={toggleHoldingsCollapsed}
               onToggleQtyCol={toggleQtyCol}
