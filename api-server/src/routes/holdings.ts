@@ -215,36 +215,39 @@ async function buildPortfolioXirrSnapshot() {
     && (holding.currentValue ?? 0) > 0
   );
 
-  const cashFlows = eligibleHoldings.flatMap((holding) => ([
+  const initialCapital = eligibleHoldings.reduce((sum, holding) => sum + (holding.costOfCapital ?? 0), 0);
+  const currentValue = eligibleHoldings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
+
+  const cashFlows = [
     {
       date: STOCK_RETURN_INITIAL_AT,
-      amount: -(holding.costOfCapital ?? 0),
+      amount: -initialCapital,
       kind: "initial_capital",
-      source: "asset_snapshot",
-      note: holding.symbol,
-      rowType: "asset_start_capital" as const,
+      source: "portfolio_snapshot",
+      note: "Total capital",
+      rowType: "portfolio_start_capital" as const,
     },
     {
       date: asOf,
-      amount: holding.currentValue ?? 0,
+      amount: currentValue,
       kind: "current_value",
-      source: "asset_snapshot",
-      note: holding.symbol,
-      rowType: "asset_current_value" as const,
+      source: "portfolio_snapshot",
+      note: "Current portfolio value",
+      rowType: "portfolio_current_value" as const,
     },
-  ]));
+  ];
 
   const xirrAnnual = calculateXirr(cashFlows);
   const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
-  const includedCurrentValue = eligibleHoldings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
 
   return {
     asOf,
-    currentValue: includedCurrentValue,
+    currentValue,
+    initialCapital,
     cashFlowCount: eligibleHoldings.length,
     hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
     hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
-    mode: "asset_capital_snapshot_full_portfolio" as const,
+    mode: "portfolio_capital_snapshot" as const,
     reason: eligibleHoldings.length === 0
       ? "Portfolio XIRR needs assets with both cost of capital and current value."
       : null,
@@ -401,6 +404,7 @@ router.get("/portfolio/xirr/export", async (_req, res): Promise<void> => {
       "",
       "",
       "",
+      snapshot.initialCapital,
       snapshot.currentValue,
       snapshot.xirrAnnual ?? "",
       snapshot.xirrMonthly ?? "",
@@ -416,6 +420,7 @@ router.get("/portfolio/xirr/export", async (_req, res): Promise<void> => {
       flow.note ?? "",
       flow.amount < 0 ? "out" : "in",
       flow.amount,
+      snapshot.initialCapital,
       snapshot.currentValue,
       snapshot.xirrAnnual ?? "",
       snapshot.xirrMonthly ?? "",
@@ -433,6 +438,7 @@ router.get("/portfolio/xirr/export", async (_req, res): Promise<void> => {
     "note",
     "direction",
     "amount",
+    "initial_capital",
     "current_portfolio_value",
     "xirr_annual",
     "xirr_monthly",
