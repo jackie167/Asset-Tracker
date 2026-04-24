@@ -214,6 +214,56 @@ async function getPortfolioCurrentValueSnapshot() {
   };
 }
 
+async function buildPortfolioXirrSnapshot() {
+  const [cashFlowsFromDb, portfolioSnapshot] = await Promise.all([
+    db.select().from(portfolioCashFlowsTable).orderBy(portfolioCashFlowsTable.occurredAt),
+    getPortfolioCurrentValueSnapshot(),
+  ]);
+
+  const asOf = new Date();
+  const cashFlows = cashFlowsFromDb
+    .filter((flow) => flow.occurredAt <= asOf)
+    .map((flow) => ({
+      date: flow.occurredAt,
+      amount: flow.kind === "contribution"
+        ? -parseFloat(String(flow.amount))
+        : parseFloat(String(flow.amount)),
+      kind: flow.kind,
+      source: flow.source,
+      note: flow.note,
+      rowType: "cash_flow" as const,
+    }));
+
+  if (portfolioSnapshot.totalValue > 0) {
+    cashFlows.push({
+      date: asOf,
+      amount: portfolioSnapshot.totalValue,
+      kind: "current_value",
+      source: "system",
+      note: "Current portfolio value",
+      rowType: "current_portfolio_value" as const,
+    });
+  }
+
+  const xirrAnnual = calculateXirr(cashFlows);
+  const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
+
+  return {
+    asOf,
+    currentValue: portfolioSnapshot.totalValue,
+    cashFlowCount: cashFlows.length > 0 ? cashFlows.length - 1 : 0,
+    hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
+    hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
+    mode: "external_cash_flows_only" as const,
+    reason: cashFlowsFromDb.length === 0
+      ? "Portfolio XIRR needs contribution/withdrawal cash flows. Internal asset trades are not used."
+      : null,
+    xirrAnnual,
+    xirrMonthly,
+    cashFlows,
+  };
+}
+
 const CreatePortfolioCashFlowBody = z.object({
   kind: z.enum(["contribution", "withdrawal"]),
   amount: z.coerce.number().positive(),
@@ -346,42 +396,67 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
 });
 
 router.get("/portfolio/xirr", async (_req, res): Promise<void> => {
-  const [cashFlowsFromDb, portfolioSnapshot] = await Promise.all([
-    db.select().from(portfolioCashFlowsTable).orderBy(portfolioCashFlowsTable.occurredAt),
-    getPortfolioCurrentValueSnapshot(),
-  ]);
+  const snapshot = await buildPortfolioXirrSnapshot();
+  res.json(snapshot);
+});
 
-  const asOf = new Date();
-  const cashFlows = cashFlowsFromDb
-    .filter((flow) => flow.occurredAt <= asOf)
-    .map((flow) => ({
-      date: flow.occurredAt,
-      amount: flow.kind === "contribution"
-        ? -parseFloat(String(flow.amount))
-        : parseFloat(String(flow.amount)),
-    }));
+router.get("/portfolio/xirr/export", async (_req, res): Promise<void> => {
+  const snapshot = await buildPortfolioXirrSnapshot();
+  const rows = [
+    [
+      "meta",
+      "",
+      snapshot.asOf.toISOString(),
+      "",
+      "",
+      "",
+      "",
+      snapshot.currentValue,
+      snapshot.xirrAnnual ?? "",
+      snapshot.xirrMonthly ?? "",
+      snapshot.hasNegativeCashFlow ? "true" : "false",
+      snapshot.hasPositiveCashFlow ? "true" : "false",
+      snapshot.reason ?? "",
+    ],
+    ...snapshot.cashFlows.map((flow) => [
+      flow.rowType,
+      flow.kind,
+      flow.date.toISOString(),
+      flow.source,
+      flow.note ?? "",
+      flow.amount < 0 ? "out" : "in",
+      flow.amount,
+      snapshot.currentValue,
+      snapshot.xirrAnnual ?? "",
+      snapshot.xirrMonthly ?? "",
+      snapshot.hasNegativeCashFlow ? "true" : "false",
+      snapshot.hasPositiveCashFlow ? "true" : "false",
+      "",
+    ]),
+  ];
 
-  if (portfolioSnapshot.totalValue > 0) {
-    cashFlows.push({ date: asOf, amount: portfolioSnapshot.totalValue });
-  }
+  const header = [
+    "row_type",
+    "kind",
+    "date",
+    "source",
+    "note",
+    "direction",
+    "amount",
+    "current_portfolio_value",
+    "xirr_annual",
+    "xirr_monthly",
+    "has_negative_cash_flow",
+    "has_positive_cash_flow",
+    "reason",
+  ];
+  const csv = [header, ...rows]
+    .map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
 
-  const xirrAnnual = calculateXirr(cashFlows);
-  const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
-
-  res.json({
-    asOf,
-    currentValue: portfolioSnapshot.totalValue,
-    cashFlowCount: cashFlows.length > 0 ? cashFlows.length - 1 : 0,
-    hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
-    hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
-    mode: "external_cash_flows_only",
-    reason: cashFlowsFromDb.length === 0
-      ? "Portfolio XIRR needs contribution/withdrawal cash flows. Internal asset trades are not used."
-      : null,
-    xirrAnnual,
-    xirrMonthly,
-    cashFlows,
-  });
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="portfolio-xirr-debug-${snapshot.asOf.toISOString().slice(0, 10)}.csv"`);
+  res.send(`\uFEFF${csv}`);
 });
 
 router.get("/portfolio/cash-flows", async (_req, res): Promise<void> => {

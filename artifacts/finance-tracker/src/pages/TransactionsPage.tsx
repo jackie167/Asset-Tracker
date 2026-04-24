@@ -9,6 +9,27 @@ async function fetchTradeOrders(): Promise<TradeOrder[]> {
   return res.json();
 }
 
+async function exportPortfolioXirrDebugCSV() {
+  const res = await fetch("/api/portfolio/xirr/export");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status} ${res.statusText}`);
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get("content-disposition") || "";
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = filenameMatch?.[1] || `portfolio-xirr-debug-${new Date().toISOString().slice(0, 10)}.csv`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function csvValue(value: string | number | null | undefined) {
   const text = value == null ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
@@ -89,6 +110,16 @@ export default function TransactionsPage() {
               onClick={() => exportTradeOrdersCSV(orders)}
             >
               Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                void exportPortfolioXirrDebugCSV();
+              }}
+            >
+              Export XIRR DB
             </Button>
           </nav>
         </div>
