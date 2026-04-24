@@ -193,17 +193,17 @@ export default function HoldingsTable({
 
   const filteredCostTotal = sortedFilteredHoldings.reduce((sum, row) => sum + (row.holding.costOfCapital ?? 0), 0);
   const colTemplate = [
-    "minmax(96px, 1.45fr)",
-    "minmax(52px, 0.85fr)",
-    "minmax(52px, 0.65fr)",
-    "minmax(132px, 1.25fr)",
-    showQtyCol ? "minmax(50px, 0.65fr)" : null,
-    showPriceCol ? "minmax(110px, 1fr)" : null,
-    showCostOfCapitalCol ? "minmax(120px, 1fr)" : null,
-    showReturnCols ? "minmax(128px, 1fr)" : null,
-    showReturnCols ? "minmax(68px, 0.75fr)" : null,
-    showReturnCols ? "minmax(78px, 0.8fr)" : null,
-    showReturnCols ? "minmax(78px, 0.8fr)" : null,
+    "minmax(118px, 1.4fr)",
+    "minmax(74px, 0.78fr)",
+    "minmax(48px, 0.5fr)",
+    "minmax(118px, 1.05fr)",
+    showQtyCol ? "minmax(52px, 0.58fr)" : null,
+    showPriceCol ? "minmax(102px, 0.9fr)" : null,
+    showCostOfCapitalCol ? "minmax(108px, 0.95fr)" : null,
+    showReturnCols ? "minmax(112px, 0.95fr)" : null,
+    showReturnCols ? "minmax(62px, 0.6fr)" : null,
+    showReturnCols ? "minmax(72px, 0.65fr)" : null,
+    showReturnCols ? "minmax(72px, 0.65fr)" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -321,7 +321,7 @@ export default function HoldingsTable({
             <div className="overflow-x-auto">
               <div className="min-w-full" style={{ width: "max-content" }}>
                 <div
-                  className="grid gap-x-2 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
+                  className="grid gap-x-1.5 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
                   style={{ gridTemplateColumns: colTemplate }}
                 >
                   <button type="button" onClick={() => handleSort("symbol")} className="text-left hover:text-foreground transition-colors">Asset{sortIndicator("symbol")}</button>
@@ -346,7 +346,7 @@ export default function HoldingsTable({
                 {sortedFilteredHoldings.map(({ holding, unrealizedPnL, unrealizedPnLPercent, xirrAnnual, xirrMonthly, weight }) => (
                   <div
                     key={holding.id}
-                    className="grid gap-x-2 items-center py-2.5 border-b border-border last:border-0"
+                    className="grid gap-x-1.5 items-center py-2.5 border-b border-border last:border-0"
                     style={{ gridTemplateColumns: colTemplate }}
                   >
                     <div className="overflow-hidden">
@@ -449,7 +449,7 @@ export default function HoldingsTable({
 
                 {filteredHoldings.length > 0 && (
                   <div
-                    className="grid gap-x-2 items-center pt-2.5 mt-0.5"
+                    className="grid gap-x-1.5 items-center pt-2.5 mt-0.5"
                     style={{ gridTemplateColumns: colTemplate }}
                   >
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
