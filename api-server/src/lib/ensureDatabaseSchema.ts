@@ -36,6 +36,8 @@ export async function ensureDatabaseSchema() {
     CREATE TABLE IF NOT EXISTS portfolio_cash_flows (
       id serial PRIMARY KEY,
       kind text NOT NULL DEFAULT 'contribution',
+      account text NOT NULL DEFAULT 'CASH',
+      origin text NOT NULL DEFAULT 'manual',
       amount numeric(18, 2) NOT NULL,
       note text,
       source text NOT NULL DEFAULT 'manual',
@@ -43,5 +45,11 @@ export async function ensureDatabaseSchema() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE portfolio_cash_flows
+      ADD COLUMN IF NOT EXISTS account text NOT NULL DEFAULT 'CASH',
+      ADD COLUMN IF NOT EXISTS origin text NOT NULL DEFAULT 'manual'
   `);
 }

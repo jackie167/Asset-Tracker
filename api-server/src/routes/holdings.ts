@@ -279,7 +279,8 @@ async function buildPortfolioXirrSnapshot() {
 }
 
 const CreatePortfolioCashFlowBody = z.object({
-  kind: z.enum(["contribution", "withdrawal"]),
+  kind: z.enum(["deposit", "withdrawal", "cash_yield", "manual_adjustment", "contribution"]),
+  account: z.string().trim().min(1).default("CASH"),
   amount: z.coerce.number().positive(),
   note: z.string().trim().optional().nullable(),
   occurredAt: z.coerce.date().optional(),
@@ -481,6 +482,8 @@ router.get("/portfolio/cash-flows", async (_req, res): Promise<void> => {
   res.json(rows.map((row) => ({
     id: row.id,
     kind: row.kind,
+    account: row.account,
+    origin: row.origin,
     amount: parseFloat(String(row.amount)),
     note: row.note,
     source: row.source,
@@ -500,7 +503,9 @@ router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
   const [created] = await db
     .insert(portfolioCashFlowsTable)
     .values({
-      kind: parsed.data.kind,
+      kind: parsed.data.kind === "contribution" ? "deposit" : parsed.data.kind,
+      account: parsed.data.account.toUpperCase(),
+      origin: "manual",
       amount: String(parsed.data.amount),
       note: parsed.data.note || null,
       source: "manual",
@@ -511,6 +516,8 @@ router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
   res.status(201).json({
     id: created.id,
     kind: created.kind,
+    account: created.account,
+    origin: created.origin,
     amount: parseFloat(String(created.amount)),
     note: created.note,
     source: created.source,
