@@ -15,7 +15,6 @@ import { getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
 const STOCK_RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
-const CASH_FIXED_ANNUAL_RATE = 0.06;
 
 function usesManualPortfolioValue(type: string): boolean {
   const normalized = type.trim().toLowerCase();
@@ -127,12 +126,6 @@ function calculateXirr(cashFlows: Array<{ date: Date; amount: number }>): number
   }
 
   return null;
-}
-
-function deriveCashPrincipalFromCurrentValue(currentValue: number, asOf: Date): number | null {
-  const years = yearFraction(STOCK_RETURN_INITIAL_AT, asOf);
-  if (!(years > 0) || !(currentValue > 0)) return currentValue > 0 ? currentValue : null;
-  return currentValue / Math.pow(1 + CASH_FIXED_ANNUAL_RATE, years);
 }
 
 function latestPriceMap(latestPrices: Awaited<ReturnType<typeof getLatestPrices>>) {
@@ -580,7 +573,7 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
     const currentValue = resolveHoldingCurrentValue({ type: holding.type, quantity, currentPrice });
     const costOfCapital =
       holding.type === "cash" && currentValue != null
-        ? deriveCashPrincipalFromCurrentValue(currentValue, today)
+        ? currentValue
         : storedCostOfCapital;
     const unrealizedPnL =
       costOfCapital != null && currentValue != null ? currentValue - costOfCapital : null;
@@ -590,8 +583,8 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
         : null;
 
     const xirrAnnual =
-      holding.type === "cash" && currentValue != null && currentValue > 0
-        ? CASH_FIXED_ANNUAL_RATE
+      holding.type === "cash"
+        ? 0
         : costOfCapital != null && costOfCapital > 0 && currentValue != null
           ? calculateXirr([
               { date: STOCK_RETURN_INITIAL_AT, amount: -costOfCapital },
