@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatTypeShortLabel, formatVNDFull } from "@/pages/assets/utils";
@@ -41,6 +42,9 @@ function typeRank(type: string) {
   return ranks[type.toLowerCase()] ?? 10;
 }
 
+type SortKey = "symbol" | "type" | "costOfCapital" | "currentValue" | "unrealizedPnL" | "unrealizedPnLPercent" | "xirrAnnual" | "xirrMonthly";
+type SortDirection = "asc" | "desc";
+
 export default function ProfitLossTable({
   rows,
   isLoading,
@@ -49,11 +53,47 @@ export default function ProfitLossTable({
   collapsed = false,
   onToggleCollapsed,
 }: ProfitLossTableProps) {
-  const sortedRows = [...rows].sort((a, b) => {
-    const rankDiff = typeRank(a.type) - typeRank(b.type);
-    if (rankDiff !== 0) return rankDiff;
-    return a.symbol.localeCompare(b.symbol);
-  });
+  const [sortKey, setSortKey] = useState<SortKey>("type");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const direction = sortDirection === "asc" ? 1 : -1;
+
+      if (sortKey === "symbol") {
+        return a.symbol.localeCompare(b.symbol) * direction;
+      }
+
+      if (sortKey === "type") {
+        const rankDiff = typeRank(a.type) - typeRank(b.type);
+        if (rankDiff !== 0) return rankDiff * direction;
+        return a.symbol.localeCompare(b.symbol) * direction;
+      }
+
+      const left = a[sortKey];
+      const right = b[sortKey];
+      const leftValue = left == null || !Number.isFinite(left) ? Number.NEGATIVE_INFINITY : left;
+      const rightValue = right == null || !Number.isFinite(right) ? Number.NEGATIVE_INFINITY : right;
+      if (leftValue !== rightValue) {
+        return (leftValue - rightValue) * direction;
+      }
+      return a.symbol.localeCompare(b.symbol);
+    });
+  }, [rows, sortDirection, sortKey]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(key === "symbol" || key === "type" ? "asc" : "desc");
+  };
+
+  const sortIndicator = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    return sortDirection === "asc" ? " ↑" : " ↓";
+  };
 
   return (
     <Card className="p-4">
@@ -107,14 +147,46 @@ export default function ProfitLossTable({
           <table className="min-w-full text-xs">
             <thead>
               <tr className="text-[9px] text-muted-foreground uppercase tracking-wider border-b border-border">
-                <th className="py-1.5 pr-3 text-left font-normal">Asset</th>
-                <th className="py-1.5 px-3 text-center font-normal">Type</th>
-                <th className="py-1.5 px-3 text-right font-normal">Capital</th>
-                <th className="py-1.5 px-3 text-right font-normal">Current</th>
-                <th className="py-1.5 px-3 text-right font-normal">P/L</th>
-                <th className="py-1.5 px-3 text-right font-normal">P/L %</th>
-                <th className="py-1.5 px-3 text-right font-normal">XIRR / Year</th>
-                <th className="py-1.5 pl-3 text-right font-normal">XIRR / Month</th>
+                <th className="py-1.5 pr-3 text-left font-normal">
+                  <button type="button" onClick={() => handleSort("symbol")} className="hover:text-foreground transition-colors">
+                    Asset{sortIndicator("symbol")}
+                  </button>
+                </th>
+                <th className="py-1.5 px-3 text-center font-normal">
+                  <button type="button" onClick={() => handleSort("type")} className="hover:text-foreground transition-colors">
+                    Type{sortIndicator("type")}
+                  </button>
+                </th>
+                <th className="py-1.5 px-3 text-right font-normal">
+                  <button type="button" onClick={() => handleSort("costOfCapital")} className="hover:text-foreground transition-colors">
+                    Capital{sortIndicator("costOfCapital")}
+                  </button>
+                </th>
+                <th className="py-1.5 px-3 text-right font-normal">
+                  <button type="button" onClick={() => handleSort("currentValue")} className="hover:text-foreground transition-colors">
+                    Current{sortIndicator("currentValue")}
+                  </button>
+                </th>
+                <th className="py-1.5 px-3 text-right font-normal">
+                  <button type="button" onClick={() => handleSort("unrealizedPnL")} className="hover:text-foreground transition-colors">
+                    P/L{sortIndicator("unrealizedPnL")}
+                  </button>
+                </th>
+                <th className="py-1.5 px-3 text-right font-normal">
+                  <button type="button" onClick={() => handleSort("unrealizedPnLPercent")} className="hover:text-foreground transition-colors">
+                    P/L %{sortIndicator("unrealizedPnLPercent")}
+                  </button>
+                </th>
+                <th className="py-1.5 px-3 text-right font-normal">
+                  <button type="button" onClick={() => handleSort("xirrAnnual")} className="hover:text-foreground transition-colors">
+                    XIRR / Year{sortIndicator("xirrAnnual")}
+                  </button>
+                </th>
+                <th className="py-1.5 pl-3 text-right font-normal">
+                  <button type="button" onClick={() => handleSort("xirrMonthly")} className="hover:text-foreground transition-colors">
+                    XIRR / Month{sortIndicator("xirrMonthly")}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
