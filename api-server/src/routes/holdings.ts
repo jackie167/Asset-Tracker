@@ -16,8 +16,12 @@ import { getLatestPrices } from "../lib/priceFetcher.js";
 const router: IRouter = Router();
 const STOCK_RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
 
+function normalizeHoldingType(type: string): string {
+  return type.trim().toLowerCase();
+}
+
 function usesManualPortfolioValue(type: string): boolean {
-  const normalized = type.trim().toLowerCase();
+  const normalized = normalizeHoldingType(type);
   return normalized !== "stock" && normalized !== "gold" && normalized !== "crypto";
 }
 
@@ -150,7 +154,7 @@ async function getPortfolioCurrentValueSnapshot() {
       changePercent: p.changePercent != null ? parseFloat(String(p.changePercent)) : null,
     });
   }
-  const goldBenchmark = latestPrices.find((price) => price.type === "gold");
+  const goldBenchmark = latestPrices.find((price) => normalizeHoldingType(price.type) === "gold");
 
   let stockValue = 0;
   let goldValue = 0;
@@ -166,7 +170,8 @@ async function getPortfolioCurrentValueSnapshot() {
   const holdingsWithValue = holdings.map((h) => {
     const qty = parseFloat(String(h.quantity));
     const sym = h.symbol.toUpperCase();
-    const priceData = priceMap.get(sym) ?? (h.type === "gold" && goldBenchmark
+    const normalizedType = normalizeHoldingType(h.type);
+    const priceData = priceMap.get(sym) ?? (normalizedType === "gold" && goldBenchmark
       ? {
           price: parseFloat(String(goldBenchmark.price)),
           change: goldBenchmark.change != null ? parseFloat(String(goldBenchmark.change)) : null,
@@ -178,8 +183,8 @@ async function getPortfolioCurrentValueSnapshot() {
     const currentValue = resolveHoldingCurrentValue({ type: h.type, quantity: qty, currentPrice });
 
     if (currentValue != null) {
-      if (h.type === "stock") stockValue += currentValue;
-      else if (h.type === "gold") goldValue += currentValue;
+      if (normalizedType === "stock") stockValue += currentValue;
+      else if (normalizedType === "gold") goldValue += currentValue;
       else otherValue += currentValue;
     }
 
@@ -564,7 +569,7 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
     getLatestPrices(),
   ]);
   const priceMap = latestPriceMap(prices);
-  const goldBenchmark = prices.find((price) => price.type === "gold");
+  const goldBenchmark = prices.find((price) => normalizeHoldingType(price.type) === "gold");
   const goldPrice = goldBenchmark ? parseFloat(String(goldBenchmark.price)) : null;
   const today = new Date();
 
@@ -573,7 +578,8 @@ router.get("/portfolio/returns", async (_req, res): Promise<void> => {
     const quantity = parseFloat(String(holding.quantity));
     const costOfCapital = holding.costOfCapital != null ? parseFloat(String(holding.costOfCapital)) : null;
     const manualPrice = holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null;
-    const currentPrice = priceMap.get(symbol) ?? (holding.type === "gold" ? goldPrice : null) ?? manualPrice;
+    const normalizedType = normalizeHoldingType(holding.type);
+    const currentPrice = priceMap.get(symbol) ?? (normalizedType === "gold" ? goldPrice : null) ?? manualPrice;
     const currentValue = resolveHoldingCurrentValue({ type: holding.type, quantity, currentPrice });
     const unrealizedPnL =
       costOfCapital != null && currentValue != null ? currentValue - costOfCapital : null;

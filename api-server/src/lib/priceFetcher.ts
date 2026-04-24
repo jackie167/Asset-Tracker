@@ -14,6 +14,10 @@ interface PriceData {
   changePercent: number | null;
 }
 
+function normalizeHoldingType(type: string): string {
+  return type.trim().toLowerCase();
+}
+
 const COINGECKO_ID_MAP: Record<string, string> = {
   BTC: "bitcoin",
   ETH: "ethereum",
@@ -352,10 +356,10 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
   }
 
   const stockSymbols = [
-    ...new Set(holdings.filter((h) => h.type === "stock").map((h) => h.symbol.toUpperCase())),
+    ...new Set(holdings.filter((h) => normalizeHoldingType(h.type) === "stock").map((h) => h.symbol.toUpperCase())),
   ];
   const goldSymbols = [
-    ...new Set(holdings.filter((h) => h.type === "gold").map((h) => h.symbol.toUpperCase())),
+    ...new Set(holdings.filter((h) => normalizeHoldingType(h.type) === "gold").map((h) => h.symbol.toUpperCase())),
   ];
   const hasGold = goldSymbols.length > 0;
 
@@ -363,7 +367,10 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
   const cryptoSymbols = [
     ...new Set(
       holdings
-        .filter((h) => h.type !== "stock" && h.type !== "gold")
+        .filter((h) => {
+          const normalizedType = normalizeHoldingType(h.type);
+          return normalizedType !== "stock" && normalizedType !== "gold";
+        })
         .map((h) => h.symbol.toUpperCase())
         .filter((s) => COINGECKO_ID_MAP[s])
     ),
@@ -440,10 +447,10 @@ async function savePortfolioSnapshot(
     const price = priceMap.get(sym) ?? (h.manualPrice != null ? parseFloat(String(h.manualPrice)) : null);
     if (price == null) continue;
     const val = qty * price;
-    const normalizedType = h.type.toLowerCase();
+    const normalizedType = normalizeHoldingType(h.type);
     typeTotals.set(normalizedType, (typeTotals.get(normalizedType) ?? 0) + val);
-    if (h.type === "stock") stockValue += val;
-    else if (h.type === "gold") goldValue += val;
+    if (normalizedType === "stock") stockValue += val;
+    else if (normalizedType === "gold") goldValue += val;
     else otherValue += val;
   }
 
