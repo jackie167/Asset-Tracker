@@ -41,6 +41,11 @@ type HoldingsTableProps = {
   showQtyCol: boolean;
   showPriceCol: boolean;
   showCostOfCapitalCol?: boolean;
+  metrics?: Array<{
+    label: string;
+    value: string;
+    tone?: "positive" | "negative" | "neutral";
+  }>;
   formatMoney: (value: number | null | undefined, full?: boolean) => string;
   onToggleHoldingsCollapsed: () => void;
   onToggleQtyCol: () => void;
@@ -67,6 +72,7 @@ export default function HoldingsTable({
   showQtyCol,
   showPriceCol,
   showCostOfCapitalCol = false,
+  metrics = [],
   formatMoney,
   onToggleHoldingsCollapsed,
   onToggleQtyCol,
@@ -177,6 +183,27 @@ export default function HoldingsTable({
           </div>
         )}
       </div>
+
+      {!holdingsCollapsed && metrics.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 pt-1">
+          {metrics.map((metric) => (
+            <div key={metric.label} className="space-y-1">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{metric.label}</p>
+              <p
+                className={`text-sm font-semibold tabular-nums ${
+                  metric.tone === "positive"
+                    ? "text-emerald-400"
+                    : metric.tone === "negative"
+                      ? "text-red-300"
+                      : "text-foreground"
+                }`}
+              >
+                {metric.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!holdingsCollapsed && (
         <>

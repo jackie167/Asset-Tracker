@@ -359,43 +359,6 @@ export default function AssetsPage() {
               totalValueLabel={formatMoney(totalValue, true)}
               hideValues={hideValues}
               onToggleHideValues={toggleHideValues}
-              metrics={[
-                {
-                  label: "P/L",
-                  value: formatVNDFull(portfolioReturnSummary.totalPnL),
-                  tone: portfolioReturnSummary.totalPnL >= 0 ? "positive" : "negative",
-                },
-                {
-                  label: "P/L %",
-                  value: formatPercent(portfolioReturnSummary.totalPnLPercent),
-                  tone:
-                    portfolioReturnSummary.totalPnLPercent == null
-                      ? "neutral"
-                      : portfolioReturnSummary.totalPnLPercent >= 0
-                        ? "positive"
-                        : "negative",
-                },
-                {
-                  label: "XIRR / Year",
-                  value: formatPercent(portfolioReturnSummary.xirrAnnual),
-                  tone:
-                    portfolioReturnSummary.xirrAnnual == null
-                      ? "neutral"
-                      : portfolioReturnSummary.xirrAnnual >= 0
-                        ? "positive"
-                        : "negative",
-                },
-                {
-                  label: "XIRR / Month",
-                  value: formatPercent(portfolioReturnSummary.xirrMonthly),
-                  tone:
-                    portfolioReturnSummary.xirrMonthly == null
-                      ? "neutral"
-                      : portfolioReturnSummary.xirrMonthly >= 0
-                        ? "positive"
-                        : "negative",
-                },
-              ]}
             />
 
             {totalValue > 0 && (
@@ -428,6 +391,43 @@ export default function AssetsPage() {
               showQtyCol={showQtyCol}
               showPriceCol={showPriceCol}
               showCostOfCapitalCol={showCostOfCapitalCol}
+              metrics={[
+                {
+                  label: "P/L",
+                  value: hideValues ? "****" : formatVNDFull(portfolioReturnSummary.totalPnL),
+                  tone: portfolioReturnSummary.totalPnL >= 0 ? "positive" : "negative",
+                },
+                {
+                  label: "P/L %",
+                  value: hideValues ? "****" : formatPercent(portfolioReturnSummary.totalPnLPercent),
+                  tone:
+                    portfolioReturnSummary.totalPnLPercent == null
+                      ? "neutral"
+                      : portfolioReturnSummary.totalPnLPercent >= 0
+                        ? "positive"
+                        : "negative",
+                },
+                {
+                  label: "XIRR / Year",
+                  value: hideValues ? "****" : formatPercent(portfolioReturnSummary.xirrAnnual),
+                  tone:
+                    portfolioReturnSummary.xirrAnnual == null
+                      ? "neutral"
+                      : portfolioReturnSummary.xirrAnnual >= 0
+                        ? "positive"
+                        : "negative",
+                },
+                {
+                  label: "XIRR / Month",
+                  value: hideValues ? "****" : formatPercent(portfolioReturnSummary.xirrMonthly),
+                  tone:
+                    portfolioReturnSummary.xirrMonthly == null
+                      ? "neutral"
+                      : portfolioReturnSummary.xirrMonthly >= 0
+                        ? "positive"
+                        : "negative",
+                },
+              ]}
               formatMoney={formatMoney}
               onToggleHoldingsCollapsed={toggleHoldingsCollapsed}
               onToggleQtyCol={toggleQtyCol}
