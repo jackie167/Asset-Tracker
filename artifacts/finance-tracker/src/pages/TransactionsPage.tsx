@@ -1,10 +1,38 @@
+import { FormEvent, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTable";
 
 async function fetchTradeOrders(): Promise<TradeOrder[]> {
   const res = await fetch("/api/transactions");
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+type CashFlow = {
+  id: number;
+  kind: string;
+  account: string;
+  origin: string;
+  amount: number;
+  note: string | null;
+  source: string;
+  occurredAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+async function fetchCashFlows(): Promise<CashFlow[]> {
+  const res = await fetch("/api/portfolio/cash-flows");
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -83,11 +111,65 @@ function exportTradeOrdersCSV(orders: TradeOrder[]) {
 }
 
 export default function TransactionsPage() {
+  const queryClient = useQueryClient();
   const tradeOrdersQuery = useQuery({
     queryKey: ["transactions"],
     queryFn: fetchTradeOrders,
   });
+  const cashFlowsQuery = useQuery({
+    queryKey: ["portfolio-cash-flows"],
+    queryFn: fetchCashFlows,
+  });
+  const [cashFlowKind, setCashFlowKind] = useState<"deposit" | "withdrawal">("deposit");
+  const [cashFlowAmount, setCashFlowAmount] = useState("");
+  const [cashFlowOccurredAt, setCashFlowOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [cashFlowNote, setCashFlowNote] = useState("");
   const orders = tradeOrdersQuery.data ?? [];
+  const cashFlows = cashFlowsQuery.data ?? [];
+  const cashFlowBalance = useMemo(
+    () =>
+      cashFlows.reduce((sum, flow) => {
+        const sign = flow.kind === "withdrawal" ? -1 : 1;
+        return sum + sign * flow.amount;
+      }, 0),
+    [cashFlows]
+  );
+
+  const createCashFlowMutation = useMutation({
+    mutationFn: async (body: { kind: "deposit" | "withdrawal"; amount: number; occurredAt?: string; note?: string }) => {
+      const res = await fetch("/api/portfolio/cash-flows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: body.kind,
+          account: "CASH",
+          amount: body.amount,
+          occurredAt: body.occurredAt ? new Date(`${body.occurredAt}T00:00:00+07:00`).toISOString() : undefined,
+          note: body.note?.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Unable to save cash flow.");
+      return data as CashFlow;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["portfolio-cash-flows"] });
+      setCashFlowAmount("");
+      setCashFlowNote("");
+    },
+  });
+
+  const handleCashFlowSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedAmount = Number(cashFlowAmount.replace(/[^\d.-]/g, ""));
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) return;
+    createCashFlowMutation.mutate({
+      kind: cashFlowKind,
+      amount: normalizedAmount,
+      occurredAt: cashFlowOccurredAt,
+      note: cashFlowNote,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -126,6 +208,100 @@ export default function TransactionsPage() {
       </header>
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
+        <Card className="p-4 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xs text-muted-foreground uppercase tracking-widest">Cash Flows</h2>
+              <p className="text-xs text-muted-foreground mt-1">Debug ledger for deposit and withdrawal before wiring cash P/L to it.</p>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Net Flow</div>
+              <div className="text-sm font-semibold tabular-nums">{cashFlowBalance.toLocaleString("vi-VN")} đ</div>
+            </div>
+          </div>
+
+          <form className="grid gap-2 md:grid-cols-[120px_1fr_160px_1.4fr_auto]" onSubmit={handleCashFlowSubmit}>
+            <Select value={cashFlowKind} onValueChange={(value) => setCashFlowKind(value as "deposit" | "withdrawal")}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="deposit">Deposit</SelectItem>
+                <SelectItem value="withdrawal">Withdrawal</SelectItem>
+              </SelectContent>
+            </Select>
+            <input
+              value={cashFlowAmount}
+              onChange={(event) => setCashFlowAmount(event.target.value)}
+              placeholder="Amount"
+              inputMode="decimal"
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+            />
+            <input
+              type="date"
+              value={cashFlowOccurredAt}
+              onChange={(event) => setCashFlowOccurredAt(event.target.value)}
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+            />
+            <input
+              value={cashFlowNote}
+              onChange={(event) => setCashFlowNote(event.target.value)}
+              placeholder="Note"
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+            />
+            <Button type="submit" size="sm" className="h-9" disabled={createCashFlowMutation.isPending}>
+              Add
+            </Button>
+          </form>
+
+          {createCashFlowMutation.isError && (
+            <p className="text-xs text-red-300">
+              {createCashFlowMutation.error instanceof Error ? createCashFlowMutation.error.message : "Unable to save cash flow."}
+            </p>
+          )}
+
+          {cashFlowsQuery.isError ? (
+            <p className="text-xs text-red-300">
+              {cashFlowsQuery.error instanceof Error ? cashFlowsQuery.error.message : "Unable to load cash flows."}
+            </p>
+          ) : cashFlows.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No deposit or withdrawal recorded yet.</p>
+          ) : (
+            <div className="overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="text-[9px] text-muted-foreground uppercase tracking-wider border-b border-border">
+                    <th className="py-1.5 pr-3 text-left font-normal">Kind</th>
+                    <th className="py-1.5 px-3 text-right font-normal">Amount</th>
+                    <th className="py-1.5 px-3 text-left font-normal">Account</th>
+                    <th className="py-1.5 px-3 text-left font-normal">Origin</th>
+                    <th className="py-1.5 px-3 text-left font-normal">Note</th>
+                    <th className="py-1.5 pl-3 text-right font-normal">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...cashFlows].reverse().map((flow) => (
+                    <tr key={flow.id} className="border-b border-border last:border-0">
+                      <td className={`py-2 pr-3 font-medium uppercase ${flow.kind === "withdrawal" ? "text-amber-300" : "text-emerald-400"}`}>
+                        {flow.kind}
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums font-medium">
+                        {flow.amount.toLocaleString("vi-VN")} đ
+                      </td>
+                      <td className="py-2 px-3 text-muted-foreground">{flow.account}</td>
+                      <td className="py-2 px-3 text-muted-foreground">{flow.origin}</td>
+                      <td className="py-2 px-3 text-muted-foreground">{flow.note || "—"}</td>
+                      <td className="py-2 pl-3 text-right tabular-nums text-muted-foreground">
+                        {new Date(flow.occurredAt).toLocaleDateString("vi-VN")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
         {tradeOrdersQuery.isError ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
             {tradeOrdersQuery.error instanceof Error ? tradeOrdersQuery.error.message : "Unable to load transactions."}

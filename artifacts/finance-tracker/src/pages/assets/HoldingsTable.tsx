@@ -114,10 +114,13 @@ export default function HoldingsTable({
 }: HoldingsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("currentValue");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const filteredPnLTotal = filteredHoldings.reduce(
-    (sum, holding) => sum + ((holding.currentValue ?? 0) - (holding.costOfCapital ?? 0)),
-    0
-  );
+  const filteredPnLTotal = filteredHoldings.reduce((sum, holding) => {
+    const effectiveCostOfCapital =
+      holding.type.trim().toLowerCase() === "cash" && cashAdjustedCost != null
+        ? cashAdjustedCost
+        : holding.costOfCapital ?? 0;
+    return sum + ((holding.currentValue ?? 0) - effectiveCostOfCapital);
+  }, 0);
 
   const sortedFilteredHoldings = useMemo(() => {
     const denominator = filterType === "all" ? totalValue : filteredTotal;
@@ -201,7 +204,6 @@ export default function HoldingsTable({
     });
   }, [filteredHoldings, filterType, filteredTotal, sortDirection, sortKey, totalValue]);
 
-  const filteredCostTotal = sortedFilteredHoldings.reduce((sum, row) => sum + (row.holding.costOfCapital ?? 0), 0);
   const colTemplate = [
     "minmax(108px, 1fr)",
     "minmax(84px, 0.72fr)",
@@ -476,11 +478,7 @@ export default function HoldingsTable({
                     </span>
                     {showQtyCol && <span />}
                     {showPriceCol && <span />}
-                    {showCostOfCapitalCol && (
-                      <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-muted-foreground">
-                        {formatMoney(filteredCostTotal, true)}
-                      </span>
-                    )}
+                    {showCostOfCapitalCol && <span />}
                     {showReturnCols && (
                       <span className={`text-sm font-bold text-right tabular-nums whitespace-nowrap ${
                         filteredPnLTotal >= 0 ? "text-emerald-400" : "text-red-300"
