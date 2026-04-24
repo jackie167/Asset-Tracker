@@ -240,8 +240,28 @@ export default function AssetsPage() {
     [filteredHoldings]
   );
 
+  const cashAdjustedCost = useMemo(() => {
+    const cashHolding = holdings.find((holding) => holding.type.trim().toLowerCase() === "cash");
+    if (!cashHolding || cashHolding.costOfCapital == null) return null;
+
+    const totalBuyFromCash = (tradeOrdersQuery.data ?? []).reduce((sum, order) => {
+      if (order.side !== "buy") return sum;
+      if (order.status !== "applied") return sum;
+      if (order.fundingSource.trim().toUpperCase() !== "CASH") return sum;
+      return sum + order.totalValue;
+    }, 0);
+
+    return cashHolding.costOfCapital - totalBuyFromCash;
+  }, [holdings, tradeOrdersQuery.data]);
+
   const portfolioReturnSummary = useMemo(() => {
-    const totalCapital = holdings.reduce((sum, holding) => sum + (holding.costOfCapital ?? 0), 0);
+    const totalCapital = holdings.reduce((sum, holding) => {
+      const effectiveCost =
+        holding.type.trim().toLowerCase() === "cash" && cashAdjustedCost != null
+          ? cashAdjustedCost
+          : holding.costOfCapital ?? 0;
+      return sum + effectiveCost;
+    }, 0);
     const totalCurrent = holdings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
     const totalPnL = totalCurrent - totalCapital;
     const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
@@ -252,7 +272,7 @@ export default function AssetsPage() {
       xirrAnnual: portfolioXirrQuery.data?.xirrAnnual ?? null,
       xirrMonthly: portfolioXirrQuery.data?.xirrMonthly ?? null,
     };
-  }, [holdings, portfolioXirrQuery.data]);
+  }, [cashAdjustedCost, holdings, portfolioXirrQuery.data]);
 
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
@@ -429,6 +449,7 @@ export default function AssetsPage() {
               showPriceCol={showPriceCol}
               showCostOfCapitalCol={showCostOfCapitalCol}
               showReturnCols
+              cashAdjustedCost={cashAdjustedCost}
               formatMoney={formatMoney}
               onToggleHoldingsCollapsed={toggleHoldingsCollapsed}
               onToggleQtyCol={toggleQtyCol}

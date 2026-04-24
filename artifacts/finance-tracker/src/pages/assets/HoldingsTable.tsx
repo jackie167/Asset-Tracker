@@ -71,6 +71,7 @@ type HoldingsTableProps = {
   showPriceCol: boolean;
   showCostOfCapitalCol?: boolean;
   showReturnCols?: boolean;
+  cashAdjustedCost?: number | null;
   formatMoney: (value: number | null | undefined, full?: boolean) => string;
   onToggleHoldingsCollapsed: () => void;
   onToggleQtyCol: () => void;
@@ -98,6 +99,7 @@ export default function HoldingsTable({
   showPriceCol,
   showCostOfCapitalCol = false,
   showReturnCols = false,
+  cashAdjustedCost = null,
   formatMoney,
   onToggleHoldingsCollapsed,
   onToggleQtyCol,
@@ -120,15 +122,19 @@ export default function HoldingsTable({
   const sortedFilteredHoldings = useMemo(() => {
     const denominator = filterType === "all" ? totalValue : filteredTotal;
     const rows = filteredHoldings.map((holding) => {
+      const effectiveCostOfCapital =
+        holding.type.trim().toLowerCase() === "cash" && cashAdjustedCost != null
+          ? cashAdjustedCost
+          : holding.costOfCapital;
       const unrealizedPnL =
-        holding.currentValue != null && holding.costOfCapital != null
-          ? holding.currentValue - holding.costOfCapital
+        holding.currentValue != null && effectiveCostOfCapital != null
+          ? holding.currentValue - effectiveCostOfCapital
           : null;
       const unrealizedPnLPercent =
-        unrealizedPnL != null && (holding.costOfCapital ?? 0) > 0
-          ? unrealizedPnL / (holding.costOfCapital ?? 0)
+        unrealizedPnL != null && (effectiveCostOfCapital ?? 0) > 0
+          ? unrealizedPnL / (effectiveCostOfCapital ?? 0)
           : null;
-      const xirrAnnual = calculateSnapshotXirr(holding.costOfCapital, holding.currentValue);
+      const xirrAnnual = calculateSnapshotXirr(effectiveCostOfCapital, holding.currentValue);
       const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
       const weight =
         denominator > 0 && holding.currentValue != null
