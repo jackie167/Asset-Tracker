@@ -210,12 +210,10 @@ async function getPortfolioCurrentValueSnapshot() {
 async function buildPortfolioXirrSnapshot() {
   const portfolioSnapshot = await getPortfolioCurrentValueSnapshot();
   const asOf = new Date();
-  const eligibleHoldings = portfolioSnapshot.holdingsWithValue.filter((holding) => {
-    const type = holding.type.trim().toLowerCase();
-    return type !== "cash"
-      && (holding.costOfCapital ?? 0) > 0
-      && (holding.currentValue ?? 0) > 0;
-  });
+  const eligibleHoldings = portfolioSnapshot.holdingsWithValue.filter((holding) =>
+    (holding.costOfCapital ?? 0) > 0
+    && (holding.currentValue ?? 0) > 0
+  );
 
   const cashFlows = eligibleHoldings.flatMap((holding) => ([
     {
@@ -246,9 +244,9 @@ async function buildPortfolioXirrSnapshot() {
     cashFlowCount: eligibleHoldings.length,
     hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
     hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
-    mode: "asset_capital_snapshot_excluding_cash" as const,
+    mode: "asset_capital_snapshot_full_portfolio" as const,
     reason: eligibleHoldings.length === 0
-      ? "Portfolio XIRR needs assets with both cost of capital and current value. Cash is excluded."
+      ? "Portfolio XIRR needs assets with both cost of capital and current value."
       : null,
     xirrAnnual,
     xirrMonthly,
