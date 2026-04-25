@@ -62,6 +62,107 @@ async function fetchTransactions() {
   return res.json() as Promise<Array<{ side: string; status: string; fundingSource: string; totalValue: number }>>;
 }
 
+type CashflowData = {
+  income: number;
+  expense: number;
+  interest: number;
+  savingsRate: number | null;
+  interestBurden: number | null;
+  year: number;
+};
+
+type TotalAssetData = {
+  totalAsset: number;
+  netAsset: number;
+  debt: number;
+  debtRatio: number | null;
+  year: number;
+};
+
+function parseNum(v: unknown): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const n = parseFloat(String(v ?? "").replace(/[^0-9.,-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function findColIdx(headers: unknown[], names: string[]): number {
+  return headers.findIndex((h) =>
+    names.includes(String(h ?? "").trim().toLowerCase())
+  );
+}
+
+async function fetchCashflowData(): Promise<CashflowData | null> {
+  const res = await fetch("/api/excel/sheet?name=Cashflow");
+  if (!res.ok) return null;
+  const data = await res.json();
+  const rows: unknown[][] = data?.rows ?? [];
+  if (rows.length < 2) return null;
+
+  const headers = rows[0];
+  const yearCol = findColIdx(headers, ["year", "năm"]);
+  const incomeCol = findColIdx(headers, ["income"]);
+  const expenseCol = findColIdx(headers, ["tiêu dùng", "tieu dung", "expense", "tiêu dụng"]);
+  const interestCol = findColIdx(headers, ["interest"]);
+  if (yearCol < 0 || incomeCol < 0) return null;
+
+  const currentYear = new Date().getFullYear();
+  const targetRow =
+    rows.slice(1).find((r) => Number(r[yearCol]) === currentYear) ??
+    rows.slice(1).findLast((r) => Number(r[yearCol]) <= currentYear) ??
+    rows[1];
+
+  if (!targetRow) return null;
+  const year = Number(targetRow[yearCol]);
+  const income = parseNum(targetRow[incomeCol]);
+  const expense = Math.abs(parseNum(expenseCol >= 0 ? targetRow[expenseCol] : 0));
+  const interest = Math.abs(parseNum(interestCol >= 0 ? targetRow[interestCol] : 0));
+  const savings = income - expense;
+
+  return {
+    year,
+    income,
+    expense,
+    interest,
+    savingsRate: income > 0 ? savings / income : null,
+    interestBurden: income > 0 ? interest / income : null,
+  };
+}
+
+async function fetchTotalAssetData(): Promise<TotalAssetData | null> {
+  const res = await fetch("/api/excel/sheet?name=Total Asset");
+  if (!res.ok) return null;
+  const data = await res.json();
+  const rows: unknown[][] = data?.rows ?? [];
+  if (rows.length < 2) return null;
+
+  const headers = rows[0];
+  const yearCol = findColIdx(headers, ["year", "năm"]);
+  const totalCol = findColIdx(headers, ["tổng tài sản", "tong tai san"]);
+  const netCol = findColIdx(headers, ["tài sản ròng", "tai san rong"]);
+  const debtCol = findColIdx(headers, ["nợ", "no"]);
+  if (yearCol < 0 || totalCol < 0) return null;
+
+  const currentYear = new Date().getFullYear();
+  const targetRow =
+    rows.slice(1).find((r) => Number(r[yearCol]) === currentYear) ??
+    rows.slice(1).findLast((r) => Number(r[yearCol]) <= currentYear) ??
+    rows[1];
+
+  if (!targetRow) return null;
+  const year = Number(targetRow[yearCol]);
+  const totalAsset = parseNum(targetRow[totalCol]);
+  const netAsset = netCol >= 0 ? parseNum(targetRow[netCol]) : totalAsset;
+  const debt = Math.abs(parseNum(debtCol >= 0 ? targetRow[debtCol] : 0));
+
+  return {
+    year,
+    totalAsset,
+    netAsset,
+    debt,
+    debtRatio: totalAsset > 0 ? debt / totalAsset : null,
+  };
+}
+
 // ─── sub-components ──────────────────────────────────────────────────────────
 
 function StatCard({
@@ -159,6 +260,8 @@ export default function FinancialDashboardPage() {
   const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
   const snapshotsQuery = useQuery({ queryKey: ["dashboard-snapshots", snapshotRange], queryFn: () => fetchSnapshots(snapshotRange) });
   const transactionsQuery = useQuery({ queryKey: ["transactions"], queryFn: fetchTransactions });
+  const cashflowQuery = useQuery({ queryKey: ["excel-cashflow"], queryFn: fetchCashflowData });
+  const totalAssetQuery = useQuery({ queryKey: ["excel-total-asset"], queryFn: fetchTotalAssetData });
 
   // ── derived values ─────────────────────────────────────────────────────────
 
@@ -444,6 +547,97 @@ export default function FinancialDashboardPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+          </Card>
+        </section>
+
+        {/* ── Thu nhập & Dòng tiền ─────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            Thu nhập & Dòng tiền
+            {cashflowQuery.data && (
+              <span className="ml-2 normal-case text-muted-foreground/60">năm {cashflowQuery.data.year}</span>
+            )}
+          </p>
+          <Card className="p-4 md:p-6 grid md:grid-cols-2 gap-6">
+
+            {/* Cột trái — tổng quan thu chi */}
+            <div className="space-y-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tổng quan năm</p>
+              {cashflowQuery.isLoading ? (
+                <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-5 rounded bg-muted animate-pulse" />)}</div>
+              ) : !cashflowQuery.data ? (
+                <p className="text-xs text-muted-foreground">Không thể đọc sheet Cashflow.</p>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    { label: "Thu nhập năm", value: fmt(cashflowQuery.data.income, true), t: "positive" as Tone },
+                    { label: "Chi tiêu năm", value: fmt(cashflowQuery.data.expense, true), t: "neutral" as Tone },
+                    { label: "Tiết kiệm ròng", value: fmt(cashflowQuery.data.income - cashflowQuery.data.expense, true),
+                      t: tone(cashflowQuery.data.income - cashflowQuery.data.expense) },
+                    { label: "Thu nhập / tháng (ước)", value: fmt(cashflowQuery.data.income / 12), t: "neutral" as Tone },
+                    { label: "Gánh nặng lãi vay", value: formatPercent(cashflowQuery.data.interestBurden),
+                      t: (cashflowQuery.data.interestBurden ?? 0) < 0.1 ? "positive" as Tone : "warn" as Tone },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between border-b border-border/30 pb-2 last:border-0 last:pb-0">
+                      <p className="text-xs text-muted-foreground">{row.label}</p>
+                      <p className={`text-sm font-semibold tabular-nums ${TONE_CLASS[row.t]}`}>
+                        {hideValues ? "****" : row.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Cột phải — chỉ số tỷ lệ */}
+            <div className="space-y-5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Chỉ số dòng tiền</p>
+              {cashflowQuery.isLoading || totalAssetQuery.isLoading ? (
+                <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-10 rounded bg-muted animate-pulse" />)}</div>
+              ) : (
+                <div className="space-y-5">
+                  <HealthRow
+                    label="Tỷ lệ tiết kiệm"
+                    value={formatPercent(cashflowQuery.data?.savingsRate)}
+                    pct={cashflowQuery.data?.savingsRate ?? null}
+                    low={0.20} high={0.50}
+                    hint="Mục tiêu 20–50% thu nhập — nền tảng tích lũy"
+                  />
+                  <HealthRow
+                    label="Gánh nặng lãi vay"
+                    value={formatPercent(cashflowQuery.data?.interestBurden)}
+                    pct={cashflowQuery.data?.interestBurden != null ? 1 - cashflowQuery.data.interestBurden : null}
+                    low={0.90} high={1.0}
+                    hint="Nên dưới 10% thu nhập — an toàn tài chính"
+                  />
+                  <HealthRow
+                    label="Tỷ lệ nợ / tổng tài sản"
+                    value={formatPercent(totalAssetQuery.data?.debtRatio)}
+                    pct={totalAssetQuery.data?.debtRatio != null ? 1 - totalAssetQuery.data.debtRatio : null}
+                    low={0.70} high={1.0}
+                    hint="Nên dưới 30% tổng tài sản"
+                  />
+                  {totalAssetQuery.data && (
+                    <div className="pt-1 border-t border-border/30 space-y-2">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tài sản & Nợ — {totalAssetQuery.data.year}</p>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Tổng tài sản</span>
+                        <span className="font-semibold">{hideValues ? "****" : fmt(totalAssetQuery.data.totalAsset, true)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Tài sản ròng (sau nợ)</span>
+                        <span className="font-semibold text-emerald-400">{hideValues ? "****" : fmt(totalAssetQuery.data.netAsset, true)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Nợ</span>
+                        <span className="font-semibold text-red-400">{hideValues ? "****" : fmt(totalAssetQuery.data.debt, true)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
           </Card>
