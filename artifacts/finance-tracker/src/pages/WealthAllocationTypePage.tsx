@@ -15,7 +15,31 @@ async function fetchFinancialHoldings(): Promise<HoldingItem[]> {
   if (!res.ok) throw new Error("Unable to load investment data.");
   const data = await res.json();
   const holdings: HoldingItem[] = data?.holdings ?? [];
-  return holdings.filter((h) => !REAL_ESTATE_TYPES.includes(h.type.toLowerCase().trim()));
+  const financial = holdings.filter((h) => !REAL_ESTATE_TYPES.includes(h.type.toLowerCase().trim()));
+
+  // Group by type → one row per category (Cash, Stock, Gold, Fund, Crypto...)
+  const grouped = new Map<string, { currentValue: number; costOfCapital: number }>();
+  for (const h of financial) {
+    const key = h.type.toLowerCase().trim();
+    const existing = grouped.get(key) ?? { currentValue: 0, costOfCapital: 0 };
+    grouped.set(key, {
+      currentValue: existing.currentValue + (h.currentValue ?? 0),
+      costOfCapital: existing.costOfCapital + (h.costOfCapital ?? 0),
+    });
+  }
+
+  return Array.from(grouped.entries()).map(([type, agg], idx) => ({
+    id: idx + 1,
+    symbol: type.charAt(0).toUpperCase() + type.slice(1),
+    type,
+    quantity: 1,
+    currentValue: agg.currentValue,
+    costOfCapital: agg.costOfCapital,
+    currentPrice: null,
+    change: null,
+    changePercent: null,
+    manualPrice: null,
+  }));
 }
 
 type RouteParams = {
