@@ -1,8 +1,6 @@
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { format } from "date-fns";
-import { usePortfolioData } from "@/hooks/use-portfolio";
 import AllocationChart from "@/pages/assets/AllocationChart";
 import AssetsHeader from "@/pages/assets/AssetsHeader";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
@@ -10,12 +8,7 @@ import PerformanceChart from "@/pages/assets/PerformanceChart";
 import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatTypeLabel, formatVND, formatVNDFull } from "@/pages/assets/utils";
-
-const EXCLUDED_TYPES = ["real_estate", "realestate", "real estate"];
-
-function isFinancialType(type: string) {
-  return !EXCLUDED_TYPES.includes(type.toLowerCase().trim());
-}
+import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
 
 function formatPercent(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -32,6 +25,18 @@ async function fetchPortfolioXirr(): Promise<{ xirrAnnual: number | null; xirrMo
   };
 }
 
+async function fetchPortfolioSummaryPnL(): Promise<{ totalPnL: number | null; totalPnLPercent: number | null }> {
+  const res = await fetch("/api/portfolio/summary");
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { totalPnL: null, totalPnLPercent: null };
+  const holdings: Array<{ currentValue?: number | null; costOfCapital?: number | null }> = data?.holdings ?? [];
+  const totalCapital = holdings.reduce((sum, h) => sum + (h.costOfCapital ?? 0), 0);
+  const totalCurrent = holdings.reduce((sum, h) => sum + (h.currentValue ?? 0), 0);
+  const totalPnL = totalCurrent - totalCapital;
+  const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
+  return { totalPnL, totalPnLPercent };
+}
+
 export default function WealthAllocationPage() {
   const [, navigate] = useLocation();
   const [snapshotRange, setSnapshotRange] = useState<SnapshotRange>("1m");
@@ -43,45 +48,39 @@ export default function WealthAllocationPage() {
   const [hideValues, setHideValues] = useState<boolean>(() => localStorage.getItem("hide_values") === "1");
   const [showQtyCol, setShowQtyCol] = useState<boolean>(() => localStorage.getItem("wealth_col_qty") === "1");
   const [showPriceCol, setShowPriceCol] = useState<boolean>(() => localStorage.getItem("wealth_col_price") === "1");
+  const [holdings, setHoldings] = useState<HoldingItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const { summary, snapshots, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData(snapshotRange);
   const portfolioXirrQuery = useQuery({
     queryKey: ["portfolio-xirr"],
     queryFn: fetchPortfolioXirr,
   });
 
-  const allHoldings = (summary?.holdings ?? holdingsFromApi) as HoldingItem[];
-  const holdings = useMemo(() => allHoldings.filter((h) => isFinancialType(h.type)), [allHoldings]);
-  const totalValue = useMemo(() => holdings.reduce((sum, h) => sum + (h.currentValue ?? 0), 0), [holdings]);
+  const portfolioPnLQuery = useQuery({
+    queryKey: ["portfolio-pnl"],
+    queryFn: fetchPortfolioSummaryPnL,
+  });
 
-  const portfolioReturnSummary = useMemo(() => {
-    const totalCapital = holdings.reduce((sum, h) => sum + (h.costOfCapital ?? 0), 0);
-    const totalPnL = totalValue - totalCapital;
-    const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
-    return {
-      totalPnL,
-      totalPnLPercent,
-      xirrAnnual: portfolioXirrQuery.data?.xirrAnnual ?? null,
-      xirrMonthly: portfolioXirrQuery.data?.xirrMonthly ?? null,
-    };
-  }, [holdings, totalValue, portfolioXirrQuery.data]);
+  const loadWealthAllocation = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setHoldings(await fetchWealthAllocationHoldings());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load wealth allocation sheet.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const chartData = useMemo(() =>
-    [...(snapshots || [])]
-      .sort((a, b) => new Date(a.snapshotAt).getTime() - new Date(b.snapshotAt).getTime())
-      .reduce((acc: ChartPoint[], snapshot) => {
-        const dateKey = format(new Date(snapshot.snapshotAt), "dd/MM");
-        const existing = acc.find((item) => item.date === dateKey);
-        if (existing) {
-          existing.totalValue = snapshot.totalValue;
-          existing.stockValue = snapshot.stockValue;
-          existing.goldValue = snapshot.goldValue;
-        } else {
-          acc.push({ date: dateKey, totalValue: snapshot.totalValue, stockValue: snapshot.stockValue, goldValue: snapshot.goldValue });
-        }
-        return acc;
-      }, []),
-    [snapshots]
+  useEffect(() => {
+    loadWealthAllocation();
+  }, [loadWealthAllocation]);
+
+  const totalValue = useMemo(
+    () => holdings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0),
+    [holdings]
   );
 
   const sortedHoldings = useMemo(() => {
@@ -94,19 +93,21 @@ export default function WealthAllocationPage() {
   }, [holdings, sortOrder]);
 
   const availableTypes = useMemo(
-    () => [...new Set(holdings.map((h) => h.type.toLowerCase()))].sort(),
+    () => [...new Set(holdings.map((holding) => holding.type.toLowerCase()))].sort(),
     [holdings]
   );
 
   const filteredHoldings = useMemo(
-    () => (filterType === "all" ? sortedHoldings : sortedHoldings.filter((h) => h.type.toLowerCase() === filterType)),
+    () => (filterType === "all" ? sortedHoldings : sortedHoldings.filter((holding) => holding.type.toLowerCase() === filterType)),
     [filterType, sortedHoldings]
   );
 
   const filteredTotal = useMemo(
-    () => filteredHoldings.reduce((sum, h) => sum + (h.currentValue ?? 0), 0),
+    () => filteredHoldings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0),
     [filteredHoldings]
   );
+
+  const chartData: ChartPoint[] = [];
 
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
@@ -115,7 +116,11 @@ export default function WealthAllocationPage() {
     sortOrder === "desc" ? "↓ High → Low" : sortOrder === "asc" ? "↑ Low → High" : "Sort";
 
   const cycleSortOrder = () => {
-    setSortOrder((prev) => (prev === "none" ? "desc" : prev === "desc" ? "asc" : "none"));
+    setSortOrder((previous) => {
+      if (previous === "none") return "desc";
+      if (previous === "desc") return "asc";
+      return "none";
+    });
   };
 
   const toggleHoldingsCollapsed = () => {
@@ -131,28 +136,29 @@ export default function WealthAllocationPage() {
   };
 
   const toggleQtyCol = () => {
-    const v = !showQtyCol;
-    setShowQtyCol(v);
-    localStorage.setItem("wealth_col_qty", v ? "1" : "0");
+    const value = !showQtyCol;
+    setShowQtyCol(value);
+    localStorage.setItem("wealth_col_qty", value ? "1" : "0");
   };
 
   const togglePriceCol = () => {
-    const v = !showPriceCol;
-    setShowPriceCol(v);
-    localStorage.setItem("wealth_col_price", v ? "1" : "0");
+    const value = !showPriceCol;
+    setShowPriceCol(value);
+    localStorage.setItem("wealth_col_price", value ? "1" : "0");
   };
 
   const handleExportCSV = () => {
     if (!holdings.length) return;
-    const fmt = (v: number) => v.toLocaleString("vi-VN");
-    const header = ["asset", "type", "current_value", "cost_of_capital"];
-    const rows = holdings.map((h) => [
-      h.symbol,
-      formatTypeLabel(h.type),
-      h.currentValue != null ? fmt(Math.round(h.currentValue)) : "",
-      h.costOfCapital != null ? fmt(Math.round(h.costOfCapital)) : "",
+    const formatNumber = (value: number) => value.toLocaleString("vi-VN");
+    const header = ["asset", "type", "current_value"];
+    const rows = holdings.map((holding) => [
+      holding.symbol,
+      formatTypeLabel(holding.type),
+      holding.currentValue != null ? formatNumber(Math.round(holding.currentValue)) : "",
     ]);
-    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = [header, ...rows]
+      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -166,6 +172,11 @@ export default function WealthAllocationPage() {
     navigate(`/wealth-allocation/type/${encodeURIComponent(type)}`);
   };
 
+  const pnl = portfolioPnLQuery.data?.totalPnL ?? null;
+  const pnlPercent = portfolioPnLQuery.data?.totalPnLPercent ?? null;
+  const xirrAnnual = portfolioXirrQuery.data?.xirrAnnual ?? null;
+  const xirrMonthly = portfolioXirrQuery.data?.xirrMonthly ?? null;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AssetsHeader
@@ -175,39 +186,36 @@ export default function WealthAllocationPage() {
       />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
-        {isError ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-            {error instanceof Error ? error.message : "Unable to load data."}
-          </div>
+        {error ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">{error}</div>
         ) : isLoading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
         ) : (
           <>
             <PortfolioSummaryCard
-              title="Financial"
               totalValueLabel={formatMoney(totalValue, true)}
               hideValues={hideValues}
               onToggleHideValues={toggleHideValues}
               metrics={[
                 {
                   label: "P/L",
-                  value: formatVNDFull(portfolioReturnSummary.totalPnL),
-                  tone: portfolioReturnSummary.totalPnL >= 0 ? "positive" : "negative",
+                  value: pnl != null ? formatVNDFull(pnl) : "—",
+                  tone: pnl == null ? "neutral" : pnl >= 0 ? "positive" : "negative",
                 },
                 {
                   label: "P/L %",
-                  value: formatPercent(portfolioReturnSummary.totalPnLPercent),
-                  tone: portfolioReturnSummary.totalPnLPercent == null ? "neutral" : portfolioReturnSummary.totalPnLPercent >= 0 ? "positive" : "negative",
+                  value: formatPercent(pnlPercent),
+                  tone: pnlPercent == null ? "neutral" : pnlPercent >= 0 ? "positive" : "negative",
                 },
                 {
                   label: "XIRR / Year",
-                  value: formatPercent(portfolioReturnSummary.xirrAnnual),
-                  tone: portfolioReturnSummary.xirrAnnual == null ? "neutral" : portfolioReturnSummary.xirrAnnual >= 0 ? "positive" : "negative",
+                  value: formatPercent(xirrAnnual),
+                  tone: xirrAnnual == null ? "neutral" : xirrAnnual >= 0 ? "positive" : "negative",
                 },
                 {
                   label: "XIRR / Month",
-                  value: formatPercent(portfolioReturnSummary.xirrMonthly),
-                  tone: portfolioReturnSummary.xirrMonthly == null ? "neutral" : portfolioReturnSummary.xirrMonthly >= 0 ? "positive" : "negative",
+                  value: formatPercent(xirrMonthly),
+                  tone: xirrMonthly == null ? "neutral" : xirrMonthly >= 0 ? "positive" : "negative",
                 },
               ]}
             />
