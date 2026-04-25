@@ -387,12 +387,12 @@ export default function ExpenseTrackerPage() {
                   <p className="text-lg font-bold tabular-nums">{fmt(amount, hide)}</p>
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="text-muted-foreground">{data?.count ? `${data.count} lần` : "0 lần"}</span>
-                    <span className={`font-semibold tabular-nums ${!pct ? "text-muted-foreground" : pct >= 1 ? "text-red-400" : pct >= 0.8 ? "text-amber-400" : "text-emerald-400"}`}>
+                    <span className="font-semibold tabular-nums text-muted-foreground">
                       {pct != null ? fmtPct(pct) : "—"}
                     </span>
                   </div>
                   <div className="h-1 rounded-full bg-muted overflow-hidden">
-                    <div className={`h-full rounded-full ${barColor(pct)}`}
+                    <div className="h-full rounded-full bg-primary"
                       style={{ width: `${Math.min((pct ?? 0) * 100, 100)}%` }} />
                   </div>
                 </Card>
