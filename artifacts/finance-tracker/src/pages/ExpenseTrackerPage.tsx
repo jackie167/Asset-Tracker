@@ -200,6 +200,9 @@ export default function ExpenseTrackerPage() {
   const income = cashflowQuery.data?.income ?? 0;
   const totalAlloc = alloc.invest + alloc.needTotal + alloc.want;
 
+  // Total = income from Cashflow sheet (auto-updates when Excel changes)
+  const totalIncome = income > 0 ? income : alloc.invest + alloc.needTotal + alloc.want;
+
   const totalSpent = summaryQuery.data?.totalSpent ?? 0;
   const budgetUsed = monthlyBudget && monthlyBudget > 0 ? totalSpent / monthlyBudget : null;
   const remaining  = monthlyBudget != null ? monthlyBudget - totalSpent : null;
@@ -258,7 +261,7 @@ export default function ExpenseTrackerPage() {
                   <td className="px-4 py-2.5 font-semibold">Investment</td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{fmt(alloc.invest, hide)}</td>
                   <td className="px-4 py-2.5 text-right text-muted-foreground text-xs w-16">
-                    {totalAlloc > 0 ? fmtPct(alloc.invest / totalAlloc) : "—"}
+                    {totalIncome > 0 ? fmtPct(alloc.invest / totalIncome) : "—"}
                   </td>
                 </tr>
                 {/* Need */}
@@ -266,7 +269,7 @@ export default function ExpenseTrackerPage() {
                   <td className="px-4 py-2.5 font-semibold">Need</td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{fmt(alloc.needTotal, hide)}</td>
                   <td className="px-4 py-2.5 text-right text-muted-foreground text-xs">
-                    {totalAlloc > 0 ? fmtPct(alloc.needTotal / totalAlloc) : "—"}
+                    {totalIncome > 0 ? fmtPct(alloc.needTotal / totalIncome) : "—"}
                   </td>
                 </tr>
                 {[
@@ -286,21 +289,21 @@ export default function ExpenseTrackerPage() {
                   <td className="px-4 py-2.5 font-bold text-primary">Want</td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-bold text-primary">{fmt(alloc.want, hide)}</td>
                   <td className="px-4 py-2.5 text-right text-primary text-xs font-semibold">
-                    {totalAlloc > 0 ? fmtPct(alloc.want / totalAlloc) : "—"}
+                    {totalIncome > 0 ? fmtPct(alloc.want / totalIncome) : "—"}
                   </td>
                 </tr>
                 {/* Total */}
                 <tr className="border-t-2 border-border">
                   <td className="px-4 py-2.5 font-bold">Total</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-bold">{fmt(totalAlloc, hide)}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-bold">{fmt(totalIncome, hide)}</td>
                   <td />
                 </tr>
               </tbody>
             </table>
           </Card>
-          {income > 0 && Math.abs(income - totalAlloc) > 1000 && (
-            <p className="text-[11px] text-amber-400">
-              ⚠ Tổng phân bổ ({fmt(totalAlloc, hide)}) khác thu nhập Cashflow ({fmt(income, hide)})
+          {income > 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              Total lấy từ sheet Cashflow năm {cashflowQuery.data?.year ?? year}
             </p>
           )}
         </section>
