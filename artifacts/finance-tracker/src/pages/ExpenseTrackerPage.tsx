@@ -338,7 +338,7 @@ export default function ExpenseTrackerPage() {
             ].map((c) => (
               <Card key={c.label} className="p-4 space-y-1">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{c.label}</p>
-                <p className="text-xl font-bold tabular-nums">{c.value}</p>
+                <p className="text-sm sm:text-lg md:text-xl font-bold tabular-nums break-all leading-snug">{c.value}</p>
                 {c.sub && <p className="text-[10px] text-muted-foreground">{c.sub}</p>}
               </Card>
             ))}
@@ -384,7 +384,7 @@ export default function ExpenseTrackerPage() {
                     <span className="text-base">{cat.icon}</span>
                     <p className="text-xs font-medium truncate">{cat.label}</p>
                   </div>
-                  <p className="text-lg font-bold tabular-nums">{fmt(amount, hide)}</p>
+                  <p className="text-sm sm:text-base md:text-lg font-bold tabular-nums break-all leading-snug">{fmt(amount, hide)}</p>
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="text-muted-foreground">{data?.count ? `${data.count} lần` : "0 lần"}</span>
                     <span className="font-semibold tabular-nums text-emerald-400">

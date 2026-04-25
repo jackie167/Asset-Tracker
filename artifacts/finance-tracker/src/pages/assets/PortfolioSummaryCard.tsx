@@ -35,7 +35,7 @@ export default function PortfolioSummaryCard({
           {hideValues ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
       </div>
-      <p className="text-3xl font-bold tracking-tight">{totalValueLabel}</p>
+      <p className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight break-all leading-tight">{totalValueLabel}</p>
       {metrics.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
           {metrics.map((metric) => (

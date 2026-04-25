@@ -86,7 +86,7 @@ function StatCard({
       {loading ? (
         <div className="h-7 w-28 rounded bg-muted animate-pulse" />
       ) : (
-        <p className={`text-2xl font-bold tabular-nums ${TONE_CLASS[t]}`}>{value}</p>
+        <p className={`text-sm sm:text-xl md:text-2xl font-bold tabular-nums break-all leading-snug ${TONE_CLASS[t]}`}>{value}</p>
       )}
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </Card>
