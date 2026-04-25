@@ -246,7 +246,10 @@ export default function ExpenseTrackerPage() {
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-6 space-y-6">
 
-        {/* ── Phân bổ thu nhập ─────────────────────────────────────────────── */}
+        {/* ── Phân bổ + Want Budget (side by side on landscape) ───────────── */}
+        <div className="grid md:grid-cols-2 gap-6 items-start">
+
+        {/* Phân bổ thu nhập */}
         <section className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Phân bổ thu nhập {year}</p>
@@ -258,9 +261,9 @@ export default function ExpenseTrackerPage() {
           <Card className="overflow-hidden">
             <table className="w-full text-sm table-fixed">
               <colgroup>
-                <col className="w-auto" />
-                <col className="w-40 sm:w-52" />
-                <col className="w-14" />
+                <col />
+                <col className="w-36 sm:w-44" />
+                <col className="w-12" />
               </colgroup>
               <tbody className="divide-y divide-border/40">
                 {/* Investment */}
@@ -315,12 +318,14 @@ export default function ExpenseTrackerPage() {
           )}
         </section>
 
-        {/* ── Budget Overview (Want) ────────────────────────────────────────── */}
+        </section>
+
+        {/* Want Budget */}
         <section className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
             Want budget — năm {year}
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {[
               { label: "Budget Want/năm", value: fmt(annualBudget, hide), sub: "Mục Want từ phân bổ thu nhập" },
               { label: "Đã chi",  value: fmt(totalSpent, hide), sub: budgetUsed != null ? `${fmtPct(budgetUsed)} want budget` : undefined },
@@ -355,6 +360,8 @@ export default function ExpenseTrackerPage() {
             </Card>
           )}
         </section>
+
+        </div>{/* end grid md:grid-cols-2 */}
 
         {/* ── Category Breakdown ───────────────────────────────────────────── */}
         <section className="space-y-2">
