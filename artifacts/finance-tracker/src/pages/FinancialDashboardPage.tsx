@@ -396,8 +396,8 @@ export default function FinancialDashboardPage() {
               <HealthRow
                 label="Crypto"
                 value={hideValues ? "****" : `${fmt(cryptoValue)} · ${formatPercent(cryptoRatio)}`}
-                pct={cryptoRatio != null ? 1 - cryptoRatio : null}  // inverted — lower is safer
-                low={0.80} high={1.0}
+                pct={cryptoRatio}
+                low={0} high={0.10}
                 hint="Nên dưới 10% — rủi ro cao"
               />
             </div>
