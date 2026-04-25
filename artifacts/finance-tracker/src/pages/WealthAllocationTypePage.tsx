@@ -8,6 +8,16 @@ import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/
 import { formatTypeLabel, formatVND, formatVNDFull } from "@/pages/assets/utils";
 import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
 
+const REAL_ESTATE_TYPES = ["real_estate", "realestate", "real estate"];
+
+async function fetchFinancialHoldings(): Promise<HoldingItem[]> {
+  const res = await fetch("/api/portfolio/summary");
+  if (!res.ok) throw new Error("Unable to load investment data.");
+  const data = await res.json();
+  const holdings: HoldingItem[] = data?.holdings ?? [];
+  return holdings.filter((h) => !REAL_ESTATE_TYPES.includes(h.type.toLowerCase().trim()));
+}
+
 type RouteParams = {
   type: string;
 };
@@ -29,27 +39,32 @@ export default function WealthAllocationTypePage() {
 
   const normalizedType = decodeURIComponent(params?.type ?? "").toLowerCase();
   const typeLabel = normalizedType ? formatTypeLabel(normalizedType) : "Asset Type";
+  const isFinancialType = normalizedType === "financial";
 
-  const loadWealthAllocation = useCallback(async () => {
+  const loadHoldings = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      setHoldings(await fetchWealthAllocationHoldings());
+      if (isFinancialType) {
+        setHoldings(await fetchFinancialHoldings());
+      } else {
+        const all = await fetchWealthAllocationHoldings();
+        setHoldings(all.filter((h) => h.type.toLowerCase() === normalizedType));
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load wealth allocation sheet.");
+      setError(err instanceof Error ? err.message : "Unable to load data.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isFinancialType, normalizedType]);
 
   useEffect(() => {
-    loadWealthAllocation();
-  }, [loadWealthAllocation]);
+    loadHoldings();
+  }, [loadHoldings]);
 
-  const typeHoldings = useMemo(
-    () => holdings.filter((holding) => holding.type.toLowerCase() === normalizedType),
-    [holdings, normalizedType]
-  );
+  // For financial type, holdings are already filtered by investment DB (no real estate)
+  // For other types, holdings are pre-filtered in loadHoldings
+  const typeHoldings = holdings;
 
   const sortedHoldings = useMemo(() => {
     if (sortOrder === "none") return typeHoldings;
@@ -161,7 +176,7 @@ export default function WealthAllocationTypePage() {
               ↓ Export
             </Button>
             <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-              Source: Current Asset sheet
+              {isFinancialType ? "Source: Investment sheet" : "Source: Current Asset sheet"}
             </span>
           </div>
         </div>
