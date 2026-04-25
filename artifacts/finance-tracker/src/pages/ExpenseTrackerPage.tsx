@@ -318,8 +318,6 @@ export default function ExpenseTrackerPage() {
           )}
         </section>
 
-        </section>
-
         {/* Want Budget */}
         <section className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
