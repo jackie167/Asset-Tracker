@@ -261,9 +261,9 @@ export default function ExpenseTrackerPage() {
           <Card className="overflow-hidden">
             <table className="w-full text-sm table-fixed">
               <colgroup>
-                <col />
-                <col className="w-36 sm:w-44" />
-                <col className="w-12" />
+                <col className="w-2/5" />
+                <col className="w-2/5" />
+                <col className="w-1/5" />
               </colgroup>
               <tbody className="divide-y divide-border/40">
                 {/* Investment */}
