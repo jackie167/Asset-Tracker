@@ -218,8 +218,6 @@ export default function ExpenseTrackerPage() {
   const barColor = (pct: number | null) =>
     !pct ? "bg-primary" : pct >= 1 ? "bg-red-500" : pct >= 0.8 ? "bg-amber-400" : "bg-emerald-500";
 
-  const year = month.slice(0, 4);
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
