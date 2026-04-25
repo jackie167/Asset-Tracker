@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
+import { usePortfolioData } from "@/hooks/use-portfolio";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
 import PerformanceChart from "@/pages/assets/PerformanceChart";
 import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatTypeLabel, formatVND, formatVNDFull } from "@/pages/assets/utils";
-import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
 
 type RouteParams = {
   type: string;
@@ -23,32 +23,16 @@ export default function WealthAllocationTypePage() {
   const [hideValues, setHideValues] = useState<boolean>(() => localStorage.getItem("hide_values") === "1");
   const [showQtyCol, setShowQtyCol] = useState<boolean>(() => localStorage.getItem("wealth_col_qty") === "1");
   const [showPriceCol, setShowPriceCol] = useState<boolean>(() => localStorage.getItem("wealth_col_price") === "1");
-  const [holdings, setHoldings] = useState<HoldingItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const normalizedType = decodeURIComponent(params?.type ?? "").toLowerCase();
   const typeLabel = normalizedType ? formatTypeLabel(normalizedType) : "Asset Type";
 
-  const loadWealthAllocation = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      setHoldings(await fetchWealthAllocationHoldings());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load wealth allocation sheet.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const { summary, holdings: holdingsFromApi, isLoading, isError, error } = usePortfolioData(snapshotRange);
 
-  useEffect(() => {
-    loadWealthAllocation();
-  }, [loadWealthAllocation]);
-
+  const allHoldings = (summary?.holdings ?? holdingsFromApi) as HoldingItem[];
   const typeHoldings = useMemo(
-    () => holdings.filter((holding) => holding.type.toLowerCase() === normalizedType),
-    [holdings, normalizedType]
+    () => allHoldings.filter((h) => h.type.toLowerCase() === normalizedType),
+    [allHoldings, normalizedType]
   );
 
   const sortedHoldings = useMemo(() => {
@@ -61,7 +45,7 @@ export default function WealthAllocationTypePage() {
   }, [sortOrder, typeHoldings]);
 
   const totalValue = useMemo(
-    () => typeHoldings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0),
+    () => typeHoldings.reduce((sum, h) => sum + (h.currentValue ?? 0), 0),
     [typeHoldings]
   );
 
@@ -73,11 +57,7 @@ export default function WealthAllocationTypePage() {
     sortOrder === "desc" ? "↓ High → Low" : sortOrder === "asc" ? "↑ Low → High" : "Sort";
 
   const cycleSortOrder = () => {
-    setSortOrder((previous) => {
-      if (previous === "none") return "desc";
-      if (previous === "desc") return "asc";
-      return "none";
-    });
+    setSortOrder((prev) => (prev === "none" ? "desc" : prev === "desc" ? "asc" : "none"));
   };
 
   const toggleHoldingsCollapsed = () => {
@@ -93,29 +73,27 @@ export default function WealthAllocationTypePage() {
   };
 
   const toggleQtyCol = () => {
-    const value = !showQtyCol;
-    setShowQtyCol(value);
-    localStorage.setItem("wealth_col_qty", value ? "1" : "0");
+    const v = !showQtyCol;
+    setShowQtyCol(v);
+    localStorage.setItem("wealth_col_qty", v ? "1" : "0");
   };
 
   const togglePriceCol = () => {
-    const value = !showPriceCol;
-    setShowPriceCol(value);
-    localStorage.setItem("wealth_col_price", value ? "1" : "0");
+    const v = !showPriceCol;
+    setShowPriceCol(v);
+    localStorage.setItem("wealth_col_price", v ? "1" : "0");
   };
 
   const handleExportCSV = () => {
     if (!typeHoldings.length) return;
-    const formatNumber = (value: number) => value.toLocaleString("vi-VN");
+    const fmt = (v: number) => v.toLocaleString("vi-VN");
     const header = ["asset", "type", "current_value"];
-    const rows = typeHoldings.map((holding) => [
-      holding.symbol,
-      formatTypeLabel(holding.type),
-      holding.currentValue != null ? formatNumber(Math.round(holding.currentValue)) : "",
+    const rows = typeHoldings.map((h) => [
+      h.symbol,
+      formatTypeLabel(h.type),
+      h.currentValue != null ? fmt(Math.round(h.currentValue)) : "",
     ]);
-    const csv = [header, ...rows]
-      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -125,7 +103,7 @@ export default function WealthAllocationTypePage() {
     URL.revokeObjectURL(url);
   };
 
-  const isMissingType = !isLoading && !error && normalizedType !== "" && typeHoldings.length === 0;
+  const isMissingType = !isLoading && !isError && normalizedType !== "" && typeHoldings.length === 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -136,20 +114,11 @@ export default function WealthAllocationTypePage() {
               <h1 className="text-lg sm:text-xl font-semibold tracking-tight">{typeLabel}</h1>
               <p className="text-xs text-muted-foreground leading-relaxed">Wealth Allocation</p>
             </div>
-
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <Link href="/" className="hover:text-foreground transition-colors">
-                Home
-              </Link>
-              <Link href="/assets" className="hover:text-foreground transition-colors">
-                Investment
-              </Link>
-              <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">
-                Wealth Allocation
-              </Link>
-              <Link href="/excel" className="hover:text-foreground transition-colors">
-                Excel
-              </Link>
+              <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
+              <Link href="/assets" className="hover:text-foreground transition-colors">Investment</Link>
+              <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">Wealth Allocation</Link>
+              <Link href="/excel" className="hover:text-foreground transition-colors">Excel</Link>
             </div>
           </div>
 
@@ -161,15 +130,17 @@ export default function WealthAllocationTypePage() {
               ↓ Export
             </Button>
             <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-              Source: Current Asset sheet
+              Source: Investment sheet
             </span>
           </div>
         </div>
       </header>
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
-        {error ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">{error}</div>
+        {isError ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+            {error instanceof Error ? error.message : "Unable to load data."}
+          </div>
         ) : isLoading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
         ) : isMissingType ? (
