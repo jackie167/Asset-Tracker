@@ -76,13 +76,24 @@ function base64UrlEncode(input: string | Buffer): string {
     .replace(/=+$/g, "");
 }
 
+// ── In-memory caches ────────────────────────────────────────────────────────
+let _tokenCache: { token: string; expiresAt: number } | null = null;
+let _workbookCache: { workbook: XLSX.WorkBook; expiresAt: number } | null = null;
+const WORKBOOK_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 async function getGoogleDriveAccessToken() {
   const config = getGoogleDriveConfig();
   if (!config) {
     throw new Error("Google Drive source is not configured.");
   }
 
-  const now = Math.floor(Date.now() / 1000);
+  // Return cached token if still valid (with 2-minute buffer)
+  const nowMs = Date.now();
+  if (_tokenCache && _tokenCache.expiresAt > nowMs + 2 * 60 * 1000) {
+    return _tokenCache.token;
+  }
+
+  const now = Math.floor(nowMs / 1000);
   const header = { alg: "RS256", typ: "JWT" };
   const claimSet = {
     iss: config.clientEmail,
@@ -120,6 +131,8 @@ async function getGoogleDriveAccessToken() {
     throw new Error("Google token response is missing access_token.");
   }
 
+  // Cache token for 55 minutes
+  _tokenCache = { token: json.access_token, expiresAt: nowMs + 55 * 60 * 1000 };
   return json.access_token;
 }
 
@@ -165,8 +178,14 @@ async function fetchWorkbookBufferFromGoogleDrive(): Promise<Buffer> {
 async function loadWorkbook(): Promise<XLSX.WorkBook> {
   const driveConfig = getGoogleDriveConfig();
   if (driveConfig) {
+    const nowMs = Date.now();
+    if (_workbookCache && _workbookCache.expiresAt > nowMs) {
+      return _workbookCache.workbook;
+    }
     const buffer = await fetchWorkbookBufferFromGoogleDrive();
-    return XLSX.read(buffer, { type: "buffer", cellDates: true });
+    const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+    _workbookCache = { workbook, expiresAt: nowMs + WORKBOOK_TTL_MS };
+    return workbook;
   }
 
   const source = fs.existsSync(STORAGE_FILE) ? STORAGE_FILE : DEFAULT_SOURCE;
