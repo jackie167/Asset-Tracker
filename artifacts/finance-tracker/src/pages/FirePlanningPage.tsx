@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
+import PageHeader from "@/pages/PageHeader";
 import type { HoldingItem } from "@/pages/assets/types";
 import { formatVNDFull } from "@/pages/assets/utils";
 import { fetchCashflowData, fetchTotalAssetData } from "@/lib/excel-sheets";
@@ -209,24 +209,15 @@ export default function FirePlanningPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
-        <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-base font-semibold tracking-tight uppercase">FIRE Planning</h1>
-            <p className="text-xs text-muted-foreground">Financial Independence, Retire Early</p>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
-            <Link href="/assets" className="hover:text-foreground transition-colors">Investment</Link>
-            <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
-            <button
-              type="button"
-              onClick={() => { const n = !hide; setHide(n); localStorage.setItem("hide_values", n ? "1" : "0"); }}
-              className="ml-1 text-muted-foreground hover:text-foreground"
-            >{hide ? "👁‍🗨" : "👁"}</button>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="FIRE Planning"
+        subtitle="Financial Independence, Retire Early"
+        actions={[{
+          kind: "item",
+          label: hide ? "Hiện số liệu" : "Ẩn số liệu",
+          onSelect: () => { const n = !hide; setHide(n); localStorage.setItem("hide_values", n ? "1" : "0"); },
+        }]}
+      />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-6 space-y-6">
 

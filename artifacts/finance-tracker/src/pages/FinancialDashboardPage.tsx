@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import PageHeader from "@/pages/PageHeader";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import AllocationChart from "@/pages/assets/AllocationChart";
@@ -266,34 +266,15 @@ export default function FinancialDashboardPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
-        <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-center justify-between">
-          <div className="min-w-0">
-            <h1 className="text-base font-semibold tracking-tight uppercase truncate">Financial Dashboard</h1>
-            <p className="text-xs text-muted-foreground truncate">Tổng quan sức khoẻ tài chính cá nhân</p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-            <div className="hidden sm:flex items-center gap-3">
-              <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
-              <Link href="/assets" className="hover:text-foreground transition-colors">Investment</Link>
-              <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">Wealth</Link>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const next = !hideValues;
-                setHideValues(next);
-                localStorage.setItem("hide_values", next ? "1" : "0");
-              }}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              title={hideValues ? "Show values" : "Hide values"}
-            >
-              {hideValues ? "👁‍🗨" : "👁"}
-            </button>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="Financial Dashboard"
+        subtitle="Tổng quan sức khoẻ tài chính cá nhân"
+        actions={[{
+          kind: "item",
+          label: hideValues ? "Hiện số liệu" : "Ẩn số liệu",
+          onSelect: () => { const n = !hideValues; setHideValues(n); localStorage.setItem("hide_values", n ? "1" : "0"); },
+        }]}
+      />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-6 space-y-6">
 

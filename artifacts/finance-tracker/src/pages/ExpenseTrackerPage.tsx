@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
+import PageHeader from "@/pages/PageHeader";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -226,29 +226,23 @@ export default function ExpenseTrackerPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
-        <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-base font-semibold tracking-tight uppercase">Chi tiêu</h1>
-            <p className="text-xs text-muted-foreground">Theo dõi Want budget năm · {year}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <select value={year} onChange={(e) => setYear(e.target.value)}
-              className="rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
-              {[2024, 2025, 2026, 2027, 2028].map((y) => (
-                <option key={y} value={String(y)}>{y}</option>
-              ))}
-            </select>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-              <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
-              <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
-            </div>
-            <button type="button" onClick={() => { const n=!hide; setHide(n); localStorage.setItem("hide_values",n?"1":"0"); }}
-              className="text-muted-foreground hover:text-foreground">{hide ? "👁‍🗨" : "👁"}</button>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="Chi tiêu"
+        subtitle={`Theo dõi Want budget · ${year}`}
+        inlineRight={
+          <select value={year} onChange={(e) => setYear(e.target.value)}
+            className="rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+            {[2024, 2025, 2026, 2027, 2028].map((y) => (
+              <option key={y} value={String(y)}>{y}</option>
+            ))}
+          </select>
+        }
+        actions={[{
+          kind: "item",
+          label: hide ? "Hiện số liệu" : "Ẩn số liệu",
+          onSelect: () => { const n = !hide; setHide(n); localStorage.setItem("hide_values", n ? "1" : "0"); },
+        }]}
+      />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-6 space-y-6">
 
