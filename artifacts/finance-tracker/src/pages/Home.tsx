@@ -24,7 +24,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Link href="/assets" className="block">
               <Card className="h-full border-border/70 bg-card/80 p-4 hover:border-primary/70 hover:shadow-[0_0_0_1px_hsl(var(--primary))] transition">
                 <p className="text-xs text-muted-foreground uppercase tracking-widest">Page 1</p>
@@ -57,11 +57,22 @@ export default function Home() {
                 <div className="mt-3 text-xs font-semibold text-primary">Open page →</div>
               </Card>
             </Link>
+
+            <Link href="/dashboard" className="block">
+              <Card className="h-full border-border/70 bg-card/80 p-4 hover:border-primary/70 hover:shadow-[0_0_0_1px_hsl(var(--primary))] transition">
+                <p className="text-xs text-muted-foreground uppercase tracking-widest">Page 4</p>
+                <h3 className="mt-2 text-lg font-semibold">Financial Dashboard</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Tổng quan sức khoẻ tài chính, chỉ báo và phân bổ tài sản.
+                </p>
+                <div className="mt-3 text-xs font-semibold text-primary">Open page →</div>
+              </Card>
+            </Link>
           </div>
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/80"></span>
-            Total workspace: Home, Investment, Wealth Allocation, Excel Sheets.
+            Total workspace: Home, Investment, Wealth Allocation, Excel Sheets, Financial Dashboard.
           </div>
         </Card>
       </main>
