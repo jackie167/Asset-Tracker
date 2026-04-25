@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format } from "date-fns";
@@ -77,11 +77,20 @@ function ExpenseDialog({ state, onClose, onSave }: {
   onClose: () => void;
   onSave: (d: { amount: number; category: string; note: string; occurredAt: string }) => void;
 }) {
-  const init = state.open && state.mode === "edit" ? state.expense : null;
-  const [amount, setAmount] = useState(init ? String(init.amount) : "");
-  const [category, setCategory] = useState(init?.category ?? "shopping");
-  const [note, setNote] = useState(init?.note ?? "");
-  const [date, setDate] = useState(init ? init.occurredAt.slice(0, 10) : todayStr());
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("shopping");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(todayStr());
+
+  useEffect(() => {
+    if (!state.open) return;
+    const init = state.mode === "edit" ? state.expense : null;
+    setAmount(init ? String(init.amount) : "");
+    setCategory(init?.category ?? "shopping");
+    setNote(init?.note ?? "");
+    setDate(init ? init.occurredAt.slice(0, 10) : todayStr());
+  }, [state.open, state.open && (state as any).expense?.id]);
+
   if (!state.open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
