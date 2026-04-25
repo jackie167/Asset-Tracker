@@ -608,15 +608,15 @@ export default function FinancialDashboardPage() {
                   <HealthRow
                     label="Gánh nặng lãi vay"
                     value={formatPercent(cashflowQuery.data?.interestBurden)}
-                    pct={cashflowQuery.data?.interestBurden != null ? 1 - cashflowQuery.data.interestBurden : null}
-                    low={0.90} high={1.0}
+                    pct={cashflowQuery.data?.interestBurden ?? null}
+                    low={0} high={0.10}
                     hint="Nên dưới 10% thu nhập — an toàn tài chính"
                   />
                   <HealthRow
                     label="Tỷ lệ nợ / tổng tài sản"
                     value={formatPercent(totalAssetQuery.data?.debtRatio)}
-                    pct={totalAssetQuery.data?.debtRatio != null ? 1 - totalAssetQuery.data.debtRatio : null}
-                    low={0.70} high={1.0}
+                    pct={totalAssetQuery.data?.debtRatio ?? null}
+                    low={0} high={0.30}
                     hint="Nên dưới 30% tổng tài sản"
                   />
                   {totalAssetQuery.data && (

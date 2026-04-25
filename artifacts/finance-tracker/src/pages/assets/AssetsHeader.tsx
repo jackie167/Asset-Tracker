@@ -62,6 +62,9 @@ export default function AssetsHeader({
             <DropdownMenuItem asChild>
               <Link href="/excel">Excel</Link>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard">Dashboard</Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             {onTrade && (
               <DropdownMenuItem onSelect={onTrade}>

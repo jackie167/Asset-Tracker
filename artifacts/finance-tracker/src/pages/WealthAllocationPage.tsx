@@ -155,23 +155,26 @@ export default function WealthAllocationPage() {
               onToggleHideValues={toggleHideValues}
             />
 
-            {totalValue > 0 && (
-              <AllocationChart
-                holdings={holdings}
-                totalValue={totalValue}
-                onTypeSelect={handleOpenAssetType}
-              />
-            )}
-
-            {holdings.length > 0 && (
-              <PerformanceChart
-                title="Performance"
-                chartData={chartData}
-                hideValues={hideValues}
-                selectedRange={snapshotRange}
-                onRangeChange={setSnapshotRange}
-                emptyMessage="No wealth history yet."
-              />
+            {(totalValue > 0 || holdings.length > 0) && (
+              <div className="grid md:grid-cols-2 gap-4">
+                {totalValue > 0 && (
+                  <AllocationChart
+                    holdings={holdings}
+                    totalValue={totalValue}
+                    onTypeSelect={handleOpenAssetType}
+                  />
+                )}
+                {holdings.length > 0 && (
+                  <PerformanceChart
+                    title="Performance"
+                    chartData={chartData}
+                    hideValues={hideValues}
+                    selectedRange={snapshotRange}
+                    onRangeChange={setSnapshotRange}
+                    emptyMessage="No wealth history yet."
+                  />
+                )}
+              </div>
             )}
 
             <HoldingsTable
