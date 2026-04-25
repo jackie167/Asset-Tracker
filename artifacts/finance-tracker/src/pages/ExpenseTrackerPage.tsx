@@ -79,7 +79,7 @@ function ExpenseDialog({ state, onClose, onSave }: {
 }) {
   const init = state.open && state.mode === "edit" ? state.expense : null;
   const [amount, setAmount] = useState(init ? String(init.amount) : "");
-  const [category, setCategory] = useState(init?.category ?? "an_uong");
+  const [category, setCategory] = useState(init?.category ?? "shopping");
   const [note, setNote] = useState(init?.note ?? "");
   const [date, setDate] = useState(init ? init.occurredAt.slice(0, 10) : todayStr());
   if (!state.open) return null;
@@ -358,10 +358,13 @@ export default function ExpenseTrackerPage() {
 
         </div>{/* end grid md:grid-cols-2 */}
 
+        {/* ── Category + Transactions (2-col on landscape) ─────────────────── */}
+        <div className="grid md:grid-cols-2 gap-6 items-start">
+
         {/* ── Category Breakdown ───────────────────────────────────────────── */}
         <section className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Phân loại chi tiêu Want — {year}</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {CATEGORIES.map((cat) => {
               const data = byCategory.find((b) => b.category === cat.key);
               const amount = data?.amount ?? 0;
@@ -432,6 +435,8 @@ export default function ExpenseTrackerPage() {
             )}
           </Card>
         </section>
+
+        </div>{/* end grid md:grid-cols-2 category+transactions */}
       </main>
 
       <ExpenseDialog state={dialog} onClose={() => setDialog({ open: false })} onSave={handleSave} />
