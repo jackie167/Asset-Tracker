@@ -53,18 +53,16 @@ function toRow(row: typeof expensesTable.$inferSelect) {
   };
 }
 
-function parseMonth(raw: unknown): { start: Date; end: Date } | null {
+function parseYearRange(raw: unknown): { start: Date; end: Date; label: string } | null {
   const s = String(raw ?? "").trim();
-  if (!/^\d{4}-\d{2}$/.test(s)) return null;
-  const [year, month] = s.split("-").map(Number);
-  const start = new Date(year!, month! - 1, 1);
-  const end = new Date(year!, month!, 1);
-  return { start, end };
+  if (!/^\d{4}$/.test(s)) return null;
+  const y = Number(s);
+  return { start: new Date(y, 0, 1), end: new Date(y + 1, 0, 1), label: s };
 }
 
-// GET /api/expenses?month=YYYY-MM
+// GET /api/expenses?year=YYYY
 router.get("/expenses", async (req, res): Promise<void> => {
-  const range = parseMonth(req.query.month);
+  const range = parseYearRange(req.query.year ?? new Date().getFullYear());
   const conditions = range
     ? [gte(expensesTable.occurredAt, range.start), lt(expensesTable.occurredAt, range.end)]
     : [];
@@ -78,48 +76,37 @@ router.get("/expenses", async (req, res): Promise<void> => {
   res.json(rows.map(toRow));
 });
 
-// GET /api/expenses/summary?month=YYYY-MM
+// GET /api/expenses/summary?year=YYYY
 router.get("/expenses/summary", async (req, res): Promise<void> => {
-  const monthStr = String(req.query.month ?? "").trim() ||
-    new Date().toISOString().slice(0, 7);
-  const range = parseMonth(monthStr);
+  const yearStr = String(req.query.year ?? new Date().getFullYear()).trim();
+  const range = parseYearRange(yearStr);
   if (!range) {
-    res.status(400).json({ error: "Invalid month format. Use YYYY-MM." });
+    res.status(400).json({ error: "Invalid year format. Use YYYY." });
     return;
   }
-
-  const conditions = [
-    gte(expensesTable.occurredAt, range.start),
-    lt(expensesTable.occurredAt, range.end),
-  ];
 
   const rows = await db
     .select()
     .from(expensesTable)
-    .where(and(...conditions));
+    .where(and(gte(expensesTable.occurredAt, range.start), lt(expensesTable.occurredAt, range.end)));
 
   const totalSpent = rows.reduce((s, r) => s + parseFloat(String(r.amount)), 0);
 
-  const byCategory = Object.fromEntries(
-    EXPENSE_CATEGORIES.map((cat) => [cat, 0])
-  ) as Record<string, number>;
-
+  const byCategory = Object.fromEntries(EXPENSE_CATEGORIES.map((cat) => [cat, 0])) as Record<string, number>;
   for (const row of rows) {
     const cat = row.category as string;
     if (cat in byCategory) byCategory[cat] += parseFloat(String(row.amount));
   }
 
-  const byCategoryArr = Object.entries(byCategory).map(([category, amount]) => ({
-    category,
-    label: CATEGORY_LABELS[category] ?? category,
-    amount,
-    count: rows.filter((r) => r.category === category).length,
-  }));
-
   res.json({
-    month: monthStr,
+    year: yearStr,
     totalSpent,
-    byCategory: byCategoryArr,
+    byCategory: Object.entries(byCategory).map(([category, amount]) => ({
+      category,
+      label: CATEGORY_LABELS[category] ?? category,
+      amount,
+      count: rows.filter((r) => r.category === category).length,
+    })),
   });
 });
 

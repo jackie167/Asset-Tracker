@@ -41,13 +41,13 @@ type DialogState = { open: false } | { open: true; mode: "add" } | { open: true;
 
 // ─── api ─────────────────────────────────────────────────────────────────────
 
-async function getExpenses(month: string): Promise<Expense[]> {
-  const res = await fetch(`/api/expenses?month=${encodeURIComponent(month)}`);
+async function getExpenses(year: string): Promise<Expense[]> {
+  const res = await fetch(`/api/expenses?year=${encodeURIComponent(year)}`);
   if (!res.ok) throw new Error("Failed to load expenses");
   return res.json();
 }
-async function getSummary(month: string): Promise<Summary> {
-  const res = await fetch(`/api/expenses/summary?month=${encodeURIComponent(month)}`);
+async function getSummary(year: string): Promise<Summary> {
+  const res = await fetch(`/api/expenses/summary?year=${encodeURIComponent(year)}`);
   if (!res.ok) throw new Error("Failed to load summary");
   return res.json();
 }
@@ -71,7 +71,7 @@ async function deleteExpense(id: number): Promise<void> {
 const fmt = (v: number | null | undefined, hide = false) => hide ? "****" : formatVNDFull(v);
 const fmtPct = (v: number) => `${(v * 100).toFixed(1)}%`;
 const todayStr = () => new Date().toISOString().slice(0, 10);
-const currentMonth = () => new Date().toISOString().slice(0, 7);
+const currentYear = () => String(new Date().getFullYear());
 
 // ─── dialog ──────────────────────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ function AllocationSettingsDialog({ onClose, values, onChange }: {
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 export default function ExpenseTrackerPage() {
-  const [month, setMonth] = useState(currentMonth);
+  const [year, setYear] = useState(currentYear);
   const [hide, setHide] = useState(() => localStorage.getItem("hide_values") === "1");
   const [dialog, setDialog] = useState<DialogState>({ open: false });
   const [showAllocSettings, setShowAllocSettings] = useState(false);
@@ -182,21 +182,21 @@ export default function ExpenseTrackerPage() {
     setAlloc((prev) => ({ ...prev, [key]: value }));
   };
 
-  const expensesQuery = useQuery({ queryKey: ["expenses", month], queryFn: () => getExpenses(month) });
-  const summaryQuery  = useQuery({ queryKey: ["expenses-summary", month], queryFn: () => getSummary(month) });
+  const expensesQuery = useQuery({ queryKey: ["expenses", year], queryFn: () => getExpenses(year) });
+  const summaryQuery  = useQuery({ queryKey: ["expenses-summary", year], queryFn: () => getSummary(year) });
   const cashflowQuery = useQuery({ queryKey: ["excel-cashflow"], queryFn: fetchCashflowData });
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["expenses", month] });
-    qc.invalidateQueries({ queryKey: ["expenses-summary", month] });
+    qc.invalidateQueries({ queryKey: ["expenses", year] });
+    qc.invalidateQueries({ queryKey: ["expenses-summary", year] });
   };
 
   const createMut = useMutation({ mutationFn: createExpense, onSuccess: () => { invalidate(); setDialog({ open: false }); } });
   const updateMut = useMutation({ mutationFn: ({ id, ...body }: { id: number } & Partial<Omit<Expense,"id"|"createdAt">>) => updateExpense(id, body), onSuccess: () => { invalidate(); setDialog({ open: false }); } });
   const deleteMut = useMutation({ mutationFn: deleteExpense, onSuccess: invalidate });
 
-  // Budget from Want / 12
-  const monthlyBudget = alloc.want > 0 ? alloc.want / 12 : null;
+  // Budget = annual Want (no monthly division)
+  const annualBudget = alloc.want > 0 ? alloc.want : null;
   const income = cashflowQuery.data?.income ?? 0;
   const totalAlloc = alloc.invest + alloc.needTotal + alloc.want;
 
@@ -204,8 +204,8 @@ export default function ExpenseTrackerPage() {
   const totalIncome = income > 0 ? income : alloc.invest + alloc.needTotal + alloc.want;
 
   const totalSpent = summaryQuery.data?.totalSpent ?? 0;
-  const budgetUsed = monthlyBudget && monthlyBudget > 0 ? totalSpent / monthlyBudget : null;
-  const remaining  = monthlyBudget != null ? monthlyBudget - totalSpent : null;
+  const budgetUsed = annualBudget && annualBudget > 0 ? totalSpent / annualBudget : null;
+  const remaining  = annualBudget != null ? annualBudget - totalSpent : null;
 
   const expenses   = expensesQuery.data ?? [];
   const byCategory = summaryQuery.data?.byCategory ?? [];
@@ -227,11 +227,15 @@ export default function ExpenseTrackerPage() {
         <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-center justify-between gap-3">
           <div>
             <h1 className="text-base font-semibold tracking-tight uppercase">Chi tiêu</h1>
-            <p className="text-xs text-muted-foreground">Theo dõi Want budget · {year}</p>
+            <p className="text-xs text-muted-foreground">Theo dõi Want budget năm · {year}</p>
           </div>
           <div className="flex items-center gap-2">
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-              className="rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
+            <select value={year} onChange={(e) => setYear(e.target.value)}
+              className="rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+              {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                <option key={y} value={String(y)}>{y}</option>
+              ))}
+            </select>
             <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
               <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
               <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
@@ -316,14 +320,14 @@ export default function ExpenseTrackerPage() {
         {/* ── Budget Overview (Want) ────────────────────────────────────────── */}
         <section className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            Want budget — tháng {month}
+            Want budget — năm {year}
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: "Budget Want/tháng", value: fmt(monthlyBudget, hide), sub: monthlyBudget ? `${fmt(alloc.want, hide)}/năm ÷ 12` : "Chưa cài đặt" },
+              { label: "Budget Want/năm", value: fmt(annualBudget, hide), sub: "Mục Want từ phân bổ thu nhập" },
               { label: "Đã chi",  value: fmt(totalSpent, hide), sub: budgetUsed != null ? `${fmtPct(budgetUsed)} want budget` : undefined },
               { label: "Còn lại", value: remaining != null ? fmt(remaining, hide) : "—", sub: remaining != null && remaining < 0 ? "Vượt Want budget!" : undefined },
-              { label: "Số giao dịch", value: String(expenses.length), sub: `tháng ${month}` },
+              { label: "Số giao dịch", value: String(expenses.length), sub: `năm ${year}` },
             ].map((c) => (
               <Card key={c.label} className="p-4 space-y-1">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{c.label}</p>
@@ -333,10 +337,10 @@ export default function ExpenseTrackerPage() {
             ))}
           </div>
 
-          {monthlyBudget != null && (
+          {annualBudget != null && (
             <Card className="p-4 space-y-2">
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Tổng chi tiêu (Want)</span>
+                <span className="text-muted-foreground">Tổng chi tiêu Want năm {year}</span>
                 <span className={`font-semibold ${(budgetUsed ?? 0) >= 1 ? "text-red-400" : (budgetUsed ?? 0) >= 0.8 ? "text-amber-400" : "text-emerald-400"}`}>
                   {budgetUsed != null ? fmtPct(budgetUsed) : "—"}
                 </span>
@@ -348,7 +352,7 @@ export default function ExpenseTrackerPage() {
               <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>0</span>
                 <span className="text-amber-400">80%</span>
-                <span className="text-red-400">100% = {fmt(monthlyBudget, hide)}</span>
+                <span className="text-red-400">100% = {fmt(annualBudget, hide)}</span>
               </div>
             </Card>
           )}
@@ -356,12 +360,12 @@ export default function ExpenseTrackerPage() {
 
         {/* ── Category Breakdown ───────────────────────────────────────────── */}
         <section className="space-y-2">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Phân loại chi tiêu (Want)</p>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Phân loại chi tiêu Want — {year}</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {CATEGORIES.map((cat) => {
               const data = byCategory.find((b) => b.category === cat.key);
               const amount = data?.amount ?? 0;
-              const catBudget = monthlyBudget != null ? monthlyBudget / CATEGORIES.length : null;
+              const catBudget = annualBudget != null ? annualBudget / CATEGORIES.length : null;
               const pct = catBudget && catBudget > 0 ? amount / catBudget : null;
               return (
                 <Card key={cat.key} className="p-3 space-y-2">
@@ -385,7 +389,7 @@ export default function ExpenseTrackerPage() {
         <section className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-              Giao dịch Want ({expenses.length})
+              Giao dịch Want — {year} ({expenses.length})
             </p>
             <Button size="sm" className="h-8 text-xs" onClick={() => setDialog({ open: true, mode: "add" })}>
               + Thêm chi tiêu
