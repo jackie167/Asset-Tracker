@@ -56,6 +56,12 @@ async function fetchSnapshots(range: SnapshotRange) {
   return res.json();
 }
 
+async function fetchTransactions() {
+  const res = await fetch("/api/transactions");
+  if (!res.ok) return [];
+  return res.json() as Promise<Array<{ side: string; status: string; fundingSource: string; totalValue: number }>>;
+}
+
 // ─── sub-components ──────────────────────────────────────────────────────────
 
 function StatCard({
@@ -152,6 +158,7 @@ export default function FinancialDashboardPage() {
   const investmentQuery = useQuery({ queryKey: ["dashboard-investment"], queryFn: fetchInvestmentSummary });
   const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
   const snapshotsQuery = useQuery({ queryKey: ["dashboard-snapshots", snapshotRange], queryFn: () => fetchSnapshots(snapshotRange) });
+  const transactionsQuery = useQuery({ queryKey: ["transactions"], queryFn: fetchTransactions });
 
   // ── derived values ─────────────────────────────────────────────────────────
 
@@ -167,9 +174,27 @@ export default function FinancialDashboardPage() {
     [investmentHoldings]
   );
 
+  // Cash adjustment: same logic as AssetsPage to avoid double-counting
+  const cashAdjustedCost = useMemo(() => {
+    const cashHolding = investmentHoldings.find((h) => h.type.trim().toLowerCase() === "cash");
+    if (!cashHolding || cashHolding.costOfCapital == null) return null;
+    const totalBuyFromCash = (transactionsQuery.data ?? []).reduce((sum, t) => {
+      if (t.side !== "buy" || t.status !== "applied") return sum;
+      if (t.fundingSource.trim().toUpperCase() !== "CASH") return sum;
+      return sum + t.totalValue;
+    }, 0);
+    return cashHolding.costOfCapital - totalBuyFromCash;
+  }, [investmentHoldings, transactionsQuery.data]);
+
   const costTotal = useMemo(
-    () => investmentHoldings.reduce((s, h) => s + (h.costOfCapital ?? 0), 0),
-    [investmentHoldings]
+    () => investmentHoldings.reduce((sum, h) => {
+      const effectiveCost =
+        h.type.trim().toLowerCase() === "cash" && cashAdjustedCost != null
+          ? cashAdjustedCost
+          : h.costOfCapital ?? 0;
+      return sum + effectiveCost;
+    }, 0),
+    [investmentHoldings, cashAdjustedCost]
   );
 
   const pnl = financialTotal - costTotal;
