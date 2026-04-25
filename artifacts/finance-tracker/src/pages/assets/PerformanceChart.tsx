@@ -58,7 +58,7 @@ export default function PerformanceChart({
 
   if (chartData.length > 0) {
     return (
-      <Card className="p-4 overflow-hidden min-w-0">
+      <Card className="p-4 min-w-0 w-full">
         <div className="flex items-center justify-between gap-3 mb-3">
           <p className="text-xs text-muted-foreground uppercase tracking-widest">{title}</p>
           {rangeControls}

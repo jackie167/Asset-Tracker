@@ -46,7 +46,7 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
   const chartWidth = data.length * (barWidth + barGap) + 40;
 
   return (
-    <Card className="p-4 overflow-hidden min-w-0">
+    <Card className="p-4 min-w-0 w-full">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs text-muted-foreground uppercase tracking-widest">Asset Allocation</p>
         <div className="flex gap-1">

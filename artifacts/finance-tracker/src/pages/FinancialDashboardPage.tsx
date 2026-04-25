@@ -269,14 +269,16 @@ export default function FinancialDashboardPage() {
       {/* Header */}
       <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
         <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-base font-semibold tracking-tight uppercase">Financial Dashboard</h1>
-            <p className="text-xs text-muted-foreground">Tổng quan sức khoẻ tài chính cá nhân</p>
+          <div className="min-w-0">
+            <h1 className="text-base font-semibold tracking-tight uppercase truncate">Financial Dashboard</h1>
+            <p className="text-xs text-muted-foreground truncate">Tổng quan sức khoẻ tài chính cá nhân</p>
           </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
-            <Link href="/assets" className="hover:text-foreground transition-colors">Investment</Link>
-            <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">Wealth</Link>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+            <div className="hidden sm:flex items-center gap-3">
+              <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
+              <Link href="/assets" className="hover:text-foreground transition-colors">Investment</Link>
+              <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">Wealth</Link>
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -284,7 +286,7 @@ export default function FinancialDashboardPage() {
                 setHideValues(next);
                 localStorage.setItem("hide_values", next ? "1" : "0");
               }}
-              className="ml-2 text-muted-foreground hover:text-foreground transition-colors"
+              className="text-muted-foreground hover:text-foreground transition-colors"
               title={hideValues ? "Show values" : "Hide values"}
             >
               {hideValues ? "👁‍🗨" : "👁"}
@@ -330,7 +332,7 @@ export default function FinancialDashboardPage() {
 
         {/* ── Phân bổ tài sản ─────────────────────────────────────────────── */}
         <section className="grid md:grid-cols-2 gap-4">
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Phân bổ tổng tài sản</p>
             {wealthLoading ? (
               <Card className="p-4 h-40 flex items-center justify-center text-muted-foreground text-xs">Loading…</Card>
@@ -338,7 +340,7 @@ export default function FinancialDashboardPage() {
               <AllocationChart holdings={wealthHoldings} totalValue={netWorth} />
             )}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Cơ cấu tài sản tài chính</p>
             {investLoading ? (
               <Card className="p-4 h-40 flex items-center justify-center text-muted-foreground text-xs">Loading…</Card>
