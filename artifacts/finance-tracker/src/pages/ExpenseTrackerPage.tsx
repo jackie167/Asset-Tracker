@@ -368,8 +368,7 @@ export default function ExpenseTrackerPage() {
             {CATEGORIES.map((cat) => {
               const data = byCategory.find((b) => b.category === cat.key);
               const amount = data?.amount ?? 0;
-              const catBudget = annualBudget != null ? annualBudget / CATEGORIES.length : null;
-              const pct = catBudget && catBudget > 0 ? amount / catBudget : null;
+              const pct = annualBudget && annualBudget > 0 ? amount / annualBudget : null;
               return (
                 <Card key={cat.key} className="p-3 space-y-2">
                   <div className="flex items-center gap-1.5">
