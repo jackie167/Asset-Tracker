@@ -6,25 +6,19 @@ import { eq, desc, and, gte, lt, sql } from "drizzle-orm";
 const router = Router();
 
 export const EXPENSE_CATEGORIES = [
-  "an_uong",
-  "di_chuyen",
-  "mua_sam",
-  "giai_tri",
-  "suc_khoe",
-  "giao_duc",
-  "nha_o_tien_ich",
-  "khac",
+  "shopping",
+  "travel",
+  "support",
+  "personal",
+  "other",
 ] as const;
 
 export const CATEGORY_LABELS: Record<string, string> = {
-  an_uong: "Ăn uống",
-  di_chuyen: "Di chuyển",
-  mua_sam: "Mua sắm",
-  giai_tri: "Giải trí",
-  suc_khoe: "Sức khỏe",
-  giao_duc: "Giáo dục",
-  nha_o_tien_ich: "Nhà ở / Tiện ích",
-  khac: "Khác",
+  shopping: "Shopping",
+  travel:   "Travel",
+  support:  "Support",
+  personal: "Personal",
+  other:    "Other",
 };
 
 const CreateExpenseBody = z.object({

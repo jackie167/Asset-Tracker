@@ -10,14 +10,11 @@ import { fetchCashflowData } from "@/lib/excel-sheets";
 // ─── constants ───────────────────────────────────────────────────────────────
 
 const CATEGORIES: { key: string; label: string; icon: string }[] = [
-  { key: "an_uong",        label: "Ăn uống",          icon: "🍜" },
-  { key: "di_chuyen",      label: "Di chuyển",         icon: "🚗" },
-  { key: "mua_sam",        label: "Mua sắm",           icon: "🛍️" },
-  { key: "giai_tri",       label: "Giải trí",          icon: "🎬" },
-  { key: "suc_khoe",       label: "Sức khỏe",          icon: "💊" },
-  { key: "giao_duc",       label: "Giáo dục",          icon: "📚" },
-  { key: "nha_o_tien_ich", label: "Nhà ở / Tiện ích",  icon: "🏠" },
-  { key: "khac",           label: "Khác",              icon: "📦" },
+  { key: "shopping", label: "Shopping", icon: "🛍️" },
+  { key: "travel",   label: "Travel",   icon: "✈️" },
+  { key: "support",  label: "Support",  icon: "🤝" },
+  { key: "personal", label: "Personal", icon: "🧴" },
+  { key: "other",    label: "Other",    icon: "📦" },
 ];
 
 const CAT_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.key, c]));
