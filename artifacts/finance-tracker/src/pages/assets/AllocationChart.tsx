@@ -46,7 +46,7 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
   const chartWidth = data.length * (barWidth + barGap) + 40;
 
   return (
-    <Card className="p-4">
+    <Card className="p-4 overflow-hidden min-w-0">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs text-muted-foreground uppercase tracking-widest">Asset Allocation</p>
         <div className="flex gap-1">
@@ -73,7 +73,7 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
         </div>
       </div>
 
-      <div style={{ height: 160 }} className="flex justify-center overflow-x-auto">
+      <div className="overflow-x-auto" style={{ height: 160 }}>
         <BarChart
           width={chartWidth}
           height={160}
@@ -120,8 +120,8 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
         </BarChart>
       </div>
 
-      <div className="flex justify-center mt-1">
-        <table style={{ borderCollapse: "collapse", display: "inline-table" }}>
+      <div className="overflow-x-auto mt-1">
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
           <thead>
             <tr className="text-[9px] text-muted-foreground uppercase tracking-wider">
               <th className="py-1.5 pr-6 text-left font-normal border-b border-border">Asset Type</th>

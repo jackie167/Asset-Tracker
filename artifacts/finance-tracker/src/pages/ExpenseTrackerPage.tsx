@@ -387,7 +387,7 @@ export default function ExpenseTrackerPage() {
                   <p className="text-lg font-bold tabular-nums">{fmt(amount, hide)}</p>
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="text-muted-foreground">{data?.count ? `${data.count} lần` : "0 lần"}</span>
-                    <span className="font-semibold tabular-nums text-muted-foreground">
+                    <span className="font-semibold tabular-nums text-emerald-400">
                       {pct != null ? fmtPct(pct) : "—"}
                     </span>
                   </div>
