@@ -1,6 +1,6 @@
 import type { HoldingItem } from "@/pages/assets/types";
 
-export const CURRENT_ASSET_SHEET = "Current asset - CURRENT ASSETS";
+export const CURRENT_ASSET_SHEET = "Current asset";
 
 async function readJsonSafe(res: Response) {
   const contentType = res.headers.get("content-type") || "";
