@@ -68,11 +68,22 @@ export default function Home() {
                 <div className="mt-3 text-xs font-semibold text-primary">Open page →</div>
               </Card>
             </Link>
+
+            <Link href="/fire" className="block">
+              <Card className="h-full border-border/70 bg-card/80 p-4 hover:border-primary/70 hover:shadow-[0_0_0_1px_hsl(var(--primary))] transition">
+                <p className="text-xs text-muted-foreground uppercase tracking-widest">Page 5</p>
+                <h3 className="mt-2 text-lg font-semibold">FIRE Planning</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Kế hoạch tự do tài chính: FIRE number, tiến độ, Coast FIRE và kịch bản.
+                </p>
+                <div className="mt-3 text-xs font-semibold text-primary">Open page →</div>
+              </Card>
+            </Link>
           </div>
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/80"></span>
-            Total workspace: Home, Investment, Wealth Allocation, Excel Sheets, Financial Dashboard.
+            Total workspace: Home, Investment, Wealth Allocation, Excel Sheets, Financial Dashboard, FIRE Planning.
           </div>
         </Card>
       </main>

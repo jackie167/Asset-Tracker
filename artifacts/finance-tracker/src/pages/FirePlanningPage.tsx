@@ -1,0 +1,471 @@
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { Card } from "@/components/ui/card";
+import type { HoldingItem } from "@/pages/assets/types";
+import { formatVNDFull } from "@/pages/assets/utils";
+import { fetchCashflowData, fetchTotalAssetData } from "@/lib/excel-sheets";
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function fmt(v: number | null | undefined, hide = false) {
+  if (hide) return "****";
+  return formatVNDFull(v);
+}
+
+function fmtPct(v: number | null | undefined, dec = 1) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${(v * 100).toFixed(dec)}%`;
+}
+
+function fmtYear(v: number | null | undefined) {
+  if (v == null || !Number.isFinite(v) || v <= 0) return "—";
+  if (v > 100) return ">100 năm";
+  const y = Math.floor(v);
+  const m = Math.round((v - y) * 12);
+  if (y === 0) return `${m} tháng`;
+  if (m === 0) return `${y} năm`;
+  return `${y} năm ${m} tháng`;
+}
+
+// Years to reach target FV given PV, PMT/year, annual rate r
+function yearsToFire(pv: number, pmt: number, r: number, fv: number): number | null {
+  if (fv <= pv) return 0;
+  if (r === 0) return pmt > 0 ? (fv - pv) / pmt : null;
+  if (pmt + pv * r <= 0) return null;
+  const n = Math.log((fv * r + pmt) / (pv * r + pmt)) / Math.log(1 + r);
+  return n > 0 && Number.isFinite(n) ? n : null;
+}
+
+type Tone = "positive" | "negative" | "warn" | "neutral";
+const T: Record<Tone, string> = {
+  positive: "text-emerald-400",
+  negative: "text-red-400",
+  warn: "text-amber-400",
+  neutral: "text-muted-foreground",
+};
+
+function tonePct(v: number | null, good: number): Tone {
+  if (v == null) return "neutral";
+  return v >= good ? "positive" : v >= good * 0.5 ? "warn" : "negative";
+}
+
+// ─── fetchers ────────────────────────────────────────────────────────────────
+
+async function fetchInvestmentSummary() {
+  const res = await fetch("/api/portfolio/summary");
+  if (!res.ok) throw new Error();
+  return res.json() as Promise<{ holdings: HoldingItem[] }>;
+}
+
+async function fetchXirr() {
+  const res = await fetch("/api/portfolio/xirr");
+  const d = await res.json().catch(() => null);
+  return { xirrAnnual: typeof d?.xirrAnnual === "number" ? d.xirrAnnual : null };
+}
+
+// ─── small components ────────────────────────────────────────────────────────
+
+function KpiCard({ label, value, sub, tone = "neutral", loading = false }: {
+  label: string; value: string; sub?: string; tone?: Tone; loading?: boolean;
+}) {
+  return (
+    <Card className="p-4 space-y-1">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{label}</p>
+      {loading
+        ? <div className="h-7 w-32 rounded bg-muted animate-pulse" />
+        : <p className={`text-2xl font-bold tabular-nums ${T[tone]}`}>{value}</p>}
+      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+    </Card>
+  );
+}
+
+function ProgressBar({ pct, tone }: { pct: number; tone: Tone }) {
+  const w = Math.min(Math.round(pct * 100), 100);
+  const color = tone === "positive" ? "bg-emerald-500" : tone === "warn" ? "bg-amber-400" : "bg-primary";
+  return (
+    <div className="h-2 rounded-full bg-muted overflow-hidden">
+      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${w}%` }} />
+    </div>
+  );
+}
+
+function NumberInput({ label, value, onChange, unit, min = 0 }: {
+  label: string; value: number; onChange: (v: number) => void; unit?: string; min?: number;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</label>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={min}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+        {unit && <span className="text-xs text-muted-foreground shrink-0">{unit}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── main ────────────────────────────────────────────────────────────────────
+
+const LS = {
+  get: (k: string, def: number) => { const v = localStorage.getItem(k); return v != null ? Number(v) : def; },
+  set: (k: string, v: number) => localStorage.setItem(k, String(v)),
+};
+
+export default function FirePlanningPage() {
+  const [hide, setHide] = useState(() => localStorage.getItem("hide_values") === "1");
+
+  // User params (localStorage-backed)
+  const [withdrawalRate, setWithdrawalRate] = useState(() => LS.get("fire_wr", 4));          // %
+  const [expectedReturn, setExpectedReturn] = useState(() => LS.get("fire_ret", 8));          // %
+  const [currentAge, setCurrentAge] = useState(() => LS.get("fire_age", 35));
+  const [targetAge, setTargetAge] = useState(() => LS.get("fire_target_age", 55));
+  const [customSpend, setCustomSpend] = useState(() => LS.get("fire_spend", 0));              // 0 = auto from cashflow
+  const [includeRealEstate, setIncludeRealEstate] = useState(() => LS.get("fire_re", 0) === 1);
+
+  const save = (k: string, v: number) => { LS.set(k, v); };
+
+  // Queries
+  const investQuery = useQuery({ queryKey: ["dashboard-investment"], queryFn: fetchInvestmentSummary });
+  const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
+  const cashflowQuery = useQuery({ queryKey: ["excel-cashflow"], queryFn: fetchCashflowData });
+  const totalAssetQuery = useQuery({ queryKey: ["excel-total-asset"], queryFn: fetchTotalAssetData });
+
+  const isLoading = investQuery.isLoading || cashflowQuery.isLoading;
+
+  // ── core numbers ────────────────────────────────────────────────────────────
+
+  const financialAssets = useMemo(() => {
+    const holdings: HoldingItem[] = investQuery.data?.holdings ?? [];
+    return holdings.reduce((s, h) => s + (h.currentValue ?? 0), 0);
+  }, [investQuery.data]);
+
+  const annualSavings = useMemo(() => {
+    const cf = cashflowQuery.data;
+    if (!cf) return 0;
+    return Math.max(cf.income - cf.expense, 0);
+  }, [cashflowQuery.data]);
+
+  const autoSpend = cashflowQuery.data?.expense ?? 0;
+  const annualSpend = customSpend > 0 ? customSpend : autoSpend;
+
+  const wr = withdrawalRate / 100;
+  const r = expectedReturn / 100;
+  const xirrActual = xirrQuery.data?.xirrAnnual;
+
+  const fireNumber = wr > 0 ? annualSpend / wr : null;
+
+  // Assets counted toward FIRE
+  const fireAssets = useMemo(() => {
+    if (!includeRealEstate) return financialAssets;
+    return totalAssetQuery.data?.netAsset ?? financialAssets;
+  }, [financialAssets, includeRealEstate, totalAssetQuery.data]);
+
+  const fireProgress = fireNumber && fireNumber > 0 ? Math.min(fireAssets / fireNumber, 1) : null;
+  const freedomRatio = annualSpend > 0 ? (fireAssets * wr) / annualSpend : null;
+
+  // Passive income potential
+  const annualPassiveIncome = fireAssets * wr;
+  const monthlyPassiveIncome = annualPassiveIncome / 12;
+  const monthlySpend = annualSpend / 12;
+
+  // Time to FIRE
+  const yearsLeft = useMemo(() => {
+    if (!fireNumber || fireNumber <= 0) return null;
+    return yearsToFire(fireAssets, annualSavings, r, fireNumber);
+  }, [fireAssets, annualSavings, r, fireNumber]);
+
+  const fireYear = yearsLeft != null ? new Date().getFullYear() + Math.ceil(yearsLeft) : null;
+
+  // Coast FIRE
+  const yearsToTarget = Math.max(targetAge - currentAge, 0);
+  const coastFireNumber = fireNumber && yearsToTarget > 0
+    ? fireNumber / Math.pow(1 + r, yearsToTarget)
+    : null;
+  const isCoastFire = coastFireNumber != null && fireAssets >= coastFireNumber;
+
+  // Scenarios
+  const scenarios = useMemo(() => {
+    const base = annualSpend;
+    return [
+      { label: "Lean FIRE", multiplier: 0.7, color: "text-sky-400" },
+      { label: "Normal FIRE", multiplier: 1.0, color: "text-emerald-400" },
+      { label: "Fat FIRE", multiplier: 1.3, color: "text-amber-400" },
+    ].map(({ label, multiplier, color }) => {
+      const spend = base * multiplier;
+      const target = wr > 0 ? spend / wr : null;
+      const years = target ? yearsToFire(fireAssets, annualSavings, r, target) : null;
+      const yr = years != null ? new Date().getFullYear() + Math.ceil(years) : null;
+      const progress = target ? Math.min(fireAssets / target, 1) : null;
+      return { label, spend, target, years, yr, progress, color };
+    });
+  }, [annualSpend, wr, fireAssets, annualSavings, r]);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Header */}
+      <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
+        <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-base font-semibold tracking-tight uppercase">FIRE Planning</h1>
+            <p className="text-xs text-muted-foreground">Financial Independence, Retire Early</p>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
+            <Link href="/assets" className="hover:text-foreground transition-colors">Investment</Link>
+            <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
+            <button
+              type="button"
+              onClick={() => { const n = !hide; setHide(n); localStorage.setItem("hide_values", n ? "1" : "0"); }}
+              className="ml-1 text-muted-foreground hover:text-foreground"
+            >{hide ? "👁‍🗨" : "👁"}</button>
+          </div>
+        </div>
+      </header>
+
+      <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-6 space-y-6">
+
+        {/* ── Settings ─────────────────────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Thông số cá nhân</p>
+          <Card className="p-4 md:p-5">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <NumberInput label="Chi tiêu/năm (0=tự động)" value={customSpend}
+                onChange={(v) => { setCustomSpend(v); save("fire_spend", v); }} unit="đ" />
+              <NumberInput label="Withdrawal Rate" value={withdrawalRate}
+                onChange={(v) => { setWithdrawalRate(v); save("fire_wr", v); }} unit="%" min={1} />
+              <NumberInput label="Lãi suất kỳ vọng" value={expectedReturn}
+                onChange={(v) => { setExpectedReturn(v); save("fire_ret", v); }} unit="%" />
+              <NumberInput label="Tuổi hiện tại" value={currentAge}
+                onChange={(v) => { setCurrentAge(v); save("fire_age", v); }} />
+              <NumberInput label="Tuổi mục tiêu FIRE" value={targetAge}
+                onChange={(v) => { setTargetAge(v); save("fire_target_age", v); }} />
+              <div className="space-y-1 flex flex-col justify-end">
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Tính cả Bất động sản</label>
+                <button
+                  type="button"
+                  onClick={() => { const n = !includeRealEstate; setIncludeRealEstate(n); save("fire_re", n ? 1 : 0); }}
+                  className={`h-9 rounded border text-xs font-medium transition-colors ${includeRealEstate ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+                >{includeRealEstate ? "Có (tài sản ròng)" : "Không (tài chính)"}</button>
+              </div>
+            </div>
+            {autoSpend > 0 && customSpend === 0 && (
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Chi tiêu tự động từ sheet Cashflow ({cashflowQuery.data?.year}): {fmt(autoSpend, hide)} / năm
+              </p>
+            )}
+            {xirrActual != null && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                XIRR thực tế hiện tại: {fmtPct(xirrActual)} / năm
+                {Math.abs(xirrActual * 100 - expectedReturn) > 0.5 && (
+                  <span className="text-amber-400 ml-1">(đang dùng {expectedReturn}% kỳ vọng)</span>
+                )}
+              </p>
+            )}
+          </Card>
+        </section>
+
+        {/* ── KPIs ─────────────────────────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Chỉ số FIRE</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard
+              label="FIRE Number"
+              value={fmt(fireNumber, hide)}
+              sub={`Chi tiêu ${fmt(annualSpend, hide)}/năm ÷ ${withdrawalRate}%`}
+              loading={isLoading}
+            />
+            <KpiCard
+              label="Tài sản hiện tại"
+              value={fmt(fireAssets, hide)}
+              sub={includeRealEstate ? "Tài sản ròng (có BĐS)" : "Tài sản tài chính"}
+              loading={isLoading}
+            />
+            <KpiCard
+              label="Freedom Ratio"
+              value={fmtPct(freedomRatio)}
+              sub={`Thu nhập thụ động: ${fmt(annualPassiveIncome, hide)}/năm`}
+              tone={tonePct(freedomRatio, 1)}
+              loading={isLoading}
+            />
+            <KpiCard
+              label="Thời gian đến FIRE"
+              value={isLoading ? "…" : fmtYear(yearsLeft)}
+              sub={fireYear ? `Dự kiến năm ${fireYear}` : undefined}
+              tone={yearsLeft != null ? (yearsLeft <= 10 ? "positive" : yearsLeft <= 20 ? "warn" : "neutral") : "neutral"}
+              loading={isLoading}
+            />
+          </div>
+        </section>
+
+        {/* ── Progress ─────────────────────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Tiến độ đến FIRE</p>
+          <Card className="p-4 md:p-6 space-y-5">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">
+                  {fmtPct(fireProgress)} hoàn thành
+                  {fireProgress != null && fireProgress >= 1 && <span className="ml-2 text-emerald-400 font-bold">🎉 ĐÃ FIRE!</span>}
+                </span>
+                <span className="text-muted-foreground tabular-nums text-xs">
+                  {hide ? "****" : `${fmt(fireAssets)} / ${fmt(fireNumber)}`}
+                </span>
+              </div>
+              <ProgressBar pct={fireProgress ?? 0} tone={tonePct(fireProgress, 1)} />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0%</span>
+                <span className="text-amber-400">25% (Starter)</span>
+                <span className="text-sky-400">50% (Halfway)</span>
+                <span className="text-emerald-400">100% FIRE</span>
+              </div>
+            </div>
+
+            {/* Passive income vs spend */}
+            <div className="grid md:grid-cols-2 gap-4 pt-2 border-t border-border/40">
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Thu nhập thụ động / tháng</p>
+                <p className={`text-xl font-bold tabular-nums ${freedomRatio != null && freedomRatio >= 1 ? "text-emerald-400" : "text-foreground"}`}>
+                  {fmt(monthlyPassiveIncome, hide)}
+                </p>
+                <p className="text-xs text-muted-foreground">từ {fmtPct(wr, 0)} × tài sản tài chính</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Chi tiêu mục tiêu / tháng</p>
+                <p className="text-xl font-bold tabular-nums">{fmt(monthlySpend, hide)}</p>
+                <p className={`text-xs font-medium ${freedomRatio != null && freedomRatio >= 1 ? "text-emerald-400" : "text-amber-400"}`}>
+                  {freedomRatio != null ? `Thụ động bù được ${fmtPct(freedomRatio)} chi tiêu` : "—"}
+                </p>
+              </div>
+            </div>
+          </Card>
+        </section>
+
+        {/* ── Coast FIRE ───────────────────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Coast FIRE</p>
+          <Card className="p-4 md:p-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Nếu ngừng tiết kiệm ngay hôm nay, tài sản có tự tăng đến FIRE number trước tuổi <strong className="text-foreground">{targetAge}</strong> không?
+                </p>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Coast FIRE Number (tại tuổi {currentAge})</span>
+                    <span className="font-semibold">{fmt(coastFireNumber, hide)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Tài sản hiện tại</span>
+                    <span className="font-semibold">{fmt(fireAssets, hide)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Còn thiếu</span>
+                    <span className={`font-semibold ${isCoastFire ? "text-emerald-400" : "text-amber-400"}`}>
+                      {coastFireNumber != null ? (isCoastFire ? "Đã đạt Coast FIRE ✓" : fmt(coastFireNumber - fireAssets, hide)) : "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {isCoastFire ? (
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-1">
+                    <p className="text-sm font-semibold text-emerald-400">Đã đạt Coast FIRE!</p>
+                    <p className="text-xs text-muted-foreground">
+                      Dù ngừng tiết kiệm, tài sản hiện tại sẽ tự tăng đến {fmt(fireNumber, hide)} trước tuổi {targetAge} với lãi suất {expectedReturn}%/năm.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-1">
+                    <p className="text-sm font-semibold text-amber-400">Chưa đạt Coast FIRE</p>
+                    <p className="text-xs text-muted-foreground">
+                      Cần {fmt(coastFireNumber, hide)} để Coast FIRE. Tiếp tục tích lũy thêm {fmt(coastFireNumber != null ? Math.max(coastFireNumber - fireAssets, 0) : null, hide)}.
+                    </p>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground">
+                  Năm còn lại đến tuổi mục tiêu: {yearsToTarget} năm · Lãi suất: {expectedReturn}%/năm
+                </p>
+              </div>
+            </div>
+          </Card>
+        </section>
+
+        {/* ── Scenarios ────────────────────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Kịch bản FIRE</p>
+          <div className="grid md:grid-cols-3 gap-4">
+            {scenarios.map((s) => (
+              <Card key={s.label} className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className={`text-sm font-semibold ${s.color}`}>{s.label}</p>
+                  <p className="text-[10px] text-muted-foreground">{fmtPct(s.progress)} done</p>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Chi tiêu/năm</span>
+                    <span className="font-medium">{fmt(s.spend, hide)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">FIRE Number</span>
+                    <span className="font-medium">{fmt(s.target, hide)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Thời gian</span>
+                    <span className={`font-semibold ${s.color}`}>{fmtYear(s.years)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Năm FIRE</span>
+                    <span className="font-medium">{s.yr ?? "—"}</span>
+                  </div>
+                </div>
+                <ProgressBar pct={s.progress ?? 0} tone="neutral" />
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Milestones ───────────────────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Cột mốc tích lũy</p>
+          <Card className="p-4 md:p-5">
+            <div className="divide-y divide-border/40">
+              {[
+                { label: "Starter (25%)", pct: 0.25, emoji: "🌱" },
+                { label: "Halfway (50%)", pct: 0.50, emoji: "🏃" },
+                { label: "Almost there (75%)", pct: 0.75, emoji: "🚀" },
+                { label: "FIRE! (100%)", pct: 1.00, emoji: "🎯" },
+              ].map((m) => {
+                const target = fireNumber ? fireNumber * m.pct : null;
+                const reached = fireAssets >= (target ?? Infinity);
+                const yearsToMilestone = target && !reached
+                  ? yearsToFire(fireAssets, annualSavings, r, target)
+                  : null;
+                return (
+                  <div key={m.label} className="flex items-center gap-3 py-2.5">
+                    <span className="text-lg w-6 shrink-0">{m.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-medium ${reached ? "text-emerald-400" : "text-foreground"}`}>
+                        {m.label} {reached && "✓"}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">{fmt(target, hide)}</p>
+                    </div>
+                    <p className={`text-xs font-semibold tabular-nums shrink-0 ${reached ? "text-emerald-400" : "text-muted-foreground"}`}>
+                      {reached ? "Đạt rồi!" : fmtYear(yearsToMilestone)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </section>
+
+      </main>
+    </div>
+  );
+}
