@@ -12,6 +12,7 @@ import WealthAllocationPage from "@/pages/WealthAllocationPage";
 import WealthAllocationTypePage from "@/pages/WealthAllocationTypePage";
 import FinancialDashboardPage from "@/pages/FinancialDashboardPage";
 import FirePlanningPage from "@/pages/FirePlanningPage";
+import ExpenseTrackerPage from "@/pages/ExpenseTrackerPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/excel" component={ExcelPage} />
       <Route path="/dashboard" component={FinancialDashboardPage} />
       <Route path="/fire" component={FirePlanningPage} />
+      <Route path="/expenses" component={ExpenseTrackerPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -68,6 +68,9 @@ export default function AssetsHeader({
             <DropdownMenuItem asChild>
               <Link href="/fire">FIRE Planning</Link>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/expenses">Chi tiêu</Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             {onTrade && (
               <DropdownMenuItem onSelect={onTrade}>

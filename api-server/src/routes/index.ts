@@ -6,6 +6,7 @@ import snapshotsRouter from "./snapshots.js";
 import importRouter from "./import.js";
 import excelRouter from "./excel.js";
 import transactionsRouter from "./transactions.js";
+import expensesRouter from "./expenses.js";
 
 const router: IRouter = Router();
 
@@ -14,6 +15,7 @@ router.use(importRouter);
 router.use(excelRouter);
 router.use(holdingsRouter);
 router.use(transactionsRouter);
+router.use(expensesRouter);
 router.use(pricesRouter);
 router.use(snapshotsRouter);
 
