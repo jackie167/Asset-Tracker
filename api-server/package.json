@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "NODE_ENV=development tsx src/index.ts",
-    "build": "../node_modules/.bin/esbuild src/index.ts --bundle --platform=node --format=esm --external:pg --external:better-sqlite3 --outdir=dist",
+    "build": "../node_modules/.bin/esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --alias:@workspace/db=../lib/db/src/index.ts --alias:@workspace/api-zod=../lib/api-zod/src/index.ts --outdir=dist",
     "start": "node dist/index.js"
   },
   "dependencies": {
