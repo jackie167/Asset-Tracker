@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import AllocationChart from "@/pages/assets/AllocationChart";
 import AssetsHeader from "@/pages/assets/AssetsHeader";
@@ -9,33 +8,6 @@ import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatTypeLabel, formatVND, formatVNDFull } from "@/pages/assets/utils";
 import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
-
-function formatPercent(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${(value * 100).toFixed(2)}%`;
-}
-
-async function fetchPortfolioXirr(): Promise<{ xirrAnnual: number | null; xirrMonthly: number | null }> {
-  const res = await fetch("/api/portfolio/xirr");
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status} ${res.statusText}`);
-  return {
-    xirrAnnual: typeof data?.xirrAnnual === "number" ? data.xirrAnnual : null,
-    xirrMonthly: typeof data?.xirrMonthly === "number" ? data.xirrMonthly : null,
-  };
-}
-
-async function fetchPortfolioSummaryPnL(): Promise<{ totalPnL: number | null; totalPnLPercent: number | null }> {
-  const res = await fetch("/api/portfolio/summary");
-  const data = await res.json().catch(() => null);
-  if (!res.ok) return { totalPnL: null, totalPnLPercent: null };
-  const holdings: Array<{ currentValue?: number | null; costOfCapital?: number | null }> = data?.holdings ?? [];
-  const totalCapital = holdings.reduce((sum, h) => sum + (h.costOfCapital ?? 0), 0);
-  const totalCurrent = holdings.reduce((sum, h) => sum + (h.currentValue ?? 0), 0);
-  const totalPnL = totalCurrent - totalCapital;
-  const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
-  return { totalPnL, totalPnLPercent };
-}
 
 export default function WealthAllocationPage() {
   const [, navigate] = useLocation();
@@ -51,16 +23,6 @@ export default function WealthAllocationPage() {
   const [holdings, setHoldings] = useState<HoldingItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const portfolioXirrQuery = useQuery({
-    queryKey: ["portfolio-xirr"],
-    queryFn: fetchPortfolioXirr,
-  });
-
-  const portfolioPnLQuery = useQuery({
-    queryKey: ["portfolio-pnl"],
-    queryFn: fetchPortfolioSummaryPnL,
-  });
 
   const loadWealthAllocation = useCallback(async () => {
     setIsLoading(true);
@@ -172,11 +134,6 @@ export default function WealthAllocationPage() {
     navigate(`/wealth-allocation/type/${encodeURIComponent(type)}`);
   };
 
-  const pnl = portfolioPnLQuery.data?.totalPnL ?? null;
-  const pnlPercent = portfolioPnLQuery.data?.totalPnLPercent ?? null;
-  const xirrAnnual = portfolioXirrQuery.data?.xirrAnnual ?? null;
-  const xirrMonthly = portfolioXirrQuery.data?.xirrMonthly ?? null;
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AssetsHeader
@@ -196,28 +153,6 @@ export default function WealthAllocationPage() {
               totalValueLabel={formatMoney(totalValue, true)}
               hideValues={hideValues}
               onToggleHideValues={toggleHideValues}
-              metrics={[
-                {
-                  label: "P/L",
-                  value: pnl != null ? formatVNDFull(pnl) : "—",
-                  tone: pnl == null ? "neutral" : pnl >= 0 ? "positive" : "negative",
-                },
-                {
-                  label: "P/L %",
-                  value: formatPercent(pnlPercent),
-                  tone: pnlPercent == null ? "neutral" : pnlPercent >= 0 ? "positive" : "negative",
-                },
-                {
-                  label: "XIRR / Year",
-                  value: formatPercent(xirrAnnual),
-                  tone: xirrAnnual == null ? "neutral" : xirrAnnual >= 0 ? "positive" : "negative",
-                },
-                {
-                  label: "XIRR / Month",
-                  value: formatPercent(xirrMonthly),
-                  tone: xirrMonthly == null ? "neutral" : xirrMonthly >= 0 ? "positive" : "negative",
-                },
-              ]}
             />
 
             {totalValue > 0 && (
