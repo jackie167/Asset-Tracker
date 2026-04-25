@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { db } from "@workspace/db";
-import { expensesTable } from "@workspace/db/schema";
+import { db, expensesTable } from "@workspace/db";
 import { eq, desc, and, gte, lt, sql } from "drizzle-orm";
 
 const router = Router();
