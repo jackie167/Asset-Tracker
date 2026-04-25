@@ -254,13 +254,18 @@ export default function ExpenseTrackerPage() {
             </button>
           </div>
           <Card className="overflow-hidden">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
+              <colgroup>
+                <col className="w-auto" />
+                <col className="w-40 sm:w-52" />
+                <col className="w-14" />
+              </colgroup>
               <tbody className="divide-y divide-border/40">
                 {/* Investment */}
                 <tr className="hover:bg-muted/20">
                   <td className="px-4 py-2.5 font-semibold">Investment</td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{fmt(alloc.invest, hide)}</td>
-                  <td className="px-4 py-2.5 text-right text-muted-foreground text-xs w-16">
+                  <td className="px-3 py-2.5 text-right text-muted-foreground text-xs">
                     {totalIncome > 0 ? fmtPct(alloc.invest / totalIncome) : "—"}
                   </td>
                 </tr>
@@ -268,7 +273,7 @@ export default function ExpenseTrackerPage() {
                 <tr className="hover:bg-muted/20">
                   <td className="px-4 py-2.5 font-semibold">Need</td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{fmt(alloc.needTotal, hide)}</td>
-                  <td className="px-4 py-2.5 text-right text-muted-foreground text-xs">
+                  <td className="px-3 py-2.5 text-right text-muted-foreground text-xs">
                     {totalIncome > 0 ? fmtPct(alloc.needTotal / totalIncome) : "—"}
                   </td>
                 </tr>
@@ -279,7 +284,7 @@ export default function ExpenseTrackerPage() {
                   { label: "Maintenance",  val: alloc.needMaint },
                 ].map(({ label, val }) => (
                   <tr key={label} className="bg-muted/10 hover:bg-muted/20">
-                    <td className="px-4 py-2 pl-10 text-muted-foreground text-xs">{label}</td>
+                    <td className="px-4 py-2 pl-8 text-muted-foreground text-xs">{label}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-xs text-muted-foreground">{fmt(val, hide)}</td>
                     <td />
                   </tr>
@@ -288,7 +293,7 @@ export default function ExpenseTrackerPage() {
                 <tr className="bg-primary/5 hover:bg-primary/10">
                   <td className="px-4 py-2.5 font-bold text-primary">Want</td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-bold text-primary">{fmt(alloc.want, hide)}</td>
-                  <td className="px-4 py-2.5 text-right text-primary text-xs font-semibold">
+                  <td className="px-3 py-2.5 text-right text-primary text-xs font-semibold">
                     {totalIncome > 0 ? fmtPct(alloc.want / totalIncome) : "—"}
                   </td>
                 </tr>
