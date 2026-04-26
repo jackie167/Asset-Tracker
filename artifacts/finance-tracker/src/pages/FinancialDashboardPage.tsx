@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import PageHeader from "@/pages/PageHeader";
-import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
-import AllocationChart from "@/pages/assets/AllocationChart";
-import PerformanceChart from "@/pages/assets/PerformanceChart";
-import type { ChartPoint, HoldingItem, SnapshotRange } from "@/pages/assets/types";
+import type { HoldingItem } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
-import { fetchWealthAllocationHoldings, normalizeWealthType } from "@/pages/wealthAllocationData";
+import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
 import { fetchCashflowData, fetchTotalAssetData } from "@/lib/excel-sheets";
-import type { CashflowData, TotalAssetData } from "@/lib/excel-sheets";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -50,12 +46,6 @@ async function fetchXirr() {
     xirrAnnual: typeof data?.xirrAnnual === "number" ? data.xirrAnnual : null,
     xirrMonthly: typeof data?.xirrMonthly === "number" ? data.xirrMonthly : null,
   };
-}
-
-async function fetchSnapshots(range: SnapshotRange) {
-  const res = await fetch(`/api/snapshots?range=${encodeURIComponent(range)}`);
-  if (!res.ok) throw new Error("Failed to load snapshots.");
-  return res.json();
 }
 
 async function fetchTransactions() {
@@ -139,7 +129,6 @@ function HealthRow({ label, value, pct, low, high, hint }: HealthRowProps) {
 
 export default function FinancialDashboardPage() {
   const [hideValues, setHideValues] = useState(() => localStorage.getItem("hide_values") === "1");
-  const [snapshotRange, setSnapshotRange] = useState<SnapshotRange>("1m");
 
   // Wealth allocation (all assets from Excel)
   const [wealthHoldings, setWealthHoldings] = useState<HoldingItem[]>([]);
@@ -160,7 +149,6 @@ export default function FinancialDashboardPage() {
 
   const investmentQuery = useQuery({ queryKey: ["dashboard-investment"], queryFn: fetchInvestmentSummary });
   const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
-  const snapshotsQuery = useQuery({ queryKey: ["dashboard-snapshots", snapshotRange], queryFn: () => fetchSnapshots(snapshotRange) });
   const transactionsQuery = useQuery({ queryKey: ["transactions"], queryFn: fetchTransactions });
   const cashflowQuery = useQuery({ queryKey: ["excel-cashflow"], queryFn: fetchCashflowData });
   const totalAssetQuery = useQuery({ queryKey: ["excel-total-asset"], queryFn: fetchTotalAssetData });
@@ -222,35 +210,6 @@ export default function FinancialDashboardPage() {
   const cryptoValue = byType.get("crypto") ?? 0;
   const fundValue = byType.get("fund") ?? byType.get("bond") ?? 0;
 
-  // Wealth type groups (from Excel)
-  const wealthByType = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const h of wealthHoldings) {
-      const key = normalizeWealthType(h.type);
-      map.set(key, (map.get(key) ?? 0) + (h.currentValue ?? 0));
-    }
-    return map;
-  }, [wealthHoldings]);
-
-  // Chart data
-  const chartData = useMemo(() =>
-    [...(snapshotsQuery.data ?? [])]
-      .sort((a: any, b: any) => new Date(a.snapshotAt).getTime() - new Date(b.snapshotAt).getTime())
-      .reduce((acc: ChartPoint[], s: any) => {
-        const dateKey = format(new Date(s.snapshotAt), "dd/MM");
-        const existing = acc.find((i) => i.date === dateKey);
-        if (existing) {
-          existing.totalValue = s.totalValue;
-          existing.stockValue = s.stockValue;
-          existing.goldValue = s.goldValue;
-        } else {
-          acc.push({ date: dateKey, totalValue: s.totalValue, stockValue: s.stockValue, goldValue: s.goldValue });
-        }
-        return acc;
-      }, []),
-    [snapshotsQuery.data]
-  );
-
   const fmt = (v: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(v) : formatVND(v);
 
@@ -278,10 +237,10 @@ export default function FinancialDashboardPage() {
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-6 space-y-6">
 
-        {/* ── Tổng quan số liệu ─────────────────────────────────────────── */}
+        {/* ── Tổng quan ─────────────────────────────────────────────────── */}
         <section className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Tổng quan</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <StatCard
               label="Tổng tài sản"
               value={fmt(netWorth, true)}
@@ -289,13 +248,27 @@ export default function FinancialDashboardPage() {
               loading={wealthLoading}
             />
             <StatCard
-              label="Tài sản tài chính"
+              label="Nợ"
+              value={fmt(totalAssetQuery.data?.debt ?? null, true)}
+              sub={totalAssetQuery.data ? `${formatPercent(totalAssetQuery.data.debtRatio)} tổng tài sản` : undefined}
+              tone="negative"
+              loading={totalAssetQuery.isLoading}
+            />
+            <StatCard
+              label="Tài sản ròng"
+              value={fmt(totalAssetQuery.data?.netAsset ?? null, true)}
+              sub="Sau khi trừ nợ"
+              tone="positive"
+              loading={totalAssetQuery.isLoading}
+            />
+            <StatCard
+              label="Tổng đầu tư"
               value={fmt(financialTotal, true)}
               sub={`${formatPercent(financialRatio)} tổng tài sản`}
               loading={investLoading}
             />
             <StatCard
-              label="Lợi nhuận đầu tư"
+              label="Lợi nhuận P/L"
               value={fmt(pnl, true)}
               sub={formatPercent(pnlPct)}
               tone={tone(pnl)}
@@ -309,39 +282,6 @@ export default function FinancialDashboardPage() {
               loading={xirrQuery.isLoading}
             />
           </div>
-        </section>
-
-        {/* ── Phân bổ tài sản ─────────────────────────────────────────────── */}
-        <section className="grid md:grid-cols-2 gap-4">
-          <div className="space-y-2 min-w-0">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Phân bổ tổng tài sản</p>
-            {wealthLoading ? (
-              <Card className="p-4 h-40 flex items-center justify-center text-muted-foreground text-xs">Loading…</Card>
-            ) : (
-              <AllocationChart holdings={wealthHoldings} totalValue={netWorth} />
-            )}
-          </div>
-          <div className="space-y-2 min-w-0">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Cơ cấu tài sản tài chính</p>
-            {investLoading ? (
-              <Card className="p-4 h-40 flex items-center justify-center text-muted-foreground text-xs">Loading…</Card>
-            ) : (
-              <AllocationChart holdings={investmentHoldings} totalValue={financialTotal} />
-            )}
-          </div>
-        </section>
-
-        {/* ── Hiệu suất đầu tư ─────────────────────────────────────────── */}
-        <section className="space-y-2">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Hiệu suất đầu tư</p>
-          <PerformanceChart
-            title=""
-            chartData={chartData}
-            hideValues={hideValues}
-            selectedRange={snapshotRange}
-            onRangeChange={setSnapshotRange}
-            emptyMessage="Chưa có lịch sử hiệu suất."
-          />
         </section>
 
         {/* ── Chỉ báo sức khoẻ tài chính ──────────────────────────────── */}

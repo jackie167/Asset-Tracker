@@ -75,7 +75,7 @@ export async function fetchTotalAssetData(): Promise<TotalAssetData | null> {
   const yearCol = findColIdx(headers, ["year", "năm"]);
   const totalCol = findColIdx(headers, ["tổng tài sản", "tong tai san"]);
   const netCol = findColIdx(headers, ["tài sản ròng", "tai san rong"]);
-  const debtCol = findColIdx(headers, ["nợ", "no"]);
+  const debtCol = findColIdx(headers, ["total loan", "nợ", "no", "loan"]);
   if (yearCol < 0 || totalCol < 0) return null;
 
   const currentYear = new Date().getFullYear();
