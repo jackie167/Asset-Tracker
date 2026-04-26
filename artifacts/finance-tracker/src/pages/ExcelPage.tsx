@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/pages/PageHeader";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -36,13 +36,6 @@ export default function ExcelPage() {
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
   const [excelSheet, setExcelSheet] = useState<string>("");
   const [excelRows, setExcelRows] = useState<Array<Array<string | number>>>([]);
-  const [excelFormulas, setExcelFormulas] = useState<Array<Array<boolean>>>([]);
-  const [excelDebug, setExcelDebug] = useState(false);
-  const [excelFormulaText, setExcelFormulaText] = useState<Array<Array<string>>>([]);
-  const [excelErrors, setExcelErrors] = useState<Array<Array<string>>>([]);
-  const [excelEdit, setExcelEdit] = useState<{ row: number; col: number; value: string } | null>(null);
-  const [excelOverrides, setExcelOverrides] = useState<Record<string, string | number | null>>({});
-  const [excelUploading, setExcelUploading] = useState(false);
   const [excelSyncingInvestment, setExcelSyncingInvestment] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelError, setExcelError] = useState<string | null>(null);
@@ -52,7 +45,6 @@ export default function ExcelPage() {
     readOnly: false,
     label: "Local file",
   });
-  const excelFileRef = useRef<HTMLInputElement | null>(null);
 
   const yearHeaderCols = useMemo(() => {
     const header = excelRows[0] ?? [];
@@ -91,8 +83,7 @@ export default function ExcelPage() {
     setExcelNotice(null);
     setExcelLoading(true);
     try {
-      const debugParam = excelDebug ? "&debug=1" : "";
-      const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(name)}${debugParam}`);
+      const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(name)}`);
       const data = await readJsonSafe(res);
       if (!res.ok) throw new Error(data?.error || "Không thể tải dữ liệu sheet.");
       if (data?.source) {
@@ -102,98 +93,12 @@ export default function ExcelPage() {
         setExcelSheet(data.name);
       }
       setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
-      setExcelFormulas(Array.isArray(data?.formulas) ? data.formulas : []);
-      if (excelDebug && data?.debug) {
-        setExcelFormulaText(Array.isArray(data.debug?.formulaText) ? data.debug.formulaText : []);
-        setExcelErrors(Array.isArray(data.debug?.errors) ? data.debug.errors : []);
-      } else {
-        setExcelFormulaText([]);
-        setExcelErrors([]);
-      }
     } catch (err) {
       setExcelError(err instanceof Error ? err.message : "Không thể tải dữ liệu sheet.");
     } finally {
       setExcelLoading(false);
     }
-  }, [excelDebug]);
-
-  const handleExcelUpload = async (file: File) => {
-    setExcelError(null);
-    setExcelNotice(null);
-    setExcelUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/excel/upload", { method: "POST", body: form });
-      const data = await readJsonSafe(res);
-      if (!res.ok) throw new Error(data?.error || "Không thể upload file Excel.");
-      if (data?.source) {
-        setExcelSource(data.source as ExcelSourceInfo);
-      }
-      const sheets = Array.isArray(data?.sheets) ? data.sheets : [];
-      setExcelSheets(sheets);
-      if (sheets.length) {
-        setExcelSheet(sheets[0]);
-      } else {
-        setExcelSheet("");
-        setExcelRows([]);
-        setExcelFormulas([]);
-      }
-    } catch (err) {
-      setExcelError(err instanceof Error ? err.message : "Không thể upload file Excel.");
-    } finally {
-      setExcelUploading(false);
-      if (excelFileRef.current) excelFileRef.current.value = "";
-    }
-  };
-
-  const recalcExcelSheet = async (name: string, overrides: Record<string, string | number | null>) => {
-    setExcelError(null);
-    setExcelNotice(null);
-    setExcelLoading(true);
-    try {
-      const res = await fetch("/api/excel/sheet/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, overrides }),
-      });
-      const data = await readJsonSafe(res);
-      if (!res.ok) throw new Error(data?.error || "Không thể tính lại dữ liệu sheet.");
-      if (data?.source) {
-        setExcelSource(data.source as ExcelSourceInfo);
-      }
-      setExcelRows(Array.isArray(data?.rows) ? data.rows : []);
-      setExcelFormulas(Array.isArray(data?.formulas) ? data.formulas : []);
-    } catch (err) {
-      setExcelError(err instanceof Error ? err.message : "Không thể tính lại dữ liệu sheet.");
-    } finally {
-      setExcelLoading(false);
-    }
-  };
-
-  const startExcelEdit = (row: number, col: number, value: string) => {
-    setExcelEdit({ row, col, value });
-  };
-
-  const commitExcelEdit = () => {
-    if (!excelEdit) return;
-    const { row, col, value } = excelEdit;
-    const trimmed = value.trim();
-    const parsed =
-      trimmed === ""
-        ? null
-        : (() => {
-            const numericValue = Number(trimmed.replace(/,/g, ""));
-            return Number.isFinite(numericValue) && trimmed.match(/^[-+]?[\d,.]+$/)
-              ? numericValue
-              : trimmed;
-          })();
-    const key = `${row},${col}`;
-    const nextOverrides = { ...excelOverrides, [key]: parsed };
-    setExcelOverrides(nextOverrides);
-    if (excelSheet) recalcExcelSheet(excelSheet, nextOverrides);
-    setExcelEdit(null);
-  };
+  }, []);
 
   const syncInvestmentToAssets = useCallback(async () => {
     setExcelError(null);
@@ -205,7 +110,6 @@ export default function ExcelPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: excelSheet,
-          overrides: excelOverrides,
         }),
       });
       const data = await readJsonSafe(res);
@@ -238,7 +142,7 @@ export default function ExcelPage() {
     } finally {
       setExcelSyncingInvestment(false);
     }
-  }, [excelOverrides, excelSheet, queryClient]);
+  }, [excelSheet, queryClient]);
 
   useEffect(() => {
     loadExcelSheets();
@@ -246,7 +150,6 @@ export default function ExcelPage() {
 
   useEffect(() => {
     if (!excelSheet) return;
-    setExcelOverrides({});
     loadExcelSheet(excelSheet);
   }, [excelSheet, loadExcelSheet]);
 
@@ -264,39 +167,6 @@ export default function ExcelPage() {
                 Nguồn dữ liệu: {excelSource.label}
                 {excelSource.readOnly ? " • chỉnh sửa tại nguồn rồi app tự đọc" : ""}
               </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {!excelSource.readOnly && (
-                <>
-                  <input
-                    ref={excelFileRef}
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) handleExcelUpload(file);
-                    }}
-                  />
-                  <button
-                    onClick={() => excelFileRef.current?.click()}
-                    className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:border-primary/40"
-                    disabled={excelUploading}
-                  >
-                    {excelUploading ? "Đang import..." : "Import file"}
-                  </button>
-                </>
-              )}
-              <button
-                onClick={() => setExcelDebug((previous) => !previous)}
-                className={`text-xs px-2 py-1 rounded border transition-colors ${
-                  excelDebug
-                    ? "border-primary/60 text-primary bg-primary/5"
-                    : "border-border text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                Debug
-              </button>
             </div>
           </div>
 
@@ -345,71 +215,22 @@ export default function ExcelPage() {
                   {excelRows.slice(0, 200).map((row, rowIndex) => (
                     <tr key={rowIndex} className={rowIndex === 0 ? "bg-muted/50 font-semibold" : ""}>
                       {row.map((cell, colIndex) => {
-                        const formulaRow = excelFormulas[rowIndex] ?? [];
-                        const hasFormula = formulaRow[colIndex] === true;
-                        const hasValue = cell !== null && cell !== undefined && cell !== "";
-                        const errorText = excelErrors[rowIndex]?.[colIndex] ?? "";
-                        const formulaText = excelFormulaText[rowIndex]?.[colIndex] ?? "";
-                        const isError = excelDebug && errorText;
-                        const displayValue = excelDebug
-                          ? isError
-                            ? `ERR: ${errorText}`
-                            : formulaText || cell
-                          : cell;
                         const isYearCol = yearHeaderCols.has(colIndex);
-                        const highlight =
-                          rowIndex > 0 &&
-                          !hasFormula &&
-                          hasValue &&
-                          typeof displayValue === "number" &&
-                          !isYearCol;
-                        const isEditing = excelEdit?.row === rowIndex && excelEdit?.col === colIndex;
-                        const isEditable = rowIndex > 0 && !hasFormula && !excelDebug && !excelSource.readOnly;
-                        const isNumeric =
-                          !isEditing &&
-                          !excelDebug &&
-                          typeof displayValue === "number" &&
-                          !isYearCol;
+                        const isNumeric = typeof cell === "number" && !isYearCol;
 
                         return (
                           <td
                             key={colIndex}
                             className={`px-2 py-1 border-b border-border whitespace-nowrap ${
-                              highlight ? "underline decoration-amber-400 decoration-2 underline-offset-2" : ""
-                            } ${isError ? "text-destructive" : ""} ${
-                              isEditable ? "cursor-pointer" : ""
-                            } ${isNumeric ? "text-right tabular-nums" : ""}`}
-                            onClick={() => {
-                              if (!isEditable) return;
-                              startExcelEdit(
-                                rowIndex,
-                                colIndex,
-                                cell === null || cell === undefined ? "" : String(cell)
-                              );
-                            }}
+                              isNumeric ? "text-right tabular-nums" : ""
+                            }`}
                           >
-                            {isEditing ? (
-                              <input
-                                autoFocus
-                                className="w-full bg-transparent outline-none text-xs"
-                                value={excelEdit?.value ?? ""}
-                                onChange={(event) =>
-                                  setExcelEdit((previous) =>
-                                    previous ? { ...previous, value: event.target.value } : previous
-                                  )
-                                }
-                                onBlur={commitExcelEdit}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") commitExcelEdit();
-                                  if (event.key === "Escape") setExcelEdit(null);
-                                }}
-                              />
-                            ) : displayValue === null || displayValue === undefined || displayValue === "" ? (
+                            {cell === null || cell === undefined || cell === "" ? (
                               "—"
-                            ) : typeof displayValue === "number" ? (
-                              isYearCol ? String(Math.trunc(displayValue)) : formatExcelNumber(displayValue)
+                            ) : typeof cell === "number" ? (
+                              isYearCol ? String(Math.trunc(cell)) : formatExcelNumber(cell)
                             ) : (
-                              String(displayValue)
+                              String(cell)
                             )}
                           </td>
                         );
