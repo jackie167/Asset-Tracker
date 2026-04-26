@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import PageHeader from "@/pages/PageHeader";
 import { Card } from "@/components/ui/card";
 import type { HoldingItem } from "@/pages/assets/types";
@@ -63,15 +64,17 @@ function StatCard({
   sub,
   tone: t = "neutral",
   loading = false,
+  href,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: Tone;
   loading?: boolean;
+  href?: string;
 }) {
-  return (
-    <Card className="p-4 space-y-1">
+  const content = (
+    <Card className={`p-4 space-y-1 ${href ? "hover:border-primary/60 hover:shadow-[0_0_0_1px_hsl(var(--primary))] transition cursor-pointer" : ""}`}>
       <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{label}</p>
       {loading ? (
         <div className="h-7 w-28 rounded bg-muted animate-pulse" />
@@ -81,6 +84,7 @@ function StatCard({
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </Card>
   );
+  return href ? <Link href={href}>{content}</Link> : content;
 }
 
 type HealthRowProps = {
@@ -250,6 +254,7 @@ export default function FinancialDashboardPage() {
                 value={fmt(netWorth, true)}
                 sub="Tất cả danh mục"
                 loading={wealthLoading}
+                href="/wealth-allocation"
               />
               <StatCard
                 label="Nợ"
@@ -275,6 +280,7 @@ export default function FinancialDashboardPage() {
                 value={fmt(financialTotal, true)}
                 sub={`${formatPercent(financialRatio)} tổng tài sản`}
                 loading={investLoading}
+                href="/assets"
               />
             <StatCard
               label="Lợi nhuận P/L"

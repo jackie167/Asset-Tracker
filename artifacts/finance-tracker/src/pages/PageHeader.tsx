@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const NAV_LINKS = [
-  { href: "/",                  label: "Home" },
+  { href: "/",                  label: "Dashboard" },
+  { href: "/home",              label: "Home" },
   { href: "/assets",            label: "Investment" },
   { href: "/wealth-allocation", label: "Wealth Allocation" },
   { href: "/transactions",      label: "Transactions" },
