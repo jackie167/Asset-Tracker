@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, holdingsTable, portfolioCashFlowsTable, transactionsTable } from "../../../lib/db/src/index.ts";
 import {
@@ -519,13 +519,21 @@ router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
     .returning();
 
   // 2. Update the Cash holding balance (manualPrice = total cash since quantity=1)
-  const [cashHolding] = await db
+  let cashHolding = await db
     .select()
     .from(holdingsTable)
-    .where(eq(holdingsTable.type, "cash"))
-    .limit(1);
+    .where(sql`lower(${holdingsTable.type}) = 'cash' OR lower(${holdingsTable.symbol}) = 'cash'`)
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
 
-  if (cashHolding) {
+  if (!cashHolding) {
+    // Auto-create Cash holding if it doesn't exist
+    const [newHolding] = await db
+      .insert(holdingsTable)
+      .values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(Math.max(0, delta)) })
+      .returning();
+    cashHolding = newHolding ?? null;
+  } else {
     const currentPrice = cashHolding.manualPrice != null
       ? parseFloat(String(cashHolding.manualPrice))
       : parseFloat(String(cashHolding.quantity));
@@ -534,6 +542,7 @@ router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
       .update(holdingsTable)
       .set({ manualPrice: String(newPrice), updatedAt: new Date() })
       .where(eq(holdingsTable.id, cashHolding.id));
+    cashHolding = { ...cashHolding, manualPrice: String(newPrice) };
 
     // 3. Write new cash balance back to Google Sheets via update-price endpoint
     try {
