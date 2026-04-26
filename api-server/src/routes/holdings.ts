@@ -212,7 +212,7 @@ async function getPortfolioCurrentValueSnapshot() {
 }
 
 async function buildPortfolioXirrSnapshot() {
-  const [portfolioSnapshot, externalCashFlows] = await Promise.all([
+  const [portfolioSnapshot, externalCashFlows, buyTransactions] = await Promise.all([
     getPortfolioCurrentValueSnapshot(),
     db
       .select()
@@ -223,11 +223,27 @@ async function buildPortfolioXirrSnapshot() {
           lte(portfolioCashFlowsTable.occurredAt, new Date()),
         )
       ),
+    db
+      .select()
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.side, "buy"),
+          eq(transactionsTable.status, "applied"),
+          eq(transactionsTable.fundingSource, "CASH"),
+          gte(transactionsTable.executedAt, STOCK_RETURN_INITIAL_AT),
+          lte(transactionsTable.executedAt, new Date()),
+        )
+      ),
   ]);
   const asOf = new Date();
   const currentValue = portfolioSnapshot.totalValue;
-  const initialCapital = portfolioSnapshot.holdingsWithValue.reduce(
+  const currentCostBasis = portfolioSnapshot.holdingsWithValue.reduce(
     (sum, holding) => sum + (holding.costOfCapital ?? 0),
+    0
+  );
+  const buyTransactionTotal = buyTransactions.reduce(
+    (sum, transaction) => sum + parseFloat(String(transaction.totalValue)),
     0
   );
 
@@ -254,6 +270,8 @@ async function buildPortfolioXirrSnapshot() {
       rowType: "external_cash_flow" as const,
     }];
   });
+  const externalCapitalDelta = externalCashFlowRows.reduce((sum, flow) => sum - flow.amount, 0);
+  const initialCapital = Math.max(0, currentCostBasis - buyTransactionTotal - externalCapitalDelta);
 
   const cashFlows = [
     {
@@ -282,8 +300,8 @@ async function buildPortfolioXirrSnapshot() {
     asOf,
     currentValue,
     initialCapital,
-    rawInitialCapital: initialCapital,
-    buyTransactionTotal: 0,
+    rawInitialCapital: currentCostBasis,
+    buyTransactionTotal,
     externalCashFlowTotal: externalCashFlowRows.reduce((sum, flow) => sum + flow.amount, 0),
     cashFlowCount: cashFlows.length,
     hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
