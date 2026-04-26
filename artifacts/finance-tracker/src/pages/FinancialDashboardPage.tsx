@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { useGetPortfolioSummary } from "@workspace/api-client-react";
 import PageHeader from "@/pages/PageHeader";
 import { Card } from "@/components/ui/card";
 import type { HoldingItem } from "@/pages/assets/types";
@@ -94,12 +95,6 @@ const TONE_CLASS: Record<Tone, string> = {
 };
 
 // ─── fetchers ────────────────────────────────────────────────────────────────
-
-async function fetchInvestmentSummary() {
-  const res = await fetch("/api/portfolio/summary");
-  if (!res.ok) throw new Error("Failed to load investment data.");
-  return res.json() as Promise<{ holdings: HoldingItem[]; totalValue: number }>;
-}
 
 async function fetchXirr() {
   const res = await fetch("/api/portfolio/xirr");
@@ -212,7 +207,7 @@ export default function FinancialDashboardPage() {
 
   useEffect(() => { loadWealth(); }, [loadWealth]);
 
-  const investmentQuery = useQuery({ queryKey: ["dashboard-investment"], queryFn: fetchInvestmentSummary });
+  const investmentQuery = useGetPortfolioSummary();
   const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
   const transactionsQuery = useQuery({ queryKey: ["transactions"], queryFn: fetchTransactions });
   const cashflowQuery = useQuery({ queryKey: ["excel-cashflow"], queryFn: fetchCashflowData });
