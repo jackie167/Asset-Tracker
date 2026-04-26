@@ -444,23 +444,6 @@ export default function FinancialDashboardPage() {
                     low={0} high={0.30}
                     hint="Nên dưới 30% tổng tài sản"
                   />
-                  {totalAssetQuery.data && (
-                    <div className="pt-1 border-t border-border/30 space-y-2">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tài sản & Nợ — {totalAssetQuery.data.year}</p>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Tổng tài sản</span>
-                        <span className="font-semibold">{hideValues ? "****" : fmt(totalAssetQuery.data.totalAsset, true)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Tài sản ròng (sau nợ)</span>
-                        <span className="font-semibold text-emerald-400">{hideValues ? "****" : fmt(totalAssetQuery.data.netAsset, true)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Nợ</span>
-                        <span className="font-semibold text-red-400">{hideValues ? "****" : fmt(totalAssetQuery.data.debt, true)}</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
