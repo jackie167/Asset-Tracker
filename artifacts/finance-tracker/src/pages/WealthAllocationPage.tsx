@@ -161,7 +161,6 @@ export default function WealthAllocationPage() {
                   <AllocationChart
                     holdings={holdings}
                     totalValue={totalValue}
-                    onTypeSelect={handleOpenAssetType}
                   />
                 )}
                 {holdings.length > 0 && (

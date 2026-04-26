@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BarChart, Bar, Cell, LabelList, Tooltip, XAxis, YAxis } from "recharts";
+import { BarChart, Bar, Cell, LabelList, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { Card } from "@/components/ui/card";
 import type { HoldingItem } from "@/pages/assets/types";
 import { formatVND, typeLabel } from "@/pages/assets/utils";
@@ -15,10 +15,9 @@ const PIE_COLORS = [
 type AllocationChartProps = {
   holdings: HoldingItem[];
   totalValue: number;
-  onTypeSelect?: (type: string) => void;
 };
 
-export default function AllocationChart({ holdings, totalValue, onTypeSelect }: AllocationChartProps) {
+export default function AllocationChart({ holdings, totalValue }: AllocationChartProps) {
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
 
   const data = useMemo(() => {
@@ -40,10 +39,6 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
   }, [holdings, totalValue, sortDir]);
 
   if (data.length === 0) return null;
-
-  const barWidth = 48;
-  const barGap = 28;
-  const chartWidth = data.length * (barWidth + barGap) + 40;
 
   return (
     <Card className="p-4 min-w-0 w-full">
@@ -73,14 +68,10 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
         </div>
       </div>
 
-      <div className="overflow-x-auto" style={{ height: 160 }}>
+      <ResponsiveContainer width="100%" height={160}>
         <BarChart
-          width={chartWidth}
-          height={160}
           data={data}
-          barSize={barWidth}
-          barCategoryGap={barGap}
-          margin={{ top: 18, right: 20, left: 20, bottom: 0 }}
+          margin={{ top: 18, right: 8, left: 8, bottom: 0 }}
         >
           <XAxis
             dataKey="name"
@@ -101,53 +92,45 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
               fontSize: 12,
             }}
           />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+          <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false} cursor="default">
             <LabelList
               dataKey="pct"
               position="top"
               style={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
               formatter={(value: number) => `${value.toFixed(1)}%`}
             />
-            {data.map((entry, index) => (
-              <Cell
-                key={entry.type}
-                fill={entry.color}
-                cursor={onTypeSelect ? "pointer" : "default"}
-                onClick={() => onTypeSelect?.(entry.type)}
-              />
+            {data.map((entry) => (
+              <Cell key={entry.type} fill={entry.color} />
             ))}
           </Bar>
         </BarChart>
-      </div>
+      </ResponsiveContainer>
 
-      <div className="overflow-x-auto mt-1">
+      <div className="mt-1">
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
           <thead>
             <tr className="text-[9px] text-muted-foreground uppercase tracking-wider">
-              <th className="py-1.5 pr-6 text-left font-normal border-b border-border">Asset Type</th>
-              <th className="py-1.5 px-4 text-center font-normal border-b border-border">Share</th>
-              <th className="py-1.5 pl-6 text-right font-normal border-b border-border">Value</th>
+              <th className="py-1.5 pr-4 text-left font-normal border-b border-border">Asset Type</th>
+              <th className="py-1.5 px-3 text-center font-normal border-b border-border">Share</th>
+              <th className="py-1.5 pl-4 text-right font-normal border-b border-border">Value</th>
             </tr>
           </thead>
           <tbody>
             {data.map((entry, index) => (
               <tr
                 key={entry.type}
-                className={`${index < data.length - 1 ? "border-b border-border" : ""} ${
-                  onTypeSelect ? "cursor-pointer hover:bg-muted/40 transition-colors" : ""
-                }`}
-                onClick={() => onTypeSelect?.(entry.type)}
+                className={index < data.length - 1 ? "border-b border-border" : ""}
               >
-                <td className="py-2.5 pr-6">
+                <td className="py-2 pr-4">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
                     <span className="text-sm font-medium whitespace-nowrap">{entry.name}</span>
                   </div>
                 </td>
-                <td className="py-2.5 px-4 text-[11px] text-center tabular-nums font-medium">
+                <td className="py-2 px-3 text-[11px] text-center tabular-nums font-medium">
                   {entry.pct.toFixed(1)}%
                 </td>
-                <td className="py-2.5 pl-6 text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
+                <td className="py-2 pl-4 text-[11px] font-semibold text-right tabular-nums whitespace-nowrap">
                   {formatVND(entry.value)}
                 </td>
               </tr>
