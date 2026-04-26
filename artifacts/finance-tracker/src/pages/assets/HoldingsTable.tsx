@@ -57,6 +57,34 @@ function ChangeChip({
   );
 }
 
+function isCashHolding(holding: HoldingItem) {
+  return holding.type.trim().toLowerCase() === "cash" || holding.symbol.trim().toUpperCase() === "CASH";
+}
+
+function getRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
+  const symbol = holding.symbol.trim().toUpperCase();
+  return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.interest ?? 0;
+}
+
+function calculatePnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
+  if (isCashHolding(holding)) {
+    return {
+      effectiveCostOfCapital: null,
+      totalPnL: 0,
+      totalPnLPercent: null,
+    };
+  }
+
+  const effectiveCostOfCapital = holding.costOfCapital ?? 0;
+  const unrealizedPnL = (holding.currentValue ?? 0) - effectiveCostOfCapital;
+  const totalPnL = unrealizedPnL + getRealizedPnL(holding, realizedPnLBySymbol);
+  return {
+    effectiveCostOfCapital,
+    totalPnL,
+    totalPnLPercent: effectiveCostOfCapital > 0 ? totalPnL / effectiveCostOfCapital : null,
+  };
+}
+
 type HoldingsTableProps = {
   holdings: HoldingItem[];
   filteredHoldings: HoldingItem[];
@@ -71,7 +99,7 @@ type HoldingsTableProps = {
   showPriceCol: boolean;
   showCostOfCapitalCol?: boolean;
   showReturnCols?: boolean;
-  cashAdjustedCost?: number | null;
+  realizedPnLBySymbol?: Map<string, number>;
   formatMoney: (value: number | null | undefined, full?: boolean) => string;
   onToggleHoldingsCollapsed: () => void;
   onToggleQtyCol: () => void;
@@ -93,21 +121,18 @@ export default function HoldingsTable({
   filteredTotal,
   filterType,
   availableTypes,
-  sortOrder,
-  sortLabel,
   holdingsCollapsed,
   showQtyCol,
   showPriceCol,
   showCostOfCapitalCol = false,
   showReturnCols = false,
-  cashAdjustedCost = null,
+  realizedPnLBySymbol = new Map<string, number>(),
   formatMoney,
   onToggleHoldingsCollapsed,
   onToggleQtyCol,
   onTogglePriceCol,
   onToggleCostOfCapitalCol,
   onFilterTypeChange,
-  onCycleSortOrder,
   onAdd,
   onEdit,
   onDelete,
@@ -136,29 +161,15 @@ export default function HoldingsTable({
     }
     setEditingPrice(null);
   };
+
   const filteredPnLTotal = filteredHoldings.reduce((sum, holding) => {
-    const effectiveCostOfCapital =
-      holding.type.trim().toLowerCase() === "cash" && cashAdjustedCost != null
-        ? cashAdjustedCost
-        : holding.costOfCapital ?? 0;
-    return sum + ((holding.currentValue ?? 0) - effectiveCostOfCapital);
+    return sum + calculatePnL(holding, realizedPnLBySymbol).totalPnL;
   }, 0);
 
   const sortedFilteredHoldings = useMemo(() => {
     const denominator = filterType === "all" ? totalValue : filteredTotal;
     const rows = filteredHoldings.map((holding) => {
-      const effectiveCostOfCapital =
-        holding.type.trim().toLowerCase() === "cash" && cashAdjustedCost != null
-          ? cashAdjustedCost
-          : holding.costOfCapital;
-      const unrealizedPnL =
-        holding.currentValue != null && effectiveCostOfCapital != null
-          ? holding.currentValue - effectiveCostOfCapital
-          : null;
-      const unrealizedPnLPercent =
-        unrealizedPnL != null && (effectiveCostOfCapital ?? 0) > 0
-          ? unrealizedPnL / (effectiveCostOfCapital ?? 0)
-          : null;
+      const { effectiveCostOfCapital, totalPnL, totalPnLPercent } = calculatePnL(holding, realizedPnLBySymbol);
       const xirrAnnual = calculateSnapshotXirr(effectiveCostOfCapital, holding.currentValue);
       const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
       const weight =
@@ -168,8 +179,8 @@ export default function HoldingsTable({
 
       return {
         holding,
-        unrealizedPnL,
-        unrealizedPnLPercent,
+        unrealizedPnL: totalPnL,
+        unrealizedPnLPercent: totalPnLPercent,
         xirrAnnual,
         xirrMonthly,
         weight,
@@ -224,7 +235,7 @@ export default function HoldingsTable({
 
       return left.holding.symbol.localeCompare(right.holding.symbol);
     });
-  }, [filteredHoldings, filterType, filteredTotal, sortDirection, sortKey, totalValue]);
+  }, [filteredHoldings, filterType, filteredTotal, realizedPnLBySymbol, sortDirection, sortKey, totalValue]);
 
   const colTemplate = [
     "minmax(108px, 1fr)",
@@ -241,13 +252,6 @@ export default function HoldingsTable({
   ]
     .filter(Boolean)
     .join(" ");
-  const totalColumns =
-    4 +
-    (showQtyCol ? 1 : 0) +
-    (showPriceCol ? 1 : 0) +
-    (showCostOfCapitalCol ? 1 : 0) +
-    (showReturnCols ? 4 : 0);
-
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
