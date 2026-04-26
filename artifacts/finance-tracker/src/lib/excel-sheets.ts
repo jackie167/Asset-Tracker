@@ -22,8 +22,9 @@ export function parseNum(v: unknown): number {
 }
 
 export function findColIdx(headers: unknown[], names: string[]): number {
+  const normalizedNames = names.map((n) => n.normalize("NFKC").toLowerCase());
   return headers.findIndex((h) =>
-    names.includes(String(h ?? "").trim().toLowerCase())
+    normalizedNames.includes(String(h ?? "").normalize("NFKC").trim().toLowerCase())
   );
 }
 
