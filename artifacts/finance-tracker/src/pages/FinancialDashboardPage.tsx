@@ -28,7 +28,7 @@ const TONE_CLASS: Record<Tone, string> = {
   positive: "text-emerald-400",
   negative: "text-red-400",
   warn: "text-amber-400",
-  neutral: "text-muted-foreground",
+  neutral: "text-foreground",
 };
 
 // ─── fetchers ────────────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ function StatCard({
       {loading ? (
         <div className="h-7 w-28 rounded bg-muted animate-pulse" />
       ) : (
-        <p className={`text-sm sm:text-xl md:text-2xl font-bold tabular-nums break-all leading-snug ${TONE_CLASS[t]}`}>{value}</p>
+        <p className={`text-base md:text-xl font-bold tabular-nums break-all leading-snug ${TONE_CLASS[t]}`}>{value}</p>
       )}
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </Card>
@@ -291,7 +291,7 @@ export default function FinancialDashboardPage() {
 
             {/* Cột trái — tỷ lệ phân bổ */}
             <div className="space-y-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cơ cấu tài chính</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Cơ cấu tài chính</p>
 
               <HealthRow
                 label="Tiền mặt"
@@ -332,7 +332,7 @@ export default function FinancialDashboardPage() {
 
             {/* Cột phải — chỉ số tổng quan */}
             <div className="space-y-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Chỉ số tổng quan</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Chỉ số tổng quan</p>
 
               <div className="space-y-3">
                 {[
@@ -361,12 +361,12 @@ export default function FinancialDashboardPage() {
                     desc: "10%/năm là mức sinh lời dài hạn hợp lý",
                   },
                 ].map((row) => (
-                  <div key={row.label} className="flex items-start justify-between gap-4 border-b border-border/40 pb-3 last:border-0 last:pb-0">
-                    <div>
-                      <p className="text-xs text-foreground">{row.label}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{row.desc}</p>
+                  <div key={row.label} className="flex items-start justify-between gap-4 border-b border-border/20 pb-3 last:border-0 last:pb-0">
+                    <div className="min-w-0">
+                      <p className="text-xs text-foreground font-medium">{row.label}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{row.desc}</p>
                     </div>
-                    <p className={`text-sm font-semibold whitespace-nowrap ${TONE_CLASS[row.tone]}`}>
+                    <p className={`text-xs font-semibold whitespace-nowrap shrink-0 ${TONE_CLASS[row.tone]}`}>
                       {hideValues && row.label !== "Đa dạng hoá" && row.label !== "XIRR so với mục tiêu (10%)" ? "****" : row.value}
                     </p>
                   </div>
@@ -389,7 +389,7 @@ export default function FinancialDashboardPage() {
 
             {/* Cột trái — tổng quan thu chi */}
             <div className="space-y-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tổng quan năm</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Tổng quan năm</p>
               {cashflowQuery.isLoading ? (
                 <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-5 rounded bg-muted animate-pulse" />)}</div>
               ) : !cashflowQuery.data ? (
@@ -397,17 +397,15 @@ export default function FinancialDashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {[
-                    { label: "Thu nhập năm", value: fmt(cashflowQuery.data.income, true), t: "positive" as Tone },
-                    { label: "Chi tiêu năm", value: fmt(cashflowQuery.data.expense, true), t: "neutral" as Tone },
-                    { label: "Tiết kiệm ròng", value: fmt(cashflowQuery.data.income - cashflowQuery.data.expense, true),
-                      t: tone(cashflowQuery.data.income - cashflowQuery.data.expense) },
-                    { label: "Thu nhập / tháng (ước)", value: fmt(cashflowQuery.data.income / 12), t: "neutral" as Tone },
-                    { label: "Gánh nặng lãi vay", value: formatPercent(cashflowQuery.data.interestBurden),
-                      t: (cashflowQuery.data.interestBurden ?? 0) < 0.1 ? "positive" as Tone : "warn" as Tone },
+                    { label: "Thu nhập năm",           value: fmt(cashflowQuery.data.income, true), t: "positive" as Tone },
+                    { label: "Chi tiêu năm",            value: fmt(cashflowQuery.data.expense, true), t: "neutral" as Tone },
+                    { label: "Tiết kiệm ròng",          value: fmt(cashflowQuery.data.income - cashflowQuery.data.expense, true), t: tone(cashflowQuery.data.income - cashflowQuery.data.expense) },
+                    { label: "Thu nhập / tháng (ước)",  value: fmt(cashflowQuery.data.income / 12), t: "neutral" as Tone },
+                    { label: "Gánh nặng lãi vay",       value: formatPercent(cashflowQuery.data.interestBurden), t: (cashflowQuery.data.interestBurden ?? 0) < 0.1 ? "positive" as Tone : "warn" as Tone },
                   ].map(row => (
-                    <div key={row.label} className="flex items-center justify-between border-b border-border/30 pb-2 last:border-0 last:pb-0">
-                      <p className="text-xs text-muted-foreground">{row.label}</p>
-                      <p className={`text-sm font-semibold tabular-nums ${TONE_CLASS[row.t]}`}>
+                    <div key={row.label} className="flex items-center justify-between gap-4 border-b border-border/20 py-2 first:pt-0 last:border-0 last:pb-0">
+                      <p className="text-xs text-muted-foreground shrink-0">{row.label}</p>
+                      <p className={`text-xs font-semibold tabular-nums text-right ${TONE_CLASS[row.t]}`}>
                         {hideValues ? "****" : row.value}
                       </p>
                     </div>
@@ -418,7 +416,7 @@ export default function FinancialDashboardPage() {
 
             {/* Cột phải — chỉ số tỷ lệ */}
             <div className="space-y-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Chỉ số dòng tiền</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Chỉ số dòng tiền</p>
               {cashflowQuery.isLoading || totalAssetQuery.isLoading ? (
                 <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-10 rounded bg-muted animate-pulse" />)}</div>
               ) : (
