@@ -1,5 +1,4 @@
 import { FormEvent, useMemo, useState } from "react";
-import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,7 +9,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  getGetPortfolioSummaryQueryKey,
+  getListHoldingsQueryKey,
+  getListSnapshotsQueryKey,
+} from "@workspace/api-client-react";
 import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTable";
+import TradeDialog from "@/pages/assets/TradeDialog";
+import type { HoldingItem } from "@/pages/assets/types";
+import PageHeader from "@/pages/PageHeader";
+import { useToast } from "@/hooks/use-toast";
 
 async function fetchTradeOrders(): Promise<TradeOrder[]> {
   const res = await fetch("/api/transactions");
@@ -110,16 +118,66 @@ function exportTradeOrdersCSV(orders: TradeOrder[]) {
   URL.revokeObjectURL(url);
 }
 
+async function fetchHoldings(): Promise<HoldingItem[]> {
+  const res = await fetch("/api/portfolio/summary");
+  if (!res.ok) return [];
+  const data = await res.json().catch(() => null);
+  return data?.holdings ?? [];
+}
+
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
-  const tradeOrdersQuery = useQuery({
-    queryKey: ["transactions"],
-    queryFn: fetchTradeOrders,
+  const { toast } = useToast();
+  const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<TradeOrder | null>(null);
+
+  const tradeOrdersQuery = useQuery({ queryKey: ["transactions"], queryFn: fetchTradeOrders });
+  const cashFlowsQuery   = useQuery({ queryKey: ["portfolio-cash-flows"], queryFn: fetchCashFlows });
+  const holdingsQuery    = useQuery({ queryKey: ["holdings-for-trade"], queryFn: fetchHoldings });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["portfolio-xirr"] });
+  };
+
+  const tradeBody = (body: { side: "buy"|"sell"; fundingSource: string; assetType: string; symbol: string; quantity: number; totalValue: number; note?: string; executedAt?: string }) =>
+    ({ ...body, fundingSource: "CASH" });
+
+  const createTrade = useMutation({
+    mutationFn: async (body: Parameters<typeof tradeBody>[0]) => {
+      const res = await fetch("/api/transactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(tradeBody(body)) });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Không thể lưu giao dịch.");
+      return data as TradeOrder;
+    },
+    onSuccess: () => { invalidate(); setTradeDialogOpen(false); toast({ title: "Đã lưu giao dịch" }); },
+    onError: (err) => toast({ title: "Lỗi", description: err instanceof Error ? err.message : "", variant: "destructive" }),
   });
-  const cashFlowsQuery = useQuery({
-    queryKey: ["portfolio-cash-flows"],
-    queryFn: fetchCashFlows,
+
+  const updateTrade = useMutation({
+    mutationFn: async (body: Parameters<typeof tradeBody>[0]) => {
+      if (!editingOrder) throw new Error("No order selected.");
+      const res = await fetch(`/api/transactions/${editingOrder.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(tradeBody(body)) });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Không thể cập nhật.");
+      return data as TradeOrder;
+    },
+    onSuccess: () => { invalidate(); setTradeDialogOpen(false); setEditingOrder(null); toast({ title: "Đã cập nhật giao dịch" }); },
+    onError: (err) => toast({ title: "Lỗi", description: err instanceof Error ? err.message : "", variant: "destructive" }),
   });
+
+  const deleteTrade = useMutation({
+    mutationFn: async (order: TradeOrder) => {
+      const res = await fetch(`/api/transactions/${order.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    },
+    onSuccess: () => { invalidate(); toast({ title: "Đã xóa giao dịch" }); },
+    onError: (err) => toast({ title: "Lỗi", description: err instanceof Error ? err.message : "", variant: "destructive" }),
+  });
+
   const [cashFlowKind, setCashFlowKind] = useState<"deposit" | "withdrawal">("deposit");
   const [cashFlowAmount, setCashFlowAmount] = useState("");
   const [cashFlowOccurredAt, setCashFlowOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
@@ -173,39 +231,16 @@ export default function TransactionsPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-3 sm:px-4 md:px-6 py-3 sticky top-0 bg-background/95 backdrop-blur z-10">
-        <div className="max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-lg sm:text-xl font-semibold tracking-[0.18em]">TRANSACTIONS</h1>
-            <p className="text-xs text-muted-foreground leading-relaxed">Recorded trade orders for debugging</p>
-          </div>
-          <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
-            <Link href="/assets" className="hover:text-foreground transition-colors">Investment</Link>
-            <Link href="/wealth-allocation" className="hover:text-foreground transition-colors">Wealth Allocation</Link>
-            <Link href="/excel" className="hover:text-foreground transition-colors">Excel</Link>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              disabled={!orders.length}
-              onClick={() => exportTradeOrdersCSV(orders)}
-            >
-              Export CSV
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => {
-                void exportPortfolioXirrDebugCSV();
-              }}
-            >
-              Export XIRR DB
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <PageHeader
+        title="Transactions"
+        subtitle="Giao dịch mua bán & dòng tiền đầu tư"
+        actions={[
+          { kind: "item", label: "Thêm giao dịch", onSelect: () => { setEditingOrder(null); setTradeDialogOpen(true); } },
+          { kind: "separator" },
+          { kind: "item", label: "Export CSV", onSelect: () => exportTradeOrdersCSV(orders), disabled: !orders.length },
+          { kind: "item", label: "Export XIRR Debug", onSelect: () => { void exportPortfolioXirrDebugCSV(); } },
+        ]}
+      />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
         <Card className="p-4 space-y-4">
@@ -311,9 +346,20 @@ export default function TransactionsPage() {
             orders={orders}
             isLoading={tradeOrdersQuery.isLoading}
             limit={0}
+            onEdit={(order) => { setEditingOrder(order); setTradeDialogOpen(true); }}
+            onDelete={(order) => deleteTrade.mutate(order)}
           />
         )}
       </main>
+
+      <TradeDialog
+        open={tradeDialogOpen}
+        holdings={holdingsQuery.data ?? []}
+        editingOrder={editingOrder}
+        isSaving={createTrade.isPending || updateTrade.isPending}
+        onClose={() => { setTradeDialogOpen(false); setEditingOrder(null); }}
+        onSubmit={(body) => editingOrder ? updateTrade.mutate(body) : createTrade.mutate(body)}
+      />
     </div>
   );
 }
