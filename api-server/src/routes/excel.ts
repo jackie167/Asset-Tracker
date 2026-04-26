@@ -77,10 +77,14 @@ const WORKBOOK_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const _sheetsCache = new Map<string, { rows: unknown[][]; expiresAt: number }>();
 
 // Returns true if the Drive file is a native Google Sheet (not an uploaded xlsx)
+// Re-checks every 10 minutes in case file was converted
 let _isNativeSheet: boolean | null = null;
+let _isNativeSheetCheckedAt = 0;
 
 async function isNativeGoogleSheet(): Promise<boolean> {
-  if (_isNativeSheet !== null) return _isNativeSheet;
+  const now = Date.now();
+  if (_isNativeSheet !== null && now - _isNativeSheetCheckedAt < 10 * 60 * 1000) return _isNativeSheet;
+  _isNativeSheetCheckedAt = now;
   const config = getGoogleDriveConfig();
   if (!config) { _isNativeSheet = false; return false; }
   try {
@@ -771,8 +775,8 @@ router.post("/excel/investment/update-price", async (req, res): Promise<void> =>
       return;
     }
 
-    // 2. Write back to Google Sheets if native Sheet
-    if (await isNativeGoogleSheet()) {
+    // 2. Write back to Google Sheets (always try when config present)
+    if (getGoogleDriveConfig()) {
       const SHEET = "Investment";
       const rows = await getGoogleSheetsValues(SHEET);
       const headerIndex = rows.findIndex(row =>
