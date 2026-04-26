@@ -252,17 +252,17 @@ export default function FinancialDashboardPage() {
                 loading={wealthLoading}
               />
               <StatCard
-                label="Tài sản ròng"
-                value={fmt(totalAssetQuery.data?.netAsset ?? null, true)}
-                sub="Sau khi trừ nợ"
-                tone="positive"
-                loading={totalAssetQuery.isLoading}
-              />
-              <StatCard
                 label="Nợ"
                 value={fmt(totalAssetQuery.data?.debt ?? null, true)}
                 sub={totalAssetQuery.data ? `${formatPercent(totalAssetQuery.data.debtRatio)} tổng tài sản` : undefined}
                 tone="negative"
+                loading={totalAssetQuery.isLoading}
+              />
+              <StatCard
+                label="Tài sản ròng"
+                value={fmt(totalAssetQuery.data?.netAsset ?? null, true)}
+                sub="Sau khi trừ nợ"
+                tone="positive"
                 loading={totalAssetQuery.isLoading}
               />
             </div>
