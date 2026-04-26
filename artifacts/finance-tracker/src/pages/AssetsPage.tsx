@@ -30,6 +30,18 @@ async function fetchTradeOrders(): Promise<TradeOrder[]> {
   return res.json();
 }
 
+async function updateManualPrice(symbol: string, price: number): Promise<void> {
+  const res = await fetch("/api/excel/investment/update-price", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol, price }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || `HTTP ${res.status}`);
+  }
+}
+
 async function fetchPortfolioXirr(): Promise<{ xirrAnnual: number | null; xirrMonthly: number | null }> {
   const res = await fetch("/api/portfolio/xirr");
   const data = await res.json().catch(() => null);
@@ -160,6 +172,18 @@ export default function AssetsPage() {
         description: err instanceof Error ? err.message : "Unable to update trade.",
         variant: "destructive",
       });
+    },
+  });
+
+  const updatePriceMutation = useMutation({
+    mutationFn: ({ symbol, price }: { symbol: string; price: number }) => updateManualPrice(symbol, price),
+    onSuccess: (_, { symbol }) => {
+      queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
+      toast({ title: "Đã cập nhật giá", description: `${symbol} đã được lưu vào DB và Google Sheets.` });
+    },
+    onError: (err) => {
+      toast({ title: "Lỗi cập nhật giá", description: err instanceof Error ? err.message : "Không thể lưu.", variant: "destructive" });
     },
   });
 
@@ -460,6 +484,7 @@ export default function AssetsPage() {
               onToggleCostOfCapitalCol={toggleCostOfCapitalCol}
               onFilterTypeChange={setFilterType}
               onCycleSortOrder={cycleSortOrder}
+              onUpdatePrice={(symbol, price) => updatePriceMutation.mutate({ symbol, price })}
               readOnly
             />
 

@@ -118,6 +118,35 @@ async function getGoogleSheetsValues(sheetName: string): Promise<unknown[][]> {
   return rows;
 }
 
+function colToLetter(col: number): string {
+  let letter = "";
+  let n = col + 1;
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letter;
+}
+
+async function writeGoogleSheetsCell(sheetName: string, rowIndex: number, colIndex: number, value: unknown): Promise<void> {
+  const config = getGoogleDriveConfig();
+  if (!config) throw new Error("Google Sheets not configured");
+  const token = await getGoogleDriveAccessToken();
+  const cellAddr = `${sheetName}!${colToLetter(colIndex)}${rowIndex + 1}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(config.fileId)}/values/${encodeURIComponent(cellAddr)}?valueInputOption=USER_ENTERED`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values: [[value]] }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Sheets write error ${res.status}: ${text.slice(0, 200)}`);
+  }
+  _sheetsCache.delete(sheetName);
+}
+
 async function getGoogleSheetNames(): Promise<string[]> {
   const config = getGoogleDriveConfig();
   if (!config) return [];
@@ -149,7 +178,7 @@ async function getGoogleDriveAccessToken() {
   const header = { alg: "RS256", typ: "JWT" };
   const claimSet = {
     iss: config.clientEmail,
-    scope: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly",
+    scope: "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly",
     aud: config.tokenUri,
     exp: now + 3600,
     iat: now,
@@ -716,6 +745,53 @@ router.get("/excel/sheet", async (req, res) => {
     const sheet = workbook.Sheets[resolvedName];
     const rows = sheetToValueGrid(sheet);
     res.json({ name: resolvedName, rows, source: getExcelSourceInfo() });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+router.post("/excel/investment/update-price", async (req, res): Promise<void> => {
+  const symbol = String(req.body?.symbol ?? "").trim().toUpperCase();
+  const price  = Number(req.body?.price);
+  if (!symbol || !Number.isFinite(price) || price < 0) {
+    res.status(400).json({ error: "symbol và price là bắt buộc" });
+    return;
+  }
+
+  try {
+    // 1. Update DB
+    const [updated] = await db
+      .update(holdingsTable)
+      .set({ manualPrice: String(price), updatedAt: new Date() })
+      .where(eq(holdingsTable.symbol, symbol))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ error: `Không tìm thấy holding "${symbol}"` });
+      return;
+    }
+
+    // 2. Write back to Google Sheets if native Sheet
+    if (await isNativeGoogleSheet()) {
+      const SHEET = "Investment";
+      const rows = await getGoogleSheetsValues(SHEET);
+      const headerIndex = rows.findIndex(row =>
+        ["tai_san", "asset", "symbol"].includes(normalizeHeaderName(row[0] as string))
+      );
+      if (headerIndex >= 0) {
+        const header = rows[headerIndex].map(c => normalizeHeaderName(c as string));
+        const symCol   = header.findIndex(h => ["tai_san","asset","symbol"].includes(h));
+        const priceCol = header.findIndex(h => ["current_price","price"].includes(h));
+        if (symCol >= 0 && priceCol >= 0) {
+          const dataRow = rows.findIndex((row, i) =>
+            i > headerIndex && String(row[symCol] ?? "").trim().toUpperCase() === symbol
+          );
+          if (dataRow >= 0) await writeGoogleSheetsCell(SHEET, dataRow, priceCol, price);
+        }
+      }
+    }
+
+    res.json({ success: true, symbol, price });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

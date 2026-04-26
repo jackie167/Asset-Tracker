@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,6 +82,7 @@ type HoldingsTableProps = {
   onAdd?: () => void;
   onEdit?: (holding: HoldingItem) => void;
   onDelete?: (id: number) => void;
+  onUpdatePrice?: (symbol: string, price: number) => void;
   readOnly?: boolean;
 };
 
@@ -110,10 +111,31 @@ export default function HoldingsTable({
   onAdd,
   onEdit,
   onDelete,
+  onUpdatePrice,
   readOnly = false,
 }: HoldingsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("currentValue");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [editingPrice, setEditingPrice] = useState<string | null>(null); // symbol being edited
+  const [priceInput, setPriceInput] = useState("");
+  const priceInputRef = useRef<HTMLInputElement>(null);
+
+  const isManualPriceType = (type: string) =>
+    !["stock", "gold", "crypto"].includes(type.toLowerCase().trim());
+
+  const startPriceEdit = (holding: HoldingItem) => {
+    setEditingPrice(holding.symbol);
+    setPriceInput(String(holding.currentPrice ?? holding.manualPrice ?? ""));
+    setTimeout(() => priceInputRef.current?.select(), 50);
+  };
+
+  const commitPriceEdit = (symbol: string) => {
+    const price = parseFloat(priceInput.replace(/[^0-9.]/g, ""));
+    if (Number.isFinite(price) && price > 0 && onUpdatePrice) {
+      onUpdatePrice(symbol, price);
+    }
+    setEditingPrice(null);
+  };
   const filteredPnLTotal = filteredHoldings.reduce((sum, holding) => {
     const effectiveCostOfCapital =
       holding.type.trim().toLowerCase() === "cash" && cashAdjustedCost != null
@@ -404,8 +426,34 @@ export default function HoldingsTable({
                     )}
 
                     {showPriceCol && (
-                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                        {formatMoney(holding.currentPrice, true)}
+                      <span className="text-[11px] text-right tabular-nums text-muted-foreground flex items-center justify-end gap-1">
+                        {editingPrice === holding.symbol ? (
+                          <input
+                            ref={priceInputRef}
+                            type="text"
+                            inputMode="numeric"
+                            value={priceInput}
+                            onChange={e => setPriceInput(e.target.value)}
+                            onBlur={() => commitPriceEdit(holding.symbol)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") commitPriceEdit(holding.symbol);
+                              if (e.key === "Escape") setEditingPrice(null);
+                            }}
+                            className="w-24 rounded border border-primary bg-background px-1.5 py-0.5 text-[11px] text-right tabular-nums focus:outline-none"
+                          />
+                        ) : (
+                          <>
+                            {formatMoney(holding.currentPrice, true)}
+                            {onUpdatePrice && isManualPriceType(holding.type) && (
+                              <button
+                                type="button"
+                                onClick={() => startPriceEdit(holding)}
+                                className="text-muted-foreground/50 hover:text-primary transition-colors shrink-0"
+                                title="Chỉnh giá"
+                              >✏</button>
+                            )}
+                          </>
+                        )}
                       </span>
                     )}
 
