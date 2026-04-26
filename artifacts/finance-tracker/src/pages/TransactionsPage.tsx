@@ -212,6 +212,8 @@ export default function TransactionsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-cash-flows"] });
+      queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
       setCashFlowAmount("");
       setCashFlowNote("");
     },
