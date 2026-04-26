@@ -80,6 +80,42 @@ function base64UrlEncode(input: string | Buffer): string {
 let _tokenCache: { token: string; expiresAt: number } | null = null;
 let _workbookCache: { workbook: XLSX.WorkBook; expiresAt: number } | null = null;
 const WORKBOOK_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const _sheetsCache = new Map<string, { rows: unknown[][]; expiresAt: number }>();
+
+async function getGoogleSheetsValues(sheetName: string): Promise<unknown[][]> {
+  const config = getGoogleDriveConfig();
+  if (!config) return [];
+
+  const cached = _sheetsCache.get(sheetName);
+  if (cached && cached.expiresAt > Date.now()) return cached.rows;
+
+  const token = await getGoogleDriveAccessToken();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(config.fileId)}/values/${encodeURIComponent(sheetName)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Sheets API error ${res.status}: ${text.slice(0, 200)}`);
+  }
+  const data = await res.json() as { values?: unknown[][] };
+  const rows = data.values ?? [];
+  _sheetsCache.set(sheetName, { rows, expiresAt: Date.now() + WORKBOOK_TTL_MS });
+  return rows;
+}
+
+async function getGoogleSheetNames(): Promise<string[]> {
+  const config = getGoogleDriveConfig();
+  if (!config) return [];
+
+  const token = await getGoogleDriveAccessToken();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(config.fileId)}?fields=sheets.properties.title`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Sheets API error ${res.status}: ${text.slice(0, 200)}`);
+  }
+  const data = await res.json() as { sheets?: { properties: { title: string } }[] };
+  return data.sheets?.map((s) => s.properties.title) ?? [];
+}
 
 async function getGoogleDriveAccessToken() {
   const config = getGoogleDriveConfig();
@@ -97,7 +133,7 @@ async function getGoogleDriveAccessToken() {
   const header = { alg: "RS256", typ: "JWT" };
   const claimSet = {
     iss: config.clientEmail,
-    scope: "https://www.googleapis.com/auth/drive.readonly",
+    scope: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly",
     aud: config.tokenUri,
     exp: now + 3600,
     iat: now,
@@ -1163,6 +1199,12 @@ router.post("/excel/upload", upload.single("file"), (req, res) => {
 
 router.get("/excel/sheets", async (_req, res) => {
   try {
+    const config = getGoogleDriveConfig();
+    if (config) {
+      const names = await getGoogleSheetNames();
+      res.json({ sheets: names, source: getExcelSourceInfo() });
+      return;
+    }
     const workbook = await loadWorkbook();
     res.json({ sheets: workbook.SheetNames, source: getExcelSourceInfo() });
   } catch (err) {
@@ -1172,14 +1214,19 @@ router.get("/excel/sheets", async (_req, res) => {
 
 router.get("/excel/sheet", async (req, res) => {
   const name = String(req.query.name ?? "").trim();
-  const debug = String(req.query.debug ?? "").toLowerCase();
-  const isDebug = debug === "1" || debug === "true" || debug === "yes";
   if (!name) {
     res.status(400).json({ error: "Missing sheet name" });
     return;
   }
 
   try {
+    const config = getGoogleDriveConfig();
+    if (config) {
+      const rows = await getGoogleSheetsValues(name);
+      res.json({ name, rows, source: getExcelSourceInfo() });
+      return;
+    }
+    // Local file fallback
     const workbook = await loadWorkbook();
     const resolvedName = resolveWorkbookSheetName(workbook, name);
     if (!resolvedName) {
@@ -1188,15 +1235,7 @@ router.get("/excel/sheet", async (req, res) => {
     }
     const evaluated = evaluateWorkbook(workbook);
     const rows = evaluated.values[resolvedName] ?? [];
-    const formulas = evaluated.formulaMask[resolvedName] ?? [];
-    const sourceInfo = getExcelSourceInfo();
-    if (isDebug) {
-      const formulaText = evaluated.formulaText[resolvedName] ?? [];
-      const errors = evaluated.errors[resolvedName] ?? [];
-      res.json({ name: resolvedName, rows, formulas, debug: { formulaText, errors }, source: sourceInfo });
-      return;
-    }
-    res.json({ name: resolvedName, rows, formulas, source: sourceInfo });
+    res.json({ name: resolvedName, rows, source: getExcelSourceInfo() });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
