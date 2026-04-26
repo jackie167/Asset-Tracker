@@ -228,7 +228,8 @@ async function buildPortfolioXirrSnapshot() {
   ]);
   const asOf = new Date();
   const eligibleHoldings = portfolioSnapshot.holdingsWithValue.filter((holding) =>
-    (holding.costOfCapital ?? 0) > 0
+    normalizeHoldingType(holding.type) !== "cash"
+    && (holding.costOfCapital ?? 0) > 0
     && (holding.currentValue ?? 0) > 0
   );
 
@@ -546,7 +547,7 @@ async function adjustCashHolding(delta: number): Promise<void> {
 
   if (!cashHolding) {
     if (delta > 0) {
-      await db.insert(holdingsTable).values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(delta) });
+      await db.insert(holdingsTable).values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(delta), costOfCapital: String(delta) });
     }
     return;
   }
@@ -555,7 +556,8 @@ async function adjustCashHolding(delta: number): Promise<void> {
     ? parseFloat(String(cashHolding.manualPrice))
     : parseFloat(String(cashHolding.quantity));
   const newPrice = Math.max(0, current + delta);
-  await db.update(holdingsTable).set({ manualPrice: String(newPrice), updatedAt: new Date() }).where(eq(holdingsTable.id, cashHolding.id));
+  // costOfCapital = manualPrice so Cash P/L is always 0
+  await db.update(holdingsTable).set({ manualPrice: String(newPrice), costOfCapital: String(newPrice), updatedAt: new Date() }).where(eq(holdingsTable.id, cashHolding.id));
 
   try {
     await fetch(`http://localhost:${process.env["PORT"] ?? 4000}/api/excel/investment/update-price`, {
@@ -589,9 +591,10 @@ router.post("/portfolio/cash-flows/recalculate", async (_req, res): Promise<void
     .then((rows) => rows[0] ?? null);
 
   if (cashHolding) {
-    await db.update(holdingsTable).set({ manualPrice: String(newPrice), updatedAt: new Date() }).where(eq(holdingsTable.id, cashHolding.id));
+    // costOfCapital = manualPrice so Cash P/L is always 0 (deposits are not investment gains)
+    await db.update(holdingsTable).set({ manualPrice: String(newPrice), costOfCapital: String(newPrice), updatedAt: new Date() }).where(eq(holdingsTable.id, cashHolding.id));
   } else {
-    const [created] = await db.insert(holdingsTable).values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(newPrice) }).returning();
+    const [created] = await db.insert(holdingsTable).values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(newPrice), costOfCapital: String(newPrice) }).returning();
     cashHolding = created ?? null;
   }
 

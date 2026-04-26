@@ -199,6 +199,7 @@ export default function TransactionsPage() {
     queryClient.invalidateQueries({ queryKey: ["portfolio-cash-flows"] });
     queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["portfolio-xirr"] });
   };
 
   const recalcCashMutation = useMutation({
