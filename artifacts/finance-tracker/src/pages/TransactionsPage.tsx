@@ -51,7 +51,6 @@ async function exportPortfolioXirrDebugCSV() {
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status} ${res.statusText}`);
   }
-
   const blob = await res.blob();
   const disposition = res.headers.get("content-disposition") || "";
   const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
@@ -71,51 +70,74 @@ function csvValue(value: string | number | null | undefined) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function exportTradeOrdersCSV(orders: TradeOrder[]) {
-  const headers = [
-    "id",
-    "side",
-    "origin",
-    "asset",
-    "asset_type",
-    "quantity",
-    "total_value",
-    "unit_price",
-    "realized_interest",
-    "funding_source",
-    "status",
-    "executed_at",
-    "created_at",
-    "updated_at",
-    "note",
-  ];
-  const rows = orders.map((order) => [
-    order.id,
-    order.side,
-    order.origin ?? "",
-    order.symbol,
-    order.assetType,
-    order.quantity,
-    order.totalValue,
-    order.unitPrice ?? "",
-    order.realizedInterest ?? "",
-    order.fundingSource,
-    order.status,
-    order.executedAt,
-    order.createdAt ?? "",
-    order.updatedAt ?? "",
-    order.note ?? "",
-  ]);
-  const csv = [headers, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+function downloadCSV(csv: string, filename: string) {
+  const bom = "﻿";
+  const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function exportTradeOrdersCSV(orders: TradeOrder[], symbol?: string) {
+  const headers = ["id","side","origin","asset","asset_type","quantity","total_value","unit_price","realized_interest","funding_source","status","executed_at","note"];
+  const rows = orders.map((o) => [
+    o.id, o.side, o.origin ?? "", o.symbol, o.assetType,
+    o.quantity, o.totalValue, o.unitPrice ?? "", o.realizedInterest ?? "",
+    o.fundingSource, o.status, o.executedAt, o.note ?? "",
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
+  const tag = symbol ? `-${symbol}` : "";
+  downloadCSV(csv, `transactions${tag}-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+function exportAssetDetailCSV(symbol: string, orders: TradeOrder[]) {
+  const sorted = [...orders]
+    .filter((o) => o.symbol === symbol)
+    .sort((a, b) => new Date(a.executedAt).getTime() - new Date(b.executedAt).getTime());
+
+  let runningQty = 0;
+  let totalInvested = 0;
+  let cumulativePnL = 0;
+
+  const headers = ["date","side","qty","unit_price","total_value","running_qty","avg_cost","realized_pnl","cumulative_pnl","note"];
+  const rows = sorted.map((o) => {
+    let realizedPnL = 0;
+    const avgCostBefore = runningQty > 0 ? totalInvested / runningQty : 0;
+
+    if (o.side === "buy") {
+      runningQty += o.quantity;
+      totalInvested += o.totalValue;
+    } else {
+      const costBasis = o.quantity * avgCostBefore;
+      realizedPnL = o.totalValue - costBasis;
+      cumulativePnL += realizedPnL;
+      runningQty = Math.max(0, runningQty - o.quantity);
+      totalInvested = Math.max(0, totalInvested - costBasis);
+    }
+
+    const avgCostAfter = runningQty > 0 ? totalInvested / runningQty : 0;
+
+    return [
+      new Date(o.executedAt).toISOString().slice(0, 10),
+      o.side,
+      o.quantity,
+      o.unitPrice ?? (o.quantity > 0 ? Math.round(o.totalValue / o.quantity) : ""),
+      o.totalValue,
+      runningQty,
+      Math.round(avgCostAfter),
+      o.side === "sell" ? Math.round(realizedPnL) : "",
+      Math.round(cumulativePnL),
+      o.note ?? "",
+    ];
+  });
+
+  const csv = [headers, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
+  downloadCSV(csv, `asset-detail-${symbol}-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
 async function fetchHoldings(): Promise<HoldingItem[]> {
@@ -130,6 +152,7 @@ export default function TransactionsPage() {
   const { toast } = useToast();
   const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<TradeOrder | null>(null);
+  const [filterSymbol, setFilterSymbol] = useState<string>("");
 
   const tradeOrdersQuery = useQuery({ queryKey: ["transactions"], queryFn: fetchTradeOrders });
   const cashFlowsQuery   = useQuery({ queryKey: ["portfolio-cash-flows"], queryFn: fetchCashFlows });
@@ -186,12 +209,19 @@ export default function TransactionsPage() {
 
   const orders = tradeOrdersQuery.data ?? [];
   const cashFlows = cashFlowsQuery.data ?? [];
+
+  const assetOptions = useMemo(() => {
+    const symbols = [...new Set(orders.map((o) => o.symbol))].sort();
+    return symbols;
+  }, [orders]);
+
+  const filteredOrders = useMemo(
+    () => (filterSymbol ? orders.filter((o) => o.symbol === filterSymbol) : orders),
+    [orders, filterSymbol]
+  );
+
   const cashFlowBalance = useMemo(
-    () =>
-      cashFlows.reduce((sum, flow) => {
-        const sign = flow.kind === "withdrawal" ? -1 : 1;
-        return sum + sign * flow.amount;
-      }, 0),
+    () => cashFlows.reduce((sum, flow) => sum + (flow.kind === "withdrawal" ? -1 : 1) * flow.amount, 0),
     [cashFlows]
   );
 
@@ -280,17 +310,35 @@ export default function TransactionsPage() {
     }
   };
 
+  const menuActions = useMemo(() => {
+    const actions: Parameters<typeof PageHeader>[0]["actions"] = [
+      { kind: "item", label: "Thêm giao dịch", onSelect: () => { setEditingOrder(null); setTradeDialogOpen(true); } },
+      { kind: "separator" },
+      {
+        kind: "item",
+        label: filterSymbol ? `Export CSV — ${filterSymbol}` : "Export CSV (tất cả)",
+        onSelect: () => exportTradeOrdersCSV(filteredOrders, filterSymbol || undefined),
+        disabled: !filteredOrders.length,
+      },
+    ];
+    if (filterSymbol) {
+      actions.push({
+        kind: "item",
+        label: `Export Asset Detail — ${filterSymbol}`,
+        onSelect: () => exportAssetDetailCSV(filterSymbol, orders),
+      });
+    }
+    actions.push({ kind: "separator" });
+    actions.push({ kind: "item", label: "Export XIRR Debug", onSelect: () => { void exportPortfolioXirrDebugCSV(); } });
+    return actions;
+  }, [filterSymbol, filteredOrders, orders]);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <PageHeader
         title="Transactions"
         subtitle="Giao dịch mua bán & dòng tiền đầu tư"
-        actions={[
-          { kind: "item", label: "Thêm giao dịch", onSelect: () => { setEditingOrder(null); setTradeDialogOpen(true); } },
-          { kind: "separator" },
-          { kind: "item", label: "Export CSV", onSelect: () => exportTradeOrdersCSV(orders), disabled: !orders.length },
-          { kind: "item", label: "Export XIRR Debug", onSelect: () => { void exportPortfolioXirrDebugCSV(); } },
-        ]}
+        actions={menuActions}
       />
 
       <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-4 space-y-4">
@@ -428,19 +476,48 @@ export default function TransactionsPage() {
           )}
         </Card>
 
-        {tradeOrdersQuery.isError ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-            {tradeOrdersQuery.error instanceof Error ? tradeOrdersQuery.error.message : "Unable to load transactions."}
+        {/* Asset filter + Trade Orders */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest shrink-0">Lọc tài sản</p>
+            <select
+              value={filterSymbol}
+              onChange={(e) => setFilterSymbol(e.target.value)}
+              className="h-8 rounded-md border border-input bg-transparent px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Tất cả ({orders.length})</option>
+              {assetOptions.map((sym) => {
+                const count = orders.filter((o) => o.symbol === sym).length;
+                return (
+                  <option key={sym} value={sym}>{sym} ({count})</option>
+                );
+              })}
+            </select>
+            {filterSymbol && (
+              <button
+                type="button"
+                onClick={() => setFilterSymbol("")}
+                className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-border/50 transition"
+              >
+                ✕ Xóa filter
+              </button>
+            )}
           </div>
-        ) : (
-          <TradeOrdersTable
-            orders={orders}
-            isLoading={tradeOrdersQuery.isLoading}
-            limit={0}
-            onEdit={(order) => { setEditingOrder(order); setTradeDialogOpen(true); }}
-            onDelete={(order) => deleteTrade.mutate(order)}
-          />
-        )}
+
+          {tradeOrdersQuery.isError ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+              {tradeOrdersQuery.error instanceof Error ? tradeOrdersQuery.error.message : "Unable to load transactions."}
+            </div>
+          ) : (
+            <TradeOrdersTable
+              orders={filteredOrders}
+              isLoading={tradeOrdersQuery.isLoading}
+              limit={0}
+              onEdit={(order) => { setEditingOrder(order); setTradeDialogOpen(true); }}
+              onDelete={(order) => deleteTrade.mutate(order)}
+            />
+          )}
+        </div>
       </main>
 
       <TradeDialog
