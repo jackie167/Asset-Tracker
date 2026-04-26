@@ -409,27 +409,18 @@ function normalizeInvestmentType(rawType: string | number | boolean | null | und
   return aliases[normalized] ?? normalized ?? "other";
 }
 
-function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"): InvestmentRow[] {
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) {
-    throw new Error(`Sheet "${sheetName}" not found`);
-  }
-
-  const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
-    header: 1,
-    defval: "",
-  });
+function parseInvestmentRowsFromRaw(rows: unknown[][]): InvestmentRow[] {
 
   const headerIndex = rows.findIndex((row) => {
-    const firstCell = normalizeHeaderName(row[0]);
+    const firstCell = normalizeHeaderName(row[0] as string | number | boolean | null);
     return firstCell === "tai_san" || firstCell === "asset" || firstCell === "symbol";
   });
 
   if (headerIndex === -1) {
-    throw new Error(`Sheet "${sheetName}" does not contain a valid header row`);
+    throw new Error(`Investment sheet does not contain a valid header row`);
   }
 
-  const header = rows[headerIndex].map((cell) => normalizeHeaderName(cell));
+  const header = rows[headerIndex].map((cell) => normalizeHeaderName(cell as string | number | boolean | null));
   const assetIndex = header.findIndex((value) => value === "tai_san" || value === "symbol" || value === "asset");
   const typeIndex = header.findIndex((value) => value === "loai" || value === "type");
   const currentIndex = header.findIndex((value) => value === "current" || value === "current_value");
@@ -439,7 +430,7 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
   const currentPriceIndex = header.findIndex((value) => value === "current_price" || value === "price");
 
   if (assetIndex === -1 || quantityIndex === -1) {
-    throw new Error(`Sheet "${sheetName}" is missing required columns`);
+    throw new Error(`Investment sheet is missing required columns (asset/symbol, quantity)`);
   }
 
   const parsedRows: InvestmentRow[] = [];
@@ -448,16 +439,17 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
     const symbol = String(row[assetIndex] ?? "").trim().toUpperCase();
     if (!symbol) continue;
 
-    const type = normalizeInvestmentType(typeIndex >= 0 ? row[typeIndex] : "");
+    const cell = (i: number) => row[i] as string | number | boolean | null;
+    const type = normalizeInvestmentType(typeIndex >= 0 ? cell(typeIndex) : "");
     const parsedCurrentValue =
-      currentIndex >= 0 ? (parseVNNumber(row[currentIndex]) ?? null) : null;
+      currentIndex >= 0 ? (parseVNNumber(cell(currentIndex)) ?? null) : null;
     const parsedInterest =
-      interestIndex >= 0 ? (parseVNNumber(row[interestIndex]) ?? null) : null;
+      interestIndex >= 0 ? (parseVNNumber(cell(interestIndex)) ?? null) : null;
     const parsedCostOfCapital =
-      costOfCapitalIndex >= 0 ? (parseVNNumber(row[costOfCapitalIndex]) ?? null) : null;
+      costOfCapitalIndex >= 0 ? (parseVNNumber(cell(costOfCapitalIndex)) ?? null) : null;
     const parsedCurrentPrice =
-      currentPriceIndex >= 0 ? (parseVNNumber(row[currentPriceIndex]) ?? null) : null;
-    let quantity = parseVNNumber(row[quantityIndex]);
+      currentPriceIndex >= 0 ? (parseVNNumber(cell(currentPriceIndex)) ?? null) : null;
+    let quantity = parseVNNumber(cell(quantityIndex));
 
     if ((quantity == null || quantity <= 0) && shouldSyncManualPrice(type) && parsedCurrentValue != null && parsedCurrentValue > 0) {
       quantity = 1;
@@ -484,6 +476,13 @@ function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"):
   }
 
   return parsedRows;
+}
+
+function parseInvestmentRows(workbook: XLSX.WorkBook, sheetName = "Investment"): InvestmentRow[] {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) throw new Error(`Sheet "${sheetName}" not found`);
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+  return parseInvestmentRowsFromRaw(rows as unknown[][]);
 }
 
 function parseDateCell(value: string | number | boolean | Date | null | undefined): Date | null {
@@ -517,26 +516,17 @@ function parseDateCell(value: string | number | boolean | Date | null | undefine
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function parseTransactionRows(workbook: XLSX.WorkBook, sheetName: string): TransactionImportRow[] {
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return [];
-
-  const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date | null>>(sheet, {
-    header: 1,
-    defval: "",
-    raw: true,
-  });
-
+function parseTransactionRowsFromRaw(rows: unknown[][]): TransactionImportRow[] {
   const headerIndex = rows.findIndex((row) => {
-    const normalized = row.map((cell) => normalizeHeaderName(cell));
+    const normalized = row.map((cell) => normalizeHeaderName(cell as string | number | boolean | null));
     return normalized.includes("side") && (normalized.includes("asset") || normalized.includes("symbol"));
   });
 
   if (headerIndex === -1) {
-    throw new Error(`Sheet "${sheetName}" does not contain a valid Transactions header row`);
+    throw new Error(`Transactions sheet does not contain a valid header row`);
   }
 
-  const header = rows[headerIndex].map((cell) => normalizeHeaderName(cell));
+  const header = rows[headerIndex].map((cell) => normalizeHeaderName(cell as string | number | boolean | null));
   const sideIndex = header.findIndex((value) => value === "side");
   const assetIndex = header.findIndex((value) => value === "asset" || value === "symbol" || value === "tai_san");
   const typeIndex = header.findIndex((value) => value === "asset_type" || value === "type" || value === "loai");
@@ -558,7 +548,7 @@ function parseTransactionRows(workbook: XLSX.WorkBook, sheetName: string): Trans
   if (totalValueIndex === -1) missing.push("total_value");
   if (executedAtIndex === -1) missing.push("executed_at");
   if (missing.length) {
-    throw new Error(`Sheet "${sheetName}" is missing required columns: ${missing.join(", ")}`);
+    throw new Error(`Transactions sheet is missing required columns: ${missing.join(", ")}`);
   }
 
   const parsedRows: TransactionImportRow[] = [];
@@ -573,40 +563,42 @@ function parseTransactionRows(workbook: XLSX.WorkBook, sheetName: string): Trans
         ? "sell"
         : null;
     if (!side) {
-      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: side must be buy or sell`);
+      throw new Error(`Transactions row ${rowNumber}: side must be buy or sell`);
     }
 
     const symbol = String(row[assetIndex] ?? "").trim().toUpperCase();
     if (!symbol) {
-      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: asset is required`);
+      throw new Error(`Transactions row ${rowNumber}: asset is required`);
     }
 
-    const assetType = normalizeInvestmentType(row[typeIndex]);
-    const quantity = parseVNNumber(row[quantityIndex]);
-    const totalValue = parseVNNumber(row[totalValueIndex]);
+    const cell = (i: number) => row[i] as string | number | boolean | Date | null;
+    const num = (i: number) => row[i] as string | number | boolean | null;
+    const assetType = normalizeInvestmentType(num(typeIndex));
+    const quantity = parseVNNumber(num(quantityIndex));
+    const totalValue = parseVNNumber(num(totalValueIndex));
     if (quantity == null || quantity <= 0) {
-      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: quantity must be greater than 0`);
+      throw new Error(`Transactions row ${rowNumber}: quantity must be greater than 0`);
     }
     if (totalValue == null || totalValue <= 0) {
-      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: total_value must be greater than 0`);
+      throw new Error(`Transactions row ${rowNumber}: total_value must be greater than 0`);
     }
 
-    const executedAt = parseDateCell(row[executedAtIndex]);
+    const executedAt = parseDateCell(cell(executedAtIndex));
     if (!executedAt) {
-      throw new Error(`Sheet "${sheetName}" row ${rowNumber}: executed_at is invalid`);
+      throw new Error(`Transactions row ${rowNumber}: executed_at is invalid`);
     }
 
     const unitPrice = unitPriceIndex >= 0
-      ? (parseVNNumber(row[unitPriceIndex]) ?? totalValue / quantity)
+      ? (parseVNNumber(num(unitPriceIndex)) ?? totalValue / quantity)
       : totalValue / quantity;
     const realizedInterest = realizedInterestIndex >= 0
-      ? (parseVNNumber(row[realizedInterestIndex]) ?? 0)
+      ? (parseVNNumber(num(realizedInterestIndex)) ?? 0)
       : 0;
-    const createdAt = createdAtIndex >= 0 ? (parseDateCell(row[createdAtIndex]) ?? new Date()) : new Date();
-    const updatedAt = updatedAtIndex >= 0 ? (parseDateCell(row[updatedAtIndex]) ?? createdAt) : createdAt;
-    const note = noteIndex >= 0 ? String(row[noteIndex] ?? "").trim() || null : null;
+    const createdAt = createdAtIndex >= 0 ? (parseDateCell(cell(createdAtIndex)) ?? new Date()) : new Date();
+    const updatedAt = updatedAtIndex >= 0 ? (parseDateCell(cell(updatedAtIndex)) ?? createdAt) : createdAt;
+    const note = noteIndex >= 0 ? String(cell(noteIndex) ?? "").trim() || null : null;
     const fundingSource = fundingSourceIndex >= 0
-      ? String(row[fundingSourceIndex] ?? "CASH").trim().toUpperCase() || "CASH"
+      ? String(cell(fundingSourceIndex) ?? "CASH").trim().toUpperCase() || "CASH"
       : "CASH";
 
     parsedRows.push({
@@ -626,6 +618,13 @@ function parseTransactionRows(workbook: XLSX.WorkBook, sheetName: string): Trans
   });
 
   return parsedRows;
+}
+
+function parseTransactionRows(workbook: XLSX.WorkBook, sheetName: string): TransactionImportRow[] {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: true });
+  return parseTransactionRowsFromRaw(rows as unknown[][]);
 }
 
 type ExcelOverrides = Record<string, string | number | null>;
@@ -1322,27 +1321,42 @@ router.post("/excel/sheet/update", async (req, res) => {
 
 router.post("/excel/investment/sync", async (req, res): Promise<void> => {
   try {
-    const workbook = await loadWorkbook();
     const requestedSheetName = String(req.body?.name ?? "").trim();
     const overrides = req.body?.overrides as ExcelOverrides | undefined;
-    const investmentSheetName = requestedSheetName
-      ? (resolveWorkbookSheetName(workbook, requestedSheetName) ?? requestedSheetName)
-      : resolveInvestmentSheetName(workbook);
-    const transactionsSheetName = workbook.SheetNames.find((name) => isTransactionsSheetName(name)) ?? null;
 
-    if (!workbook.Sheets[investmentSheetName]) {
-      res.status(404).json({ error: `Sheet "${investmentSheetName}" không tồn tại.` });
-      return;
+    let rows: InvestmentRow[];
+    let transactionRows: TransactionImportRow[];
+
+    if (await isNativeGoogleSheet()) {
+      const investmentSheetName = requestedSheetName || "Investment";
+      const [investRaw, txRaw, sheetNames] = await Promise.all([
+        getGoogleSheetsValues(investmentSheetName),
+        getGoogleSheetsValues("Transactions").catch(() => [] as unknown[][]),
+        getGoogleSheetNames(),
+      ]);
+      if (!sheetNames.includes(investmentSheetName)) {
+        res.status(404).json({ error: `Sheet "${investmentSheetName}" không tồn tại.` });
+        return;
+      }
+      rows = parseInvestmentRowsFromRaw(investRaw);
+      transactionRows = parseTransactionRowsFromRaw(txRaw);
+    } else {
+      const workbook = await loadWorkbook();
+      const investmentSheetName = requestedSheetName
+        ? (resolveWorkbookSheetName(workbook, requestedSheetName) ?? requestedSheetName)
+        : resolveInvestmentSheetName(workbook);
+      const transactionsSheetName = workbook.SheetNames.find((name) => isTransactionsSheetName(name)) ?? null;
+      if (!workbook.Sheets[investmentSheetName]) {
+        res.status(404).json({ error: `Sheet "${investmentSheetName}" không tồn tại.` });
+        return;
+      }
+      applyOverrides(workbook, investmentSheetName, overrides);
+      rows = parseInvestmentRows(workbook, investmentSheetName);
+      transactionRows = transactionsSheetName ? parseTransactionRows(workbook, transactionsSheetName) : [];
     }
 
-    applyOverrides(workbook, investmentSheetName, overrides);
-    const rows = parseInvestmentRows(workbook, investmentSheetName);
-    const transactionRows = transactionsSheetName
-      ? parseTransactionRows(workbook, transactionsSheetName)
-      : [];
-
     if (rows.length === 0) {
-      res.status(400).json({ error: `Sheet "${investmentSheetName}" không có dòng dữ liệu hợp lệ để sync.` });
+      res.status(400).json({ error: `Sheet Investment không có dòng dữ liệu hợp lệ để sync.` });
       return;
     }
 
@@ -1436,8 +1450,6 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
 
     res.json({
       success: true,
-      sheet: investmentSheetName,
-      transactionsSheet: transactionsSheetName,
       total: rows.length,
       created: syncResult.created,
       updated: syncResult.updated,
@@ -1446,9 +1458,9 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       clearedTransactions: syncResult.clearedTransactions,
       importedTransactions: transactionRows.length,
       warning: syncResult.clearedTransactions > 0
-        ? `Sync overwrote holdings from the Investment sheet, cleared ${syncResult.clearedTransactions} trade order(s), and imported ${transactionRows.length} transaction row(s).`
+        ? `Sync overwrote holdings, cleared ${syncResult.clearedTransactions} trade order(s), imported ${transactionRows.length} transaction row(s).`
         : null,
-      message: `Đã sync ${rows.length} dòng từ "${investmentSheetName}" sang Tài sản.`,
+      message: `Đã sync ${rows.length} dòng từ sheet Investment sang Tài sản.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Không thể sync sheet Investment.";
