@@ -555,13 +555,8 @@ async function adjustCashHolding(delta: number): Promise<void> {
     ? parseFloat(String(cashHolding.manualPrice))
     : parseFloat(String(cashHolding.quantity));
   const newPrice = Math.max(0, current + delta);
-  const currentCostOfCapital = cashHolding.costOfCapital != null
-    ? parseFloat(String(cashHolding.costOfCapital))
-    : current;
-  const newCostOfCapital = Math.max(0, currentCostOfCapital + delta);
   await db.update(holdingsTable).set({
     manualPrice: String(newPrice),
-    costOfCapital: String(newCostOfCapital),
     updatedAt: new Date(),
   }).where(eq(holdingsTable.id, cashHolding.id));
 
@@ -597,7 +592,6 @@ router.post("/portfolio/cash-flows/recalculate", async (_req, res): Promise<void
     return sum + (transaction.side === "buy" ? -amount : amount);
   }, 0);
   const newPrice = Math.max(0, total + tradeCashFlow);
-  const newCostOfCapital = Math.max(0, total);
 
   let cashHolding = await db
     .select()
@@ -609,7 +603,6 @@ router.post("/portfolio/cash-flows/recalculate", async (_req, res): Promise<void
   if (cashHolding) {
     await db.update(holdingsTable).set({
       manualPrice: String(newPrice),
-      costOfCapital: String(newCostOfCapital),
       updatedAt: new Date(),
     }).where(eq(holdingsTable.id, cashHolding.id));
   } else {
@@ -618,7 +611,7 @@ router.post("/portfolio/cash-flows/recalculate", async (_req, res): Promise<void
       type: "cash",
       quantity: "1",
       manualPrice: String(newPrice),
-      costOfCapital: String(newCostOfCapital),
+      costOfCapital: String(Math.max(0, total)),
     }).returning();
     cashHolding = created ?? null;
   }
