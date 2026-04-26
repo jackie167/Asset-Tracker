@@ -240,33 +240,42 @@ export default function FinancialDashboardPage() {
         {/* ── Tổng quan ─────────────────────────────────────────────────── */}
         <section className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Tổng quan</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <StatCard
-              label="Tổng tài sản"
-              value={fmt(netWorth, true)}
-              sub="Tất cả danh mục"
-              loading={wealthLoading}
-            />
-            <StatCard
-              label="Nợ"
-              value={fmt(totalAssetQuery.data?.debt ?? null, true)}
-              sub={totalAssetQuery.data ? `${formatPercent(totalAssetQuery.data.debtRatio)} tổng tài sản` : undefined}
-              tone="negative"
-              loading={totalAssetQuery.isLoading}
-            />
-            <StatCard
-              label="Tài sản ròng"
-              value={fmt(totalAssetQuery.data?.netAsset ?? null, true)}
-              sub="Sau khi trừ nợ"
-              tone="positive"
-              loading={totalAssetQuery.isLoading}
-            />
-            <StatCard
-              label="Tổng đầu tư"
-              value={fmt(financialTotal, true)}
-              sub={`${formatPercent(financialRatio)} tổng tài sản`}
-              loading={investLoading}
-            />
+          <div className="grid grid-cols-2 gap-4">
+
+            {/* Trái — Tài sản */}
+            <div className="space-y-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Tài sản</p>
+              <StatCard
+                label="Tổng tài sản"
+                value={fmt(netWorth, true)}
+                sub="Tất cả danh mục"
+                loading={wealthLoading}
+              />
+              <StatCard
+                label="Tài sản ròng"
+                value={fmt(totalAssetQuery.data?.netAsset ?? null, true)}
+                sub="Sau khi trừ nợ"
+                tone="positive"
+                loading={totalAssetQuery.isLoading}
+              />
+              <StatCard
+                label="Nợ"
+                value={fmt(totalAssetQuery.data?.debt ?? null, true)}
+                sub={totalAssetQuery.data ? `${formatPercent(totalAssetQuery.data.debtRatio)} tổng tài sản` : undefined}
+                tone="negative"
+                loading={totalAssetQuery.isLoading}
+              />
+            </div>
+
+            {/* Phải — Đầu tư */}
+            <div className="space-y-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Đầu tư</p>
+              <StatCard
+                label="Tổng đầu tư"
+                value={fmt(financialTotal, true)}
+                sub={`${formatPercent(financialRatio)} tổng tài sản`}
+                loading={investLoading}
+              />
             <StatCard
               label="Lợi nhuận P/L"
               value={fmt(pnl, true)}
@@ -281,7 +290,9 @@ export default function FinancialDashboardPage() {
               tone={xirrAnnual == null ? "neutral" : xirrAnnual >= 0.1 ? "positive" : xirrAnnual >= 0 ? "warn" : "negative"}
               loading={xirrQuery.isLoading}
             />
-          </div>
+            </div>{/* end Đầu tư */}
+
+          </div>{/* end grid cols-2 */}
         </section>
 
         {/* ── Chỉ báo sức khoẻ tài chính ──────────────────────────────── */}
