@@ -51,13 +51,14 @@ function buildRealizedPnLBySymbol(orders: TradeOrder[] | undefined) {
 function calculateCashCostBasis(orders: TradeOrder[] | undefined, cashHolding: HoldingItem | undefined) {
   if (!cashHolding || cashHolding.costOfCapital == null) return null;
 
-  const netTradeCashFlow = (orders ?? []).reduce((sum, order) => {
+  const totalBuyFromCash = (orders ?? []).reduce((sum, order) => {
+    if (order.side !== "buy") return sum;
     if (order.status !== "applied") return sum;
     if (order.fundingSource.trim().toUpperCase() !== "CASH") return sum;
-    return sum + (order.side === "buy" ? -order.totalValue : order.totalValue);
+    return sum + order.totalValue;
   }, 0);
 
-  return cashHolding.costOfCapital + netTradeCashFlow;
+  return cashHolding.costOfCapital - totalBuyFromCash;
 }
 
 function resolveRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {

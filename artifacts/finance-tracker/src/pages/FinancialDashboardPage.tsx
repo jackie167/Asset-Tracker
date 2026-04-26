@@ -55,13 +55,14 @@ function buildRealizedPnLBySymbol(transactions: DashboardTransaction[] | undefin
 function calculateCashCostBasis(transactions: DashboardTransaction[] | undefined, cashHolding: HoldingItem | undefined) {
   if (!cashHolding || cashHolding.costOfCapital == null) return null;
 
-  const netTradeCashFlow = (transactions ?? []).reduce((sum, transaction) => {
+  const totalBuyFromCash = (transactions ?? []).reduce((sum, transaction) => {
+    if (transaction.side !== "buy") return sum;
     if (transaction.status !== "applied") return sum;
     if (transaction.fundingSource.trim().toUpperCase() !== "CASH") return sum;
-    return sum + (transaction.side === "buy" ? -transaction.totalValue : transaction.totalValue);
+    return sum + transaction.totalValue;
   }, 0);
 
-  return cashHolding.costOfCapital + netTradeCashFlow;
+  return cashHolding.costOfCapital - totalBuyFromCash;
 }
 
 function resolveRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
