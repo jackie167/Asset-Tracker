@@ -52,13 +52,29 @@ function buildRealizedPnLBySymbol(transactions: DashboardTransaction[] | undefin
   return realized;
 }
 
+function calculateCashCostBasis(transactions: DashboardTransaction[] | undefined, cashHolding: HoldingItem | undefined) {
+  if (!cashHolding || cashHolding.costOfCapital == null) return null;
+
+  const totalBuyFromCash = (transactions ?? []).reduce((sum, transaction) => {
+    if (transaction.side !== "buy") return sum;
+    if (transaction.status !== "applied") return sum;
+    if (transaction.fundingSource.trim().toUpperCase() !== "CASH") return sum;
+    return sum + transaction.totalValue;
+  }, 0);
+
+  return cashHolding.costOfCapital - totalBuyFromCash;
+}
+
 function resolveRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
   const symbol = normalizeSymbol(holding.symbol);
   return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.interest ?? 0;
 }
 
-function calculateHoldingPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
-  if (isCashHolding(holding)) return 0;
+function calculateHoldingPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>, cashCostBasis: number | null) {
+  if (isCashHolding(holding)) {
+    const costBasis = cashCostBasis ?? holding.costOfCapital ?? 0;
+    return (holding.currentValue ?? 0) - costBasis;
+  }
   const costBasis = holding.costOfCapital ?? 0;
   const currentValue = holding.currentValue ?? 0;
   return currentValue - costBasis + resolveRealizedPnL(holding, realizedPnLBySymbol);
@@ -224,21 +240,28 @@ export default function FinancialDashboardPage() {
     [transactionsQuery.data]
   );
 
+  const cashCostBasis = useMemo(
+    () => calculateCashCostBasis(transactionsQuery.data, investmentHoldings.find(isCashHolding)),
+    [investmentHoldings, transactionsQuery.data]
+  );
+
   const costTotal = useMemo(
-    () => investmentHoldings.reduce((sum, h) => isCashHolding(h) ? sum : sum + (h.costOfCapital ?? 0), 0),
-    [investmentHoldings]
+    () => investmentHoldings.reduce((sum, h) => {
+      return sum + (isCashHolding(h) ? cashCostBasis ?? h.costOfCapital ?? 0 : h.costOfCapital ?? 0);
+    }, 0),
+    [cashCostBasis, investmentHoldings]
   );
 
   const pnl = useMemo(() => {
     const holdingSymbols = new Set(investmentHoldings.map((holding) => normalizeSymbol(holding.symbol)));
     const openHoldingPnL = investmentHoldings.reduce((sum, holding) => {
-      return sum + calculateHoldingPnL(holding, realizedPnLBySymbol);
+      return sum + calculateHoldingPnL(holding, realizedPnLBySymbol, cashCostBasis);
     }, 0);
     const closedPositionRealizedPnL = [...realizedPnLBySymbol.entries()].reduce((sum, [symbol, value]) => {
       return holdingSymbols.has(symbol) ? sum : sum + value;
     }, 0);
     return openHoldingPnL + closedPositionRealizedPnL;
-  }, [investmentHoldings, realizedPnLBySymbol]);
+  }, [cashCostBasis, investmentHoldings, realizedPnLBySymbol]);
   const pnlPct = pctOf(pnl, costTotal);
   const xirrAnnual = xirrQuery.data?.xirrAnnual ?? null;
 

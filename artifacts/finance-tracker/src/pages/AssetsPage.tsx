@@ -48,19 +48,35 @@ function buildRealizedPnLBySymbol(orders: TradeOrder[] | undefined) {
   return realized;
 }
 
+function calculateCashCostBasis(orders: TradeOrder[] | undefined, cashHolding: HoldingItem | undefined) {
+  if (!cashHolding || cashHolding.costOfCapital == null) return null;
+
+  const totalBuyFromCash = (orders ?? []).reduce((sum, order) => {
+    if (order.side !== "buy") return sum;
+    if (order.status !== "applied") return sum;
+    if (order.fundingSource.trim().toUpperCase() !== "CASH") return sum;
+    return sum + order.totalValue;
+  }, 0);
+
+  return cashHolding.costOfCapital - totalBuyFromCash;
+}
+
 function resolveRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
   const symbol = normalizeSymbol(holding.symbol);
   return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.interest ?? 0;
 }
 
-function calculateHoldingPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
+function calculateHoldingPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>, cashCostBasis: number | null) {
   if (isCashHolding(holding)) {
+    const costBasis = cashCostBasis ?? holding.costOfCapital ?? 0;
+    const currentValue = holding.currentValue ?? 0;
+    const totalPnL = currentValue - costBasis;
     return {
-      costBasis: null,
-      unrealizedPnL: 0,
+      costBasis,
+      unrealizedPnL: totalPnL,
       realizedPnL: 0,
-      totalPnL: 0,
-      totalPnLPercent: null,
+      totalPnL,
+      totalPnLPercent: costBasis > 0 ? totalPnL / costBasis : null,
     };
   }
 
@@ -324,16 +340,21 @@ export default function AssetsPage() {
     [tradeOrdersQuery.data]
   );
 
+  const cashCostBasis = useMemo(
+    () => calculateCashCostBasis(tradeOrdersQuery.data, holdings.find(isCashHolding)),
+    [holdings, tradeOrdersQuery.data]
+  );
+
   const portfolioReturnSummary = useMemo(() => {
     const holdingSymbols = new Set(holdings.map((holding) => normalizeSymbol(holding.symbol)));
     const openHoldingPnL = holdings.reduce((sum, holding) => {
-      return sum + calculateHoldingPnL(holding, realizedPnLBySymbol).totalPnL;
+      return sum + calculateHoldingPnL(holding, realizedPnLBySymbol, cashCostBasis).totalPnL;
     }, 0);
     const closedPositionRealizedPnL = [...realizedPnLBySymbol.entries()].reduce((sum, [symbol, value]) => {
       return holdingSymbols.has(symbol) ? sum : sum + value;
     }, 0);
     const totalCapital = holdings.reduce((sum, holding) => {
-      return isCashHolding(holding) ? sum : sum + (holding.costOfCapital ?? 0);
+      return sum + (isCashHolding(holding) ? cashCostBasis ?? holding.costOfCapital ?? 0 : holding.costOfCapital ?? 0);
     }, 0);
     const totalPnL = openHoldingPnL + closedPositionRealizedPnL;
     const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
@@ -344,7 +365,7 @@ export default function AssetsPage() {
       xirrAnnual: portfolioXirrQuery.data?.xirrAnnual ?? null,
       xirrMonthly: portfolioXirrQuery.data?.xirrMonthly ?? null,
     };
-  }, [holdings, portfolioXirrQuery.data, realizedPnLBySymbol]);
+  }, [cashCostBasis, holdings, portfolioXirrQuery.data, realizedPnLBySymbol]);
 
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
@@ -524,6 +545,7 @@ export default function AssetsPage() {
               showPriceCol={showPriceCol}
               showCostOfCapitalCol={showCostOfCapitalCol}
               showReturnCols
+              cashAdjustedCost={cashCostBasis}
               realizedPnLBySymbol={realizedPnLBySymbol}
               formatMoney={formatMoney}
               onToggleHoldingsCollapsed={toggleHoldingsCollapsed}
