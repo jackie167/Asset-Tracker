@@ -84,7 +84,7 @@ async function adjustCash(tx: any, delta: number) {
       symbol: "CASH",
       quantity: "1",
       manualPrice: String(delta),
-      costOfCapital: String(delta),
+      costOfCapital: "0",
     });
     return;
   }
@@ -96,7 +96,6 @@ async function adjustCash(tx: any, delta: number) {
     .set({
       quantity: "1",
       manualPrice: String(nextValue),
-      costOfCapital: String(nextValue),
       updatedAt: new Date(),
     })
     .where(eq(holdingsTable.id, cash.id));
