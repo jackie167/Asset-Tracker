@@ -500,18 +500,52 @@ router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
     return;
   }
 
+  const kind = parsed.data.kind === "contribution" ? "deposit" : parsed.data.kind;
+  const amount = parsed.data.amount;
+  const delta = kind === "deposit" ? amount : -amount;
+
+  // 1. Log the cash flow
   const [created] = await db
     .insert(portfolioCashFlowsTable)
     .values({
-      kind: parsed.data.kind === "contribution" ? "deposit" : parsed.data.kind,
+      kind,
       account: parsed.data.account.toUpperCase(),
       origin: "manual",
-      amount: String(parsed.data.amount),
+      amount: String(amount),
       note: parsed.data.note || null,
       source: "manual",
       occurredAt: parsed.data.occurredAt ?? new Date(),
     })
     .returning();
+
+  // 2. Update the Cash holding balance (manualPrice = total cash since quantity=1)
+  const [cashHolding] = await db
+    .select()
+    .from(holdingsTable)
+    .where(eq(holdingsTable.type, "cash"))
+    .limit(1);
+
+  if (cashHolding) {
+    const currentPrice = cashHolding.manualPrice != null
+      ? parseFloat(String(cashHolding.manualPrice))
+      : parseFloat(String(cashHolding.quantity));
+    const newPrice = Math.max(0, currentPrice + delta);
+    await db
+      .update(holdingsTable)
+      .set({ manualPrice: String(newPrice), updatedAt: new Date() })
+      .where(eq(holdingsTable.id, cashHolding.id));
+
+    // 3. Write new cash balance back to Google Sheets via update-price endpoint
+    try {
+      await fetch(`http://localhost:${process.env["PORT"] ?? 4000}/api/excel/investment/update-price`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: cashHolding.symbol.toUpperCase(), price: newPrice }),
+      });
+    } catch {
+      // Non-fatal — Sheets write failure shouldn't block the response
+    }
+  }
 
   res.status(201).json({
     id: created.id,
