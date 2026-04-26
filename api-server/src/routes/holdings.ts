@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, holdingsTable, portfolioCashFlowsTable, transactionsTable } from "../../../lib/db/src/index.ts";
 import {
@@ -212,30 +212,48 @@ async function getPortfolioCurrentValueSnapshot() {
 }
 
 async function buildPortfolioXirrSnapshot() {
-  const [portfolioSnapshot, transactions] = await Promise.all([
+  const [portfolioSnapshot, externalCashFlows] = await Promise.all([
     getPortfolioCurrentValueSnapshot(),
     db
       .select()
-      .from(transactionsTable)
+      .from(portfolioCashFlowsTable)
       .where(
         and(
-          eq(transactionsTable.side, "buy"),
-          eq(transactionsTable.status, "applied"),
-          gte(transactionsTable.executedAt, STOCK_RETURN_INITIAL_AT),
+          gte(portfolioCashFlowsTable.occurredAt, STOCK_RETURN_INITIAL_AT),
+          lte(portfolioCashFlowsTable.occurredAt, new Date()),
         )
       ),
   ]);
   const asOf = new Date();
-  const eligibleHoldings = portfolioSnapshot.holdingsWithValue.filter((holding) =>
-    normalizeHoldingType(holding.type) !== "cash"
-    && (holding.costOfCapital ?? 0) > 0
-    && (holding.currentValue ?? 0) > 0
+  const currentValue = portfolioSnapshot.totalValue;
+  const initialCapital = portfolioSnapshot.holdingsWithValue.reduce(
+    (sum, holding) => sum + (holding.costOfCapital ?? 0),
+    0
   );
 
-  const rawInitialCapital = eligibleHoldings.reduce((sum, holding) => sum + (holding.costOfCapital ?? 0), 0);
-  const buyTransactionTotal = transactions.reduce((sum, transaction) => sum + parseFloat(String(transaction.totalValue)), 0);
-  const initialCapital = Math.max(0, rawInitialCapital - buyTransactionTotal);
-  const currentValue = eligibleHoldings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
+  const externalCashFlowRows = externalCashFlows.flatMap((flow) => {
+    const amount = parseFloat(String(flow.amount));
+    if (!Number.isFinite(amount) || amount <= 0) return [];
+
+    const normalizedKind = flow.kind.trim().toLowerCase();
+    const signedAmount =
+      normalizedKind === "deposit" || normalizedKind === "contribution"
+        ? -amount
+        : normalizedKind === "withdrawal"
+          ? amount
+          : null;
+
+    if (signedAmount == null) return [];
+
+    return [{
+      date: flow.occurredAt,
+      amount: signedAmount,
+      kind: normalizedKind,
+      source: flow.source || flow.origin || "portfolio_cash_flows",
+      note: flow.note,
+      rowType: "external_cash_flow" as const,
+    }];
+  });
 
   const cashFlows = [
     {
@@ -246,6 +264,7 @@ async function buildPortfolioXirrSnapshot() {
       note: "Total capital",
       rowType: "portfolio_start_capital" as const,
     },
+    ...externalCashFlowRows,
     {
       date: asOf,
       amount: currentValue,
@@ -263,14 +282,15 @@ async function buildPortfolioXirrSnapshot() {
     asOf,
     currentValue,
     initialCapital,
-    rawInitialCapital,
-    buyTransactionTotal,
-    cashFlowCount: eligibleHoldings.length,
+    rawInitialCapital: initialCapital,
+    buyTransactionTotal: 0,
+    externalCashFlowTotal: externalCashFlowRows.reduce((sum, flow) => sum + flow.amount, 0),
+    cashFlowCount: cashFlows.length,
     hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
     hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
-    mode: "portfolio_capital_snapshot" as const,
-    reason: eligibleHoldings.length === 0
-      ? "Portfolio XIRR needs assets with both cost of capital and current value."
+    mode: "portfolio_cash_flow_xirr" as const,
+    reason: initialCapital <= 0 || currentValue <= 0
+      ? "Portfolio XIRR needs beginning capital and current portfolio value."
       : null,
     xirrAnnual,
     xirrMonthly,
