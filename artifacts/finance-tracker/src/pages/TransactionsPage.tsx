@@ -182,6 +182,8 @@ export default function TransactionsPage() {
   const [cashFlowAmount, setCashFlowAmount] = useState("");
   const [cashFlowOccurredAt, setCashFlowOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [cashFlowNote, setCashFlowNote] = useState("");
+  const [editingCashFlow, setEditingCashFlow] = useState<CashFlow | null>(null);
+
   const orders = tradeOrdersQuery.data ?? [];
   const cashFlows = cashFlowsQuery.data ?? [];
   const cashFlowBalance = useMemo(
@@ -193,42 +195,74 @@ export default function TransactionsPage() {
     [cashFlows]
   );
 
+  const invalidateCashFlow = () => {
+    queryClient.invalidateQueries({ queryKey: ["portfolio-cash-flows"] });
+    queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
+  };
+
+  const cashFlowBody = (kind: "deposit" | "withdrawal", amount: number, occurredAt: string, note: string) => ({
+    kind,
+    account: "CASH",
+    amount,
+    occurredAt: occurredAt ? new Date(`${occurredAt}T00:00:00+07:00`).toISOString() : undefined,
+    note: note.trim() || undefined,
+  });
+
   const createCashFlowMutation = useMutation({
-    mutationFn: async (body: { kind: "deposit" | "withdrawal"; amount: number; occurredAt?: string; note?: string }) => {
-      const res = await fetch("/api/portfolio/cash-flows", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: body.kind,
-          account: "CASH",
-          amount: body.amount,
-          occurredAt: body.occurredAt ? new Date(`${body.occurredAt}T00:00:00+07:00`).toISOString() : undefined,
-          note: body.note?.trim() || undefined,
-        }),
-      });
+    mutationFn: async (body: ReturnType<typeof cashFlowBody>) => {
+      const res = await fetch("/api/portfolio/cash-flows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Unable to save cash flow.");
       return data as CashFlow;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["portfolio-cash-flows"] });
-      queryClient.invalidateQueries({ queryKey: getListHoldingsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
-      setCashFlowAmount("");
-      setCashFlowNote("");
-    },
+    onSuccess: () => { invalidateCashFlow(); setCashFlowAmount(""); setCashFlowNote(""); },
   });
+
+  const updateCashFlowMutation = useMutation({
+    mutationFn: async ({ id, ...body }: { id: number } & ReturnType<typeof cashFlowBody>) => {
+      const res = await fetch(`/api/portfolio/cash-flows/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Unable to update cash flow.");
+      return data as CashFlow;
+    },
+    onSuccess: () => { invalidateCashFlow(); setEditingCashFlow(null); setCashFlowAmount(""); setCashFlowNote(""); },
+  });
+
+  const deleteCashFlowMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/portfolio/cash-flows/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    },
+    onSuccess: () => invalidateCashFlow(),
+  });
+
+  const startEditCashFlow = (flow: CashFlow) => {
+    setEditingCashFlow(flow);
+    setCashFlowKind(flow.kind as "deposit" | "withdrawal");
+    setCashFlowAmount(String(flow.amount));
+    setCashFlowOccurredAt(new Date(flow.occurredAt).toISOString().slice(0, 10));
+    setCashFlowNote(flow.note ?? "");
+  };
+
+  const cancelEditCashFlow = () => {
+    setEditingCashFlow(null);
+    setCashFlowAmount("");
+    setCashFlowNote("");
+    setCashFlowOccurredAt(new Date().toISOString().slice(0, 10));
+    setCashFlowKind("deposit");
+  };
 
   const handleCashFlowSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedAmount = Number(cashFlowAmount.replace(/[^\d.-]/g, ""));
     if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) return;
-    createCashFlowMutation.mutate({
-      kind: cashFlowKind,
-      amount: normalizedAmount,
-      occurredAt: cashFlowOccurredAt,
-      note: cashFlowNote,
-    });
+    const body = cashFlowBody(cashFlowKind, normalizedAmount, cashFlowOccurredAt, cashFlowNote);
+    if (editingCashFlow) {
+      updateCashFlowMutation.mutate({ id: editingCashFlow.id, ...body });
+    } else {
+      createCashFlowMutation.mutate(body);
+    }
   };
 
   return (
@@ -257,7 +291,10 @@ export default function TransactionsPage() {
             </div>
           </div>
 
-          <form className="grid gap-2 md:grid-cols-[120px_1fr_160px_1.4fr_auto]" onSubmit={handleCashFlowSubmit}>
+          {editingCashFlow && (
+            <p className="text-[10px] text-amber-400 uppercase tracking-widest">Editing #{editingCashFlow.id}</p>
+          )}
+          <form className="grid gap-2 md:grid-cols-[120px_1fr_160px_1.4fr_auto_auto]" onSubmit={handleCashFlowSubmit}>
             <Select value={cashFlowKind} onValueChange={(value) => setCashFlowKind(value as "deposit" | "withdrawal")}>
               <SelectTrigger className="h-9 text-xs">
                 <SelectValue />
@@ -286,14 +323,21 @@ export default function TransactionsPage() {
               placeholder="Note"
               className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
             />
-            <Button type="submit" size="sm" className="h-9" disabled={createCashFlowMutation.isPending}>
-              Add
+            <Button type="submit" size="sm" className="h-9" disabled={createCashFlowMutation.isPending || updateCashFlowMutation.isPending}>
+              {editingCashFlow ? "Save" : "Add"}
             </Button>
+            {editingCashFlow && (
+              <Button type="button" size="sm" variant="outline" className="h-9" onClick={cancelEditCashFlow}>
+                Cancel
+              </Button>
+            )}
           </form>
 
-          {createCashFlowMutation.isError && (
+          {(createCashFlowMutation.isError || updateCashFlowMutation.isError) && (
             <p className="text-xs text-red-300">
-              {createCashFlowMutation.error instanceof Error ? createCashFlowMutation.error.message : "Unable to save cash flow."}
+              {(createCashFlowMutation.error ?? updateCashFlowMutation.error) instanceof Error
+                ? (createCashFlowMutation.error ?? updateCashFlowMutation.error)!.message
+                : "Unable to save cash flow."}
             </p>
           )}
 
@@ -313,12 +357,13 @@ export default function TransactionsPage() {
                     <th className="py-1.5 px-3 text-left font-normal">Account</th>
                     <th className="py-1.5 px-3 text-left font-normal">Origin</th>
                     <th className="py-1.5 px-3 text-left font-normal">Note</th>
-                    <th className="py-1.5 pl-3 text-right font-normal">Date</th>
+                    <th className="py-1.5 px-3 text-right font-normal">Date</th>
+                    <th className="py-1.5 pl-3 text-right font-normal"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {[...cashFlows].reverse().map((flow) => (
-                    <tr key={flow.id} className="border-b border-border last:border-0">
+                    <tr key={flow.id} className={`border-b border-border last:border-0 ${editingCashFlow?.id === flow.id ? "bg-amber-500/5" : ""}`}>
                       <td className={`py-2 pr-3 font-medium uppercase ${flow.kind === "withdrawal" ? "text-amber-300" : "text-emerald-400"}`}>
                         {flow.kind}
                       </td>
@@ -328,8 +373,26 @@ export default function TransactionsPage() {
                       <td className="py-2 px-3 text-muted-foreground">{flow.account}</td>
                       <td className="py-2 px-3 text-muted-foreground">{flow.origin}</td>
                       <td className="py-2 px-3 text-muted-foreground">{flow.note || "—"}</td>
-                      <td className="py-2 pl-3 text-right tabular-nums text-muted-foreground">
+                      <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">
                         {new Date(flow.occurredAt).toLocaleDateString("vi-VN")}
+                      </td>
+                      <td className="py-2 pl-3 text-right">
+                        <div className="flex gap-1 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => startEditCashFlow(flow)}
+                            className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded border border-border/50 hover:border-border transition"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { if (confirm("Xóa cash flow này?")) deleteCashFlowMutation.mutate(flow.id); }}
+                            className="text-[10px] text-muted-foreground hover:text-red-400 px-1.5 py-0.5 rounded border border-border/50 hover:border-red-400/50 transition"
+                          >
+                            Del
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

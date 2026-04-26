@@ -518,43 +518,8 @@ router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
     })
     .returning();
 
-  // 2. Update the Cash holding balance (manualPrice = total cash since quantity=1)
-  let cashHolding = await db
-    .select()
-    .from(holdingsTable)
-    .where(sql`lower(${holdingsTable.type}) = 'cash' OR lower(${holdingsTable.symbol}) = 'cash'`)
-    .limit(1)
-    .then((rows) => rows[0] ?? null);
-
-  if (!cashHolding) {
-    // Auto-create Cash holding if it doesn't exist
-    const [newHolding] = await db
-      .insert(holdingsTable)
-      .values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(Math.max(0, delta)) })
-      .returning();
-    cashHolding = newHolding ?? null;
-  } else {
-    const currentPrice = cashHolding.manualPrice != null
-      ? parseFloat(String(cashHolding.manualPrice))
-      : parseFloat(String(cashHolding.quantity));
-    const newPrice = Math.max(0, currentPrice + delta);
-    await db
-      .update(holdingsTable)
-      .set({ manualPrice: String(newPrice), updatedAt: new Date() })
-      .where(eq(holdingsTable.id, cashHolding.id));
-    cashHolding = { ...cashHolding, manualPrice: String(newPrice) };
-
-    // 3. Write new cash balance back to Google Sheets via update-price endpoint
-    try {
-      await fetch(`http://localhost:${process.env["PORT"] ?? 4000}/api/excel/investment/update-price`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol: cashHolding.symbol.toUpperCase(), price: newPrice }),
-      });
-    } catch {
-      // Non-fatal — Sheets write failure shouldn't block the response
-    }
-  }
+  // 2. Update the Cash holding balance
+  await adjustCashHolding(delta);
 
   res.status(201).json({
     id: created.id,
@@ -568,6 +533,95 @@ router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
     createdAt: created.createdAt,
     updatedAt: created.updatedAt,
   });
+});
+
+async function adjustCashHolding(delta: number): Promise<void> {
+  if (delta === 0) return;
+  let cashHolding = await db
+    .select()
+    .from(holdingsTable)
+    .where(sql`lower(${holdingsTable.type}) = 'cash' OR lower(${holdingsTable.symbol}) = 'cash'`)
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
+
+  if (!cashHolding) {
+    if (delta > 0) {
+      await db.insert(holdingsTable).values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(delta) });
+    }
+    return;
+  }
+
+  const current = cashHolding.manualPrice != null
+    ? parseFloat(String(cashHolding.manualPrice))
+    : parseFloat(String(cashHolding.quantity));
+  const newPrice = Math.max(0, current + delta);
+  await db.update(holdingsTable).set({ manualPrice: String(newPrice), updatedAt: new Date() }).where(eq(holdingsTable.id, cashHolding.id));
+
+  try {
+    await fetch(`http://localhost:${process.env["PORT"] ?? 4000}/api/excel/investment/update-price`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol: cashHolding.symbol.toUpperCase(), price: newPrice }),
+    });
+  } catch { /* non-fatal */ }
+}
+
+const UpdatePortfolioCashFlowBody = z.object({
+  kind: z.enum(["deposit", "withdrawal"]),
+  amount: z.coerce.number().positive(),
+  note: z.string().trim().optional().nullable(),
+  occurredAt: z.coerce.date().optional(),
+});
+
+router.put("/portfolio/cash-flows/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params["id"] ?? "");
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const parsed = UpdatePortfolioCashFlowBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const [existing] = await db.select().from(portfolioCashFlowsTable).where(eq(portfolioCashFlowsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Cash flow not found" }); return; }
+
+  const oldDelta = existing.kind === "deposit" ? parseFloat(String(existing.amount)) : -parseFloat(String(existing.amount));
+  const newDelta = parsed.data.kind === "deposit" ? parsed.data.amount : -parsed.data.amount;
+  const netDelta = newDelta - oldDelta;
+
+  const [updated] = await db
+    .update(portfolioCashFlowsTable)
+    .set({
+      kind: parsed.data.kind,
+      amount: String(parsed.data.amount),
+      note: parsed.data.note ?? null,
+      occurredAt: parsed.data.occurredAt ?? existing.occurredAt,
+    })
+    .where(eq(portfolioCashFlowsTable.id, id))
+    .returning();
+
+  await adjustCashHolding(netDelta);
+
+  res.json({
+    id: updated!.id, kind: updated!.kind, account: updated!.account, origin: updated!.origin,
+    amount: parseFloat(String(updated!.amount)), note: updated!.note, source: updated!.source,
+    occurredAt: updated!.occurredAt, createdAt: updated!.createdAt, updatedAt: updated!.updatedAt,
+  });
+});
+
+router.delete("/portfolio/cash-flows/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params["id"] ?? "");
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await db.select().from(portfolioCashFlowsTable).where(eq(portfolioCashFlowsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Cash flow not found" }); return; }
+
+  const reverseDelta = existing.kind === "deposit"
+    ? -parseFloat(String(existing.amount))
+    : parseFloat(String(existing.amount));
+
+  await db.delete(portfolioCashFlowsTable).where(eq(portfolioCashFlowsTable.id, id));
+  await adjustCashHolding(reverseDelta);
+
+  res.json({ success: true });
 });
 
 router.get("/portfolio/returns/stock/:symbol", async (req, res): Promise<void> => {
