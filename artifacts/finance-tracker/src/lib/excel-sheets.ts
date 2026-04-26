@@ -39,7 +39,7 @@ export async function fetchCashflowData(): Promise<CashflowData | null> {
   const yearCol = findColIdx(headers, ["year", "năm"]);
   const incomeCol = findColIdx(headers, ["income"]);
   const expenseCol = findColIdx(headers, ["tiêu dùng", "tieu dung", "expense", "tiêu dụng"]);
-  const interestCol = findColIdx(headers, ["interest"]);
+  const interestCol = findColIdx(headers, ["total interest", "interest"]);
   if (yearCol < 0 || incomeCol < 0) return null;
 
   const currentYear = new Date().getFullYear();
