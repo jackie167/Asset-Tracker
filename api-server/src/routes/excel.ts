@@ -82,6 +82,28 @@ let _workbookCache: { workbook: XLSX.WorkBook; expiresAt: number } | null = null
 const WORKBOOK_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const _sheetsCache = new Map<string, { rows: unknown[][]; expiresAt: number }>();
 
+// Returns true if the Drive file is a native Google Sheet (not an uploaded xlsx)
+let _isNativeSheet: boolean | null = null;
+
+async function isNativeGoogleSheet(): Promise<boolean> {
+  if (_isNativeSheet !== null) return _isNativeSheet;
+  const config = getGoogleDriveConfig();
+  if (!config) { _isNativeSheet = false; return false; }
+  try {
+    const token = await getGoogleDriveAccessToken();
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(config.fileId)}?fields=mimeType`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) { _isNativeSheet = false; return false; }
+    const { mimeType } = await res.json() as { mimeType?: string };
+    _isNativeSheet = mimeType === "application/vnd.google-apps.spreadsheet";
+  } catch {
+    _isNativeSheet = false;
+  }
+  return _isNativeSheet;
+}
+
 async function getGoogleSheetsValues(sheetName: string): Promise<unknown[][]> {
   const config = getGoogleDriveConfig();
   if (!config) return [];
@@ -1200,7 +1222,7 @@ router.post("/excel/upload", upload.single("file"), (req, res) => {
 router.get("/excel/sheets", async (_req, res) => {
   try {
     const config = getGoogleDriveConfig();
-    if (config) {
+    if (config && await isNativeGoogleSheet()) {
       const names = await getGoogleSheetNames();
       res.json({ sheets: names, source: getExcelSourceInfo() });
       return;
@@ -1221,7 +1243,7 @@ router.get("/excel/sheet", async (req, res) => {
 
   try {
     const config = getGoogleDriveConfig();
-    if (config) {
+    if (config && await isNativeGoogleSheet()) {
       const rows = await getGoogleSheetsValues(name);
       res.json({ name, rows, source: getExcelSourceInfo() });
       return;
