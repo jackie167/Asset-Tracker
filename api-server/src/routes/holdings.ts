@@ -573,6 +573,41 @@ const UpdatePortfolioCashFlowBody = z.object({
   occurredAt: z.coerce.date().optional(),
 });
 
+router.post("/portfolio/cash-flows/recalculate", async (_req, res): Promise<void> => {
+  const flows = await db.select().from(portfolioCashFlowsTable);
+  const total = flows.reduce((sum, flow) => {
+    const amount = parseFloat(String(flow.amount));
+    return flow.kind === "deposit" ? sum + amount : sum - amount;
+  }, 0);
+  const newPrice = Math.max(0, total);
+
+  let cashHolding = await db
+    .select()
+    .from(holdingsTable)
+    .where(sql`lower(${holdingsTable.type}) = 'cash' OR lower(${holdingsTable.symbol}) = 'cash'`)
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
+
+  if (cashHolding) {
+    await db.update(holdingsTable).set({ manualPrice: String(newPrice), updatedAt: new Date() }).where(eq(holdingsTable.id, cashHolding.id));
+  } else {
+    const [created] = await db.insert(holdingsTable).values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(newPrice) }).returning();
+    cashHolding = created ?? null;
+  }
+
+  if (cashHolding) {
+    try {
+      await fetch(`http://localhost:${process.env["PORT"] ?? 4000}/api/excel/investment/update-price`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: cashHolding.symbol.toUpperCase(), price: newPrice }),
+      });
+    } catch { /* non-fatal */ }
+  }
+
+  res.json({ success: true, newCashBalance: newPrice, flowCount: flows.length });
+});
+
 router.put("/portfolio/cash-flows/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params["id"] ?? "");
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }

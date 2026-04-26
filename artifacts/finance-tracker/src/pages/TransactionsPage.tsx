@@ -201,6 +201,20 @@ export default function TransactionsPage() {
     queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
   };
 
+  const recalcCashMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/portfolio/cash-flows/recalculate", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Failed to recalculate.");
+      return data as { newCashBalance: number; flowCount: number };
+    },
+    onSuccess: (data) => {
+      invalidateCashFlow();
+      toast({ title: `Cash synced: ${data.newCashBalance.toLocaleString("vi-VN")} đ` });
+    },
+    onError: (err) => toast({ title: "Lỗi", description: err instanceof Error ? err.message : "", variant: "destructive" }),
+  });
+
   const cashFlowBody = (kind: "deposit" | "withdrawal", amount: number, occurredAt: string, note: string) => ({
     kind,
     account: "CASH",
@@ -283,11 +297,22 @@ export default function TransactionsPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-xs text-muted-foreground uppercase tracking-widest">Cash Flows</h2>
-              <p className="text-xs text-muted-foreground mt-1">Debug ledger for deposit and withdrawal before wiring cash P/L to it.</p>
+              <p className="text-xs text-muted-foreground mt-1">Deposit và withdrawal — ảnh hưởng trực tiếp đến Cash holding.</p>
             </div>
-            <div className="text-right">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Net Flow</div>
-              <div className="text-sm font-semibold tabular-nums">{cashFlowBalance.toLocaleString("vi-VN")} đ</div>
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[10px] px-2"
+                disabled={recalcCashMutation.isPending}
+                onClick={() => recalcCashMutation.mutate()}
+              >
+                Sync Cash
+              </Button>
+              <div className="text-right">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Net Flow</div>
+                <div className="text-sm font-semibold tabular-nums">{cashFlowBalance.toLocaleString("vi-VN")} đ</div>
+              </div>
             </div>
           </div>
 
