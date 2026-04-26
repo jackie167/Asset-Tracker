@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BarChart, Bar, Cell, LabelList, Tooltip, XAxis, YAxis } from "recharts";
+import { BarChart, Bar, Cell, LabelList, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { Card } from "@/components/ui/card";
 import type { HoldingItem } from "@/pages/assets/types";
 import { formatVND, typeLabel } from "@/pages/assets/utils";
@@ -41,10 +41,6 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
 
   if (data.length === 0) return null;
 
-  const barWidth = 48;
-  const barGap = 28;
-  const chartWidth = data.length * (barWidth + barGap) + 40;
-
   return (
     <Card className="p-4 min-w-0 w-full">
       <div className="flex items-center justify-between mb-3">
@@ -73,51 +69,51 @@ export default function AllocationChart({ holdings, totalValue, onTypeSelect }: 
         </div>
       </div>
 
-      <div className="overflow-x-auto" style={{ height: 160 }}>
-        <BarChart
-          width={chartWidth}
-          height={160}
-          data={data}
-          barSize={barWidth}
-          barCategoryGap={barGap}
-          margin={{ top: 18, right: 20, left: 20, bottom: 0 }}
-        >
-          <XAxis
-            dataKey="name"
-            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <YAxis hide />
-          <Tooltip
-            formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
-              `${formatVND(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
-              props.payload?.name ?? "",
-            ]}
-            contentStyle={{
-              background: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: 8,
-              fontSize: 12,
-            }}
-          />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-            <LabelList
-              dataKey="pct"
-              position="top"
-              style={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
-              formatter={(value: number) => `${value.toFixed(1)}%`}
+      <div style={{ height: 160 }}>
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart
+            data={data}
+            barSize={44}
+            barCategoryGap="30%"
+            margin={{ top: 18, right: 8, left: 8, bottom: 0 }}
+          >
+            <XAxis
+              dataKey="name"
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              axisLine={false}
+              tickLine={false}
             />
-            {data.map((entry, index) => (
-              <Cell
-                key={entry.type}
-                fill={entry.color}
-                cursor={onTypeSelect ? "pointer" : "default"}
-                onClick={() => onTypeSelect?.(entry.type)}
+            <YAxis hide />
+            <Tooltip
+              formatter={(value: number, _name: string, props: { payload?: { name: string; pct: number } }) => [
+                `${formatVND(value)} (${props.payload?.pct?.toFixed(1) ?? 0}%)`,
+                props.payload?.name ?? "",
+              ]}
+              contentStyle={{
+                background: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            />
+            <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+              <LabelList
+                dataKey="pct"
+                position="top"
+                style={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                formatter={(value: number) => `${value.toFixed(1)}%`}
               />
-            ))}
-          </Bar>
-        </BarChart>
+              {data.map((entry) => (
+                <Cell
+                  key={entry.type}
+                  fill={entry.color}
+                  cursor={onTypeSelect ? "pointer" : "default"}
+                  onClick={() => onTypeSelect?.(entry.type)}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="overflow-x-auto mt-1">
