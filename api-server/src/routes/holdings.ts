@@ -109,7 +109,7 @@ function calculateXirr(cashFlows: Array<{ date: Date; amount: number }>): number
     let low = lowStart;
     let high = highStart;
     let lowValue = npv(low);
-    let highValue = npv(high);
+    const highValue = npv(high);
     if (!Number.isFinite(lowValue) || !Number.isFinite(highValue) || lowValue * highValue > 0) continue;
 
     for (let i = 0; i < 120; i += 1) {
@@ -119,7 +119,6 @@ function calculateXirr(cashFlows: Array<{ date: Date; amount: number }>): number
       if (Math.abs(midValue) < 0.0001) return mid;
       if (lowValue * midValue <= 0) {
         high = mid;
-        highValue = midValue;
       } else {
         low = mid;
         lowValue = midValue;
@@ -538,7 +537,7 @@ router.post("/portfolio/cash-flows", async (req, res): Promise<void> => {
 
 async function adjustCashHolding(delta: number): Promise<void> {
   if (delta === 0) return;
-  let cashHolding = await db
+  const cashHolding = await db
     .select()
     .from(holdingsTable)
     .where(sql`lower(${holdingsTable.type}) = 'cash' OR lower(${holdingsTable.symbol}) = 'cash'`)
@@ -556,8 +555,15 @@ async function adjustCashHolding(delta: number): Promise<void> {
     ? parseFloat(String(cashHolding.manualPrice))
     : parseFloat(String(cashHolding.quantity));
   const newPrice = Math.max(0, current + delta);
-  // costOfCapital = manualPrice so Cash P/L is always 0
-  await db.update(holdingsTable).set({ manualPrice: String(newPrice), costOfCapital: String(newPrice), updatedAt: new Date() }).where(eq(holdingsTable.id, cashHolding.id));
+  const currentCostOfCapital = cashHolding.costOfCapital != null
+    ? parseFloat(String(cashHolding.costOfCapital))
+    : current;
+  const newCostOfCapital = Math.max(0, currentCostOfCapital + delta);
+  await db.update(holdingsTable).set({
+    manualPrice: String(newPrice),
+    costOfCapital: String(newCostOfCapital),
+    updatedAt: new Date(),
+  }).where(eq(holdingsTable.id, cashHolding.id));
 
   try {
     await fetch(`http://localhost:${process.env["PORT"] ?? 4000}/api/excel/investment/update-price`, {
@@ -576,12 +582,22 @@ const UpdatePortfolioCashFlowBody = z.object({
 });
 
 router.post("/portfolio/cash-flows/recalculate", async (_req, res): Promise<void> => {
-  const flows = await db.select().from(portfolioCashFlowsTable);
+  const [flows, transactions] = await Promise.all([
+    db.select().from(portfolioCashFlowsTable),
+    db.select().from(transactionsTable),
+  ]);
   const total = flows.reduce((sum, flow) => {
     const amount = parseFloat(String(flow.amount));
     return flow.kind === "deposit" ? sum + amount : sum - amount;
   }, 0);
-  const newPrice = Math.max(0, total);
+  const tradeCashFlow = transactions.reduce((sum, transaction) => {
+    if (transaction.status !== "applied") return sum;
+    if (transaction.fundingSource.trim().toUpperCase() !== "CASH") return sum;
+    const amount = parseFloat(String(transaction.totalValue));
+    return sum + (transaction.side === "buy" ? -amount : amount);
+  }, 0);
+  const newPrice = Math.max(0, total + tradeCashFlow);
+  const newCostOfCapital = Math.max(0, total);
 
   let cashHolding = await db
     .select()
@@ -591,10 +607,19 @@ router.post("/portfolio/cash-flows/recalculate", async (_req, res): Promise<void
     .then((rows) => rows[0] ?? null);
 
   if (cashHolding) {
-    // costOfCapital = manualPrice so Cash P/L is always 0 (deposits are not investment gains)
-    await db.update(holdingsTable).set({ manualPrice: String(newPrice), costOfCapital: String(newPrice), updatedAt: new Date() }).where(eq(holdingsTable.id, cashHolding.id));
+    await db.update(holdingsTable).set({
+      manualPrice: String(newPrice),
+      costOfCapital: String(newCostOfCapital),
+      updatedAt: new Date(),
+    }).where(eq(holdingsTable.id, cashHolding.id));
   } else {
-    const [created] = await db.insert(holdingsTable).values({ symbol: "CASH", type: "cash", quantity: "1", manualPrice: String(newPrice), costOfCapital: String(newPrice) }).returning();
+    const [created] = await db.insert(holdingsTable).values({
+      symbol: "CASH",
+      type: "cash",
+      quantity: "1",
+      manualPrice: String(newPrice),
+      costOfCapital: String(newCostOfCapital),
+    }).returning();
     cashHolding = created ?? null;
   }
 
