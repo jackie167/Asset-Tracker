@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, holdingsTable, portfolioCashFlowsTable, snapshotsTable, transactionsTable } from "../../../lib/db/src/index.ts";
 import {
@@ -252,7 +252,7 @@ async function getPortfolioCurrentValueSnapshot() {
 }
 
 async function buildPortfolioXirrSnapshot() {
-  const [portfolioSnapshot, snapshotBeforeStart, snapshotAfterStart] = await Promise.all([
+  const [portfolioSnapshot, snapshotBeforeStart, firstSnapshotAfterStart] = await Promise.all([
     getPortfolioCurrentValueSnapshot(),
     db
       .select()
@@ -268,13 +268,36 @@ async function buildPortfolioXirrSnapshot() {
       .limit(1),
   ]);
   const asOf = new Date();
-  const beginningSnapshot = snapshotBeforeStart[0] ?? snapshotAfterStart[0] ?? null;
+  const firstAfterStart = firstSnapshotAfterStart[0] ?? null;
+  const firstAfterStartDayEnd = firstAfterStart
+    ? new Date(Date.UTC(
+        firstAfterStart.snapshotAt.getUTCFullYear(),
+        firstAfterStart.snapshotAt.getUTCMonth(),
+        firstAfterStart.snapshotAt.getUTCDate() + 1,
+      ))
+    : null;
+  const fallbackDaySnapshots = snapshotBeforeStart[0] || !firstAfterStart || !firstAfterStartDayEnd
+    ? []
+    : await db
+        .select()
+        .from(snapshotsTable)
+        .where(
+          and(
+            gte(snapshotsTable.snapshotAt, firstAfterStart.snapshotAt),
+            lt(snapshotsTable.snapshotAt, firstAfterStartDayEnd),
+          )
+        )
+        .orderBy(desc(snapshotsTable.snapshotAt))
+        .limit(1);
+  const beginningSnapshot = snapshotBeforeStart[0] ?? fallbackDaySnapshots[0] ?? firstAfterStart;
   const beginningNav = beginningSnapshot ? parseFloat(String(beginningSnapshot.totalValue)) : 0;
   const beginningAt = beginningSnapshot?.snapshotAt ?? STOCK_RETURN_INITIAL_AT;
   const beginningSnapshotSource = snapshotBeforeStart[0]
     ? "latest_snapshot_before_or_at_start"
-    : snapshotAfterStart[0]
-      ? "first_snapshot_after_start"
+    : fallbackDaySnapshots[0]
+      ? "last_snapshot_on_first_available_day_after_start"
+      : firstAfterStart
+        ? "first_snapshot_after_start"
       : "missing_snapshot";
   const currentValue = portfolioSnapshot.totalValue;
 
