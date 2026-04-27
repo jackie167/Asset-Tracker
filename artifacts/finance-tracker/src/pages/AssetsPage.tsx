@@ -19,6 +19,8 @@ import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTab
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
+const RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
+
 function formatPercent(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—";
   return `${(value * 100).toFixed(2)}%`;
@@ -48,7 +50,31 @@ function buildRealizedPnLBySymbol(orders: TradeOrder[] | undefined) {
   return realized;
 }
 
-function calculateCashCostBasis(orders: TradeOrder[] | undefined, cashHolding: HoldingItem | undefined) {
+type CashFlow = {
+  kind: string;
+  amount: number;
+  occurredAt: string;
+};
+
+async function fetchCashFlows(): Promise<CashFlow[]> {
+  const res = await fetch("/api/portfolio/cash-flows");
+  if (!res.ok) return [];
+  return res.json();
+}
+
+function calculateNetExternalCashFlow(cashFlows: CashFlow[] | undefined) {
+  return (cashFlows ?? []).reduce((sum, flow) => {
+    const occurredAt = new Date(flow.occurredAt);
+    if (occurredAt < RETURN_INITIAL_AT || occurredAt > new Date()) return sum;
+
+    const kind = flow.kind.trim().toLowerCase();
+    if (kind === "deposit" || kind === "contribution") return sum + flow.amount;
+    if (kind === "withdrawal") return sum - flow.amount;
+    return sum;
+  }, 0);
+}
+
+function calculateCashCostBasis(orders: TradeOrder[] | undefined, cashHolding: HoldingItem | undefined, cashFlows: CashFlow[] | undefined) {
   if (!cashHolding || cashHolding.costOfCapital == null) return null;
 
   const totalBuyFromCash = (orders ?? []).reduce((sum, order) => {
@@ -58,7 +84,7 @@ function calculateCashCostBasis(orders: TradeOrder[] | undefined, cashHolding: H
     return sum + order.totalValue;
   }, 0);
 
-  return cashHolding.costOfCapital - totalBuyFromCash;
+  return cashHolding.costOfCapital - totalBuyFromCash + calculateNetExternalCashFlow(cashFlows);
 }
 
 function resolveRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
@@ -132,6 +158,10 @@ export default function AssetsPage() {
   const tradeOrdersQuery = useQuery({
     queryKey: ["transactions"],
     queryFn: fetchTradeOrders,
+  });
+  const cashFlowsQuery = useQuery({
+    queryKey: ["portfolio-cash-flows"],
+    queryFn: fetchCashFlows,
   });
   const portfolioXirrQuery = useQuery({
     queryKey: ["portfolio-xirr"],
@@ -341,8 +371,8 @@ export default function AssetsPage() {
   );
 
   const cashCostBasis = useMemo(
-    () => calculateCashCostBasis(tradeOrdersQuery.data, holdings.find(isCashHolding)),
-    [holdings, tradeOrdersQuery.data]
+    () => calculateCashCostBasis(tradeOrdersQuery.data, holdings.find(isCashHolding), cashFlowsQuery.data),
+    [cashFlowsQuery.data, holdings, tradeOrdersQuery.data]
   );
 
   const portfolioReturnSummary = useMemo(() => {

@@ -11,6 +11,8 @@ import { fetchCashflowData, fetchTotalAssetData } from "@/lib/excel-sheets";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+const STOCK_RETURN_INITIAL_AT = new Date("2026-01-01T00:00:00.000Z");
+
 function formatPercent(v: number | null | undefined, decimals = 2) {
   if (v == null || !Number.isFinite(v)) return "—";
   return `${(v * 100).toFixed(decimals)}%`;
@@ -41,6 +43,12 @@ type DashboardTransaction = {
   realizedInterest?: number | null;
 };
 
+type CashFlow = {
+  kind: string;
+  amount: number;
+  occurredAt: string;
+};
+
 function buildRealizedPnLBySymbol(transactions: DashboardTransaction[] | undefined) {
   const realized = new Map<string, number>();
   for (const transaction of transactions ?? []) {
@@ -53,7 +61,25 @@ function buildRealizedPnLBySymbol(transactions: DashboardTransaction[] | undefin
   return realized;
 }
 
-function calculateCashCostBasis(transactions: DashboardTransaction[] | undefined, cashHolding: HoldingItem | undefined) {
+async function fetchCashFlows(): Promise<CashFlow[]> {
+  const res = await fetch("/api/portfolio/cash-flows");
+  if (!res.ok) return [];
+  return res.json();
+}
+
+function calculateNetExternalCashFlow(cashFlows: CashFlow[] | undefined) {
+  return (cashFlows ?? []).reduce((sum, flow) => {
+    const occurredAt = new Date(flow.occurredAt);
+    if (occurredAt < STOCK_RETURN_INITIAL_AT || occurredAt > new Date()) return sum;
+
+    const kind = flow.kind.trim().toLowerCase();
+    if (kind === "deposit" || kind === "contribution") return sum + flow.amount;
+    if (kind === "withdrawal") return sum - flow.amount;
+    return sum;
+  }, 0);
+}
+
+function calculateCashCostBasis(transactions: DashboardTransaction[] | undefined, cashHolding: HoldingItem | undefined, cashFlows: CashFlow[] | undefined) {
   if (!cashHolding || cashHolding.costOfCapital == null) return null;
 
   const totalBuyFromCash = (transactions ?? []).reduce((sum, transaction) => {
@@ -63,7 +89,7 @@ function calculateCashCostBasis(transactions: DashboardTransaction[] | undefined
     return sum + transaction.totalValue;
   }, 0);
 
-  return cashHolding.costOfCapital - totalBuyFromCash;
+  return cashHolding.costOfCapital - totalBuyFromCash + calculateNetExternalCashFlow(cashFlows);
 }
 
 function resolveRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
@@ -210,6 +236,7 @@ export default function FinancialDashboardPage() {
   const investmentQuery = useGetPortfolioSummary();
   const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
   const transactionsQuery = useQuery({ queryKey: ["transactions"], queryFn: fetchTransactions });
+  const portfolioCashFlowsQuery = useQuery({ queryKey: ["portfolio-cash-flows"], queryFn: fetchCashFlows });
   const cashflowQuery = useQuery({ queryKey: ["excel-cashflow"], queryFn: fetchCashflowData });
   const totalAssetQuery = useQuery({ queryKey: ["excel-total-asset"], queryFn: fetchTotalAssetData });
 
@@ -236,8 +263,8 @@ export default function FinancialDashboardPage() {
   );
 
   const cashCostBasis = useMemo(
-    () => calculateCashCostBasis(transactionsQuery.data, investmentHoldings.find(isCashHolding)),
-    [investmentHoldings, transactionsQuery.data]
+    () => calculateCashCostBasis(transactionsQuery.data, investmentHoldings.find(isCashHolding), portfolioCashFlowsQuery.data),
+    [investmentHoldings, portfolioCashFlowsQuery.data, transactionsQuery.data]
   );
 
   const costTotal = useMemo(
