@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
 import { z } from "zod/v4";
-import { db, holdingsTable, portfolioCashFlowsTable, transactionsTable } from "../../../lib/db/src/index.ts";
+import { db, holdingsTable, portfolioCashFlowsTable, snapshotsTable, transactionsTable } from "../../../lib/db/src/index.ts";
 import {
   ListHoldingsResponse,
   CreateHoldingBody,
@@ -252,40 +252,43 @@ async function getPortfolioCurrentValueSnapshot() {
 }
 
 async function buildPortfolioXirrSnapshot() {
-  const [portfolioSnapshot, externalCashFlows, buyTransactions] = await Promise.all([
+  const [portfolioSnapshot, snapshotBeforeStart, snapshotAfterStart] = await Promise.all([
     getPortfolioCurrentValueSnapshot(),
     db
       .select()
-      .from(portfolioCashFlowsTable)
-      .where(
-        and(
-          gte(portfolioCashFlowsTable.occurredAt, STOCK_RETURN_INITIAL_AT),
-          lte(portfolioCashFlowsTable.occurredAt, new Date()),
-        )
-      ),
+      .from(snapshotsTable)
+      .where(lte(snapshotsTable.snapshotAt, STOCK_RETURN_INITIAL_AT))
+      .orderBy(desc(snapshotsTable.snapshotAt))
+      .limit(1),
     db
       .select()
-      .from(transactionsTable)
-      .where(
-        and(
-          eq(transactionsTable.side, "buy"),
-          eq(transactionsTable.status, "applied"),
-          eq(transactionsTable.fundingSource, "CASH"),
-          gte(transactionsTable.executedAt, STOCK_RETURN_INITIAL_AT),
-          lte(transactionsTable.executedAt, new Date()),
-        )
-      ),
+      .from(snapshotsTable)
+      .where(gt(snapshotsTable.snapshotAt, STOCK_RETURN_INITIAL_AT))
+      .orderBy(asc(snapshotsTable.snapshotAt))
+      .limit(1),
   ]);
   const asOf = new Date();
+  const beginningSnapshot = snapshotBeforeStart[0] ?? snapshotAfterStart[0] ?? null;
+  const beginningNav = beginningSnapshot ? parseFloat(String(beginningSnapshot.totalValue)) : 0;
+  const beginningAt = beginningSnapshot?.snapshotAt ?? STOCK_RETURN_INITIAL_AT;
+  const beginningSnapshotSource = snapshotBeforeStart[0]
+    ? "latest_snapshot_before_or_at_start"
+    : snapshotAfterStart[0]
+      ? "first_snapshot_after_start"
+      : "missing_snapshot";
   const currentValue = portfolioSnapshot.totalValue;
-  const currentCostBasis = portfolioSnapshot.holdingsWithValue.reduce(
-    (sum, holding) => sum + (holding.costOfCapital ?? 0),
-    0
-  );
-  const buyTransactionTotal = buyTransactions.reduce(
-    (sum, transaction) => sum + parseFloat(String(transaction.totalValue)),
-    0
-  );
+
+  const externalCashFlows = beginningSnapshot
+    ? await db
+        .select()
+        .from(portfolioCashFlowsTable)
+        .where(
+          and(
+            gt(portfolioCashFlowsTable.occurredAt, beginningAt),
+            lte(portfolioCashFlowsTable.occurredAt, asOf),
+          )
+        )
+    : [];
 
   const externalCashFlowRows = externalCashFlows.flatMap((flow) => {
     const amount = parseFloat(String(flow.amount));
@@ -310,17 +313,17 @@ async function buildPortfolioXirrSnapshot() {
       rowType: "external_cash_flow" as const,
     }];
   });
-  const externalCapitalDelta = externalCashFlowRows.reduce((sum, flow) => sum - flow.amount, 0);
-  const initialCapital = Math.max(0, currentCostBasis - buyTransactionTotal - externalCapitalDelta);
 
   const cashFlows = [
     {
-      date: STOCK_RETURN_INITIAL_AT,
-      amount: -initialCapital,
-      kind: "initial_capital",
-      source: "portfolio_snapshot",
-      note: "Total capital",
-      rowType: "portfolio_start_capital" as const,
+      date: beginningAt,
+      amount: -beginningNav,
+      kind: "beginning_nav",
+      source: beginningSnapshotSource,
+      note: beginningSnapshot
+        ? `Snapshot #${beginningSnapshot.id} total NAV`
+        : "No beginning portfolio snapshot found",
+      rowType: "portfolio_beginning_nav" as const,
     },
     ...externalCashFlowRows,
     {
@@ -338,17 +341,24 @@ async function buildPortfolioXirrSnapshot() {
 
   return {
     asOf,
+    startDate: STOCK_RETURN_INITIAL_AT,
+    beginningAt,
+    beginningSnapshotId: beginningSnapshot?.id ?? null,
+    beginningSnapshotSource,
+    beginningNav,
+    endingNav: currentValue,
     currentValue,
-    initialCapital,
-    rawInitialCapital: currentCostBasis,
-    buyTransactionTotal,
+    initialCapital: beginningNav,
+    rawInitialCapital: beginningNav,
+    buyTransactionTotal: 0,
     externalCashFlowTotal: externalCashFlowRows.reduce((sum, flow) => sum + flow.amount, 0),
     cashFlowCount: cashFlows.length,
     hasNegativeCashFlow: cashFlows.some((flow) => flow.amount < 0),
     hasPositiveCashFlow: cashFlows.some((flow) => flow.amount > 0),
-    mode: "portfolio_cash_flow_xirr" as const,
-    reason: initialCapital <= 0 || currentValue <= 0
-      ? "Portfolio XIRR needs beginning capital and current portfolio value."
+    mode: "portfolio_nav_external_cash_flow_xirr" as const,
+    ignoredInternalTradeFlows: true,
+    reason: beginningNav <= 0 || currentValue <= 0
+      ? "Portfolio XIRR needs a beginning NAV snapshot and current portfolio value."
       : null,
     xirrAnnual,
     xirrMonthly,
@@ -506,6 +516,10 @@ router.get("/portfolio/xirr/export", async (_req, res): Promise<void> => {
       "",
       snapshot.initialCapital,
       snapshot.currentValue,
+      snapshot.beginningAt.toISOString(),
+      snapshot.beginningSnapshotId ?? "",
+      snapshot.beginningSnapshotSource,
+      snapshot.endingNav,
       snapshot.xirrAnnual ?? "",
       snapshot.xirrMonthly ?? "",
       snapshot.hasNegativeCashFlow ? "true" : "false",
@@ -522,6 +536,10 @@ router.get("/portfolio/xirr/export", async (_req, res): Promise<void> => {
       flow.amount,
       snapshot.initialCapital,
       snapshot.currentValue,
+      snapshot.beginningAt.toISOString(),
+      snapshot.beginningSnapshotId ?? "",
+      snapshot.beginningSnapshotSource,
+      snapshot.endingNav,
       snapshot.xirrAnnual ?? "",
       snapshot.xirrMonthly ?? "",
       snapshot.hasNegativeCashFlow ? "true" : "false",
@@ -540,6 +558,10 @@ router.get("/portfolio/xirr/export", async (_req, res): Promise<void> => {
     "amount",
     "initial_capital",
     "current_portfolio_value",
+    "beginning_nav_at",
+    "beginning_snapshot_id",
+    "beginning_snapshot_source",
+    "ending_nav",
     "xirr_annual",
     "xirr_monthly",
     "has_negative_cash_flow",
