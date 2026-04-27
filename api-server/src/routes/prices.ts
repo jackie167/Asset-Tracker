@@ -4,10 +4,16 @@ import {
   GetLatestPricesResponse,
   RefreshPricesResponse,
 } from "../../../lib/api-zod/src/index.ts";
-import { db, priceHistoryTable, transactionsTable } from "../../../lib/db/src/index.ts";
+import { db, holdingsTable, priceHistoryTable, transactionsTable } from "../../../lib/db/src/index.ts";
+import { buildPriceHistoryRow, insertPriceHistoryRows } from "../lib/priceHistory.js";
 import { fetchAndStorePrices, getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
+
+function usesManualPortfolioValue(type: string): boolean {
+  const normalized = type.trim().toLowerCase();
+  return normalized !== "stock" && normalized !== "gold" && normalized !== "crypto";
+}
 
 router.get("/prices/latest", async (_req, res): Promise<void> => {
   const prices = await getLatestPrices();
@@ -32,6 +38,43 @@ router.post("/prices/refresh", async (_req, res): Promise<void> => {
       message: result.message,
     })
   );
+});
+
+router.post("/prices/history/backfill-current", async (_req, res): Promise<void> => {
+  const [holdings, latestPrices] = await Promise.all([
+    db.select().from(holdingsTable),
+    getLatestPrices(),
+  ]);
+  const priceBySymbol = new Map(latestPrices.map((price) => [price.symbol.toUpperCase(), parseFloat(String(price.price))]));
+  const goldBenchmark = latestPrices.find((price) => price.type.trim().toLowerCase() === "gold");
+  const goldPrice = goldBenchmark ? parseFloat(String(goldBenchmark.price)) : null;
+  const priceAt = new Date();
+  const rows = holdings.map((holding) => {
+    const type = holding.type.trim().toLowerCase();
+    const manualPrice = holding.manualPrice != null ? parseFloat(String(holding.manualPrice)) : null;
+    const priceOrValue = priceBySymbol.get(holding.symbol.toUpperCase()) ?? (type === "gold" ? goldPrice : null) ?? manualPrice;
+    if (priceOrValue == null) return null;
+    const quantity = parseFloat(String(holding.quantity));
+    return buildPriceHistoryRow({
+      assetCode: holding.symbol,
+      assetType: holding.type,
+      priceOrValue,
+      quantity,
+      currentValue: usesManualPortfolioValue(holding.type) ? priceOrValue : quantity * priceOrValue,
+      source: "backfill_current",
+      note: "current holdings baseline",
+      priceAt,
+    });
+  });
+
+  await insertPriceHistoryRows(db, rows);
+
+  res.json({
+    success: true,
+    inserted: rows.filter(Boolean).length,
+    source: "backfill_current",
+    priceAt,
+  });
 });
 
 router.get("/prices/history", async (req, res): Promise<void> => {
