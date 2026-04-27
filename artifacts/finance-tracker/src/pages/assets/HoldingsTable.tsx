@@ -33,6 +33,8 @@ type SortKey =
   | "currentPrice"
   | "costOfCapital"
   | "unrealizedPnL"
+  | "realizedPnL"
+  | "totalPnL"
   | "unrealizedPnLPercent"
   | "xirrAnnual"
   | "xirrMonthly";
@@ -72,6 +74,8 @@ function calculatePnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, num
     const totalPnL = (holding.currentValue ?? 0) - effectiveCostOfCapital;
     return {
       effectiveCostOfCapital,
+      unrealizedPnL: totalPnL,
+      realizedPnL: 0,
       totalPnL,
       totalPnLPercent: effectiveCostOfCapital > 0 ? totalPnL / effectiveCostOfCapital : null,
     };
@@ -79,9 +83,12 @@ function calculatePnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, num
 
   const effectiveCostOfCapital = holding.costBasisRemaining ?? holding.costOfCapital ?? 0;
   const unrealizedPnL = (holding.currentValue ?? 0) - effectiveCostOfCapital;
-  const totalPnL = unrealizedPnL + getRealizedPnL(holding, realizedPnLBySymbol);
+  const realizedPnL = getRealizedPnL(holding, realizedPnLBySymbol);
+  const totalPnL = unrealizedPnL + realizedPnL;
   return {
     effectiveCostOfCapital,
+    unrealizedPnL,
+    realizedPnL,
     totalPnL,
     totalPnLPercent: effectiveCostOfCapital > 0 ? totalPnL / effectiveCostOfCapital : null,
   };
@@ -169,11 +176,17 @@ export default function HoldingsTable({
   const filteredPnLTotal = filteredHoldings.reduce((sum, holding) => {
     return sum + calculatePnL(holding, realizedPnLBySymbol, cashAdjustedCost).totalPnL;
   }, 0);
+  const filteredUnrealizedPnLTotal = filteredHoldings.reduce((sum, holding) => {
+    return sum + calculatePnL(holding, realizedPnLBySymbol, cashAdjustedCost).unrealizedPnL;
+  }, 0);
+  const filteredRealizedPnLTotal = filteredHoldings.reduce((sum, holding) => {
+    return sum + calculatePnL(holding, realizedPnLBySymbol, cashAdjustedCost).realizedPnL;
+  }, 0);
 
   const sortedFilteredHoldings = useMemo(() => {
     const denominator = filterType === "all" ? totalValue : filteredTotal;
     const rows = filteredHoldings.map((holding) => {
-      const { effectiveCostOfCapital, totalPnL, totalPnLPercent } = calculatePnL(holding, realizedPnLBySymbol, cashAdjustedCost);
+      const { effectiveCostOfCapital, unrealizedPnL, realizedPnL, totalPnL, totalPnLPercent } = calculatePnL(holding, realizedPnLBySymbol, cashAdjustedCost);
       const xirrAnnual = calculateSnapshotXirr(effectiveCostOfCapital, holding.currentValue);
       const xirrMonthly = xirrAnnual == null ? null : Math.pow(1 + xirrAnnual, 1 / 12) - 1;
       const weight =
@@ -183,7 +196,9 @@ export default function HoldingsTable({
 
       return {
         holding,
-        unrealizedPnL: totalPnL,
+        unrealizedPnL,
+        realizedPnL,
+        totalPnL,
         unrealizedPnLPercent: totalPnLPercent,
         xirrAnnual,
         xirrMonthly,
@@ -217,6 +232,10 @@ export default function HoldingsTable({
             return row.holding.costBasisRemaining ?? row.holding.costOfCapital;
           case "unrealizedPnL":
             return row.unrealizedPnL;
+          case "realizedPnL":
+            return row.realizedPnL;
+          case "totalPnL":
+            return row.totalPnL;
           case "unrealizedPnLPercent":
             return row.unrealizedPnLPercent;
           case "xirrAnnual":
@@ -249,6 +268,8 @@ export default function HoldingsTable({
     showQtyCol ? "minmax(52px, 0.58fr)" : null,
     showPriceCol ? "minmax(102px, 0.9fr)" : null,
     showCostOfCapitalCol ? "minmax(108px, 0.95fr)" : null,
+    showReturnCols ? "minmax(112px, 0.95fr)" : null,
+    showReturnCols ? "minmax(112px, 0.95fr)" : null,
     showReturnCols ? "minmax(112px, 0.95fr)" : null,
     showReturnCols ? "minmax(62px, 0.6fr)" : null,
     showReturnCols ? "minmax(72px, 0.65fr)" : null,
@@ -373,7 +394,9 @@ export default function HoldingsTable({
                   {showQtyCol && <button type="button" onClick={() => handleSort("quantity")} className="text-right hover:text-foreground transition-colors">Qty{sortIndicator("quantity")}</button>}
                   {showPriceCol && <button type="button" onClick={() => handleSort("currentPrice")} className="text-right hover:text-foreground transition-colors">Price{sortIndicator("currentPrice")}</button>}
                   {showCostOfCapitalCol && <button type="button" onClick={() => handleSort("costOfCapital")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Cost{sortIndicator("costOfCapital")}</button>}
-                  {showReturnCols && <button type="button" onClick={() => handleSort("unrealizedPnL")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">P/L{sortIndicator("unrealizedPnL")}</button>}
+                  {showReturnCols && <button type="button" onClick={() => handleSort("unrealizedPnL")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Unrealized{sortIndicator("unrealizedPnL")}</button>}
+                  {showReturnCols && <button type="button" onClick={() => handleSort("realizedPnL")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Realized{sortIndicator("realizedPnL")}</button>}
+                  {showReturnCols && <button type="button" onClick={() => handleSort("totalPnL")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Total P/L{sortIndicator("totalPnL")}</button>}
                   {showReturnCols && <button type="button" onClick={() => handleSort("unrealizedPnLPercent")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">P/L %{sortIndicator("unrealizedPnLPercent")}</button>}
                   {showReturnCols && <button type="button" onClick={() => handleSort("xirrAnnual")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">XIRR Year{sortIndicator("xirrAnnual")}</button>}
                   {showReturnCols && <button type="button" onClick={() => handleSort("xirrMonthly")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">XIRR Month{sortIndicator("xirrMonthly")}</button>}
@@ -385,7 +408,7 @@ export default function HoldingsTable({
                   </p>
                 )}
 
-                {sortedFilteredHoldings.map(({ holding, unrealizedPnL, unrealizedPnLPercent, xirrAnnual, xirrMonthly, weight }) => (
+                {sortedFilteredHoldings.map(({ holding, unrealizedPnL, realizedPnL, totalPnL, unrealizedPnLPercent, xirrAnnual, xirrMonthly, weight }) => (
                   <div
                     key={holding.id}
                     className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
@@ -478,6 +501,18 @@ export default function HoldingsTable({
                     )}
 
                     {showReturnCols && (
+                      <span className={`text-[11px] text-right tabular-nums ${(realizedPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                        {formatVNDFull(realizedPnL)}
+                      </span>
+                    )}
+
+                    {showReturnCols && (
+                      <span className={`text-[11px] text-right tabular-nums ${(totalPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                        {formatVNDFull(totalPnL)}
+                      </span>
+                    )}
+
+                    {showReturnCols && (
                       <span className={`text-[11px] text-right tabular-nums ${
                         unrealizedPnLPercent == null
                           ? "text-muted-foreground"
@@ -535,6 +570,20 @@ export default function HoldingsTable({
                     {showQtyCol && <span />}
                     {showPriceCol && <span />}
                     {showCostOfCapitalCol && <span />}
+                    {showReturnCols && (
+                      <span className={`text-sm font-bold text-right tabular-nums whitespace-nowrap ${
+                        filteredUnrealizedPnLTotal >= 0 ? "text-emerald-400" : "text-red-300"
+                      }`}>
+                        {formatVNDFull(filteredUnrealizedPnLTotal)}
+                      </span>
+                    )}
+                    {showReturnCols && (
+                      <span className={`text-sm font-bold text-right tabular-nums whitespace-nowrap ${
+                        filteredRealizedPnLTotal >= 0 ? "text-emerald-400" : "text-red-300"
+                      }`}>
+                        {formatVNDFull(filteredRealizedPnLTotal)}
+                      </span>
+                    )}
                     {showReturnCols && (
                       <span className={`text-sm font-bold text-right tabular-nums whitespace-nowrap ${
                         filteredPnLTotal >= 0 ? "text-emerald-400" : "text-red-300"
