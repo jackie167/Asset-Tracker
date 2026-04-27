@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { db, pricesTable, holdingsTable, snapshotsTable, snapshotTypeValuesTable } from "../../../lib/db/src/index.ts";
+import { buildPriceHistoryRow, insertPriceHistoryRows } from "./priceHistory.js";
 import { desc } from "drizzle-orm";
 import { createPriceScheduler } from "./priceScheduler.js";
 
@@ -417,6 +418,7 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
     return { updated: 0, message: "Could not fetch prices — check server logs for details" };
   }
 
+  const fetchedAt = new Date();
   for (const p of prices) {
     await db.insert(pricesTable).values({
       type: p.type,
@@ -424,9 +426,27 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
       price: String(p.price),
       change: p.change != null ? String(p.change) : null,
       changePercent: p.changePercent != null ? String(p.changePercent) : null,
-      fetchedAt: new Date(),
+      fetchedAt,
     });
   }
+
+  const holdingBySymbol = new Map(holdings.map((holding) => [holding.symbol.toUpperCase(), holding]));
+  await insertPriceHistoryRows(
+    db,
+    prices.map((price) => {
+      const holding = holdingBySymbol.get(price.symbol.toUpperCase());
+      const quantity = holding ? parseFloat(String(holding.quantity)) : null;
+      return buildPriceHistoryRow({
+        assetCode: price.symbol,
+        assetType: price.type,
+        priceOrValue: price.price,
+        quantity,
+        source: "online_api",
+        note: "price refresh",
+        priceAt: fetchedAt,
+      });
+    })
+  );
 
   await savePortfolioSnapshot(holdings, prices);
 

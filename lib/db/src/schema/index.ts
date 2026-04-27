@@ -1,5 +1,6 @@
 export * from "./holdings";
 export * from "./prices";
+export * from "./price-history";
 export * from "./snapshots";
 export * from "./snapshot-type-values";
 export * from "./transactions";

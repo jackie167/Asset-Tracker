@@ -52,4 +52,24 @@ export async function ensureDatabaseSchema() {
       ADD COLUMN IF NOT EXISTS account text NOT NULL DEFAULT 'CASH',
       ADD COLUMN IF NOT EXISTS origin text NOT NULL DEFAULT 'manual'
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS price_history (
+      id serial PRIMARY KEY,
+      date timestamptz NOT NULL DEFAULT now(),
+      asset_code text NOT NULL,
+      asset_type text NOT NULL,
+      price_or_value numeric(22, 2) NOT NULL,
+      quantity numeric(18, 6),
+      current_value numeric(22, 2),
+      source text NOT NULL DEFAULT 'manual',
+      note text,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS price_history_asset_date_idx
+      ON price_history (asset_code, date DESC)
+  `);
 }

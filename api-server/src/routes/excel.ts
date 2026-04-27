@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db, holdingsTable, transactionsTable } from "../../../lib/db/src/index.ts";
+import { buildPriceHistoryRow, buildPriceHistoryRowFromHolding, insertPriceHistoryRows } from "../lib/priceHistory.js";
 
 const router: IRouter = Router();
 
@@ -320,6 +321,8 @@ type InvestmentRow = {
   symbol: string;
   type: string;
   quantity: number;
+  priceOrValue: number | null;
+  currentValue: number | null;
   manualPrice: number | null;
   costOfCapital: number | null;
   interest: number | null;
@@ -488,6 +491,8 @@ function parseInvestmentRowsFromRaw(rows: unknown[][]): InvestmentRow[] {
       symbol,
       type,
       quantity,
+      priceOrValue: derivedCurrentPrice,
+      currentValue: parsedCurrentValue ?? (derivedCurrentPrice != null ? derivedCurrentPrice * quantity : null),
       manualPrice,
       costOfCapital: parsedCostOfCapital,
       interest: parsedInterest,
@@ -777,6 +782,15 @@ router.post("/excel/investment/update-price", async (req, res): Promise<void> =>
       return;
     }
 
+    await insertPriceHistoryRows(db, [
+      buildPriceHistoryRowFromHolding({
+        holding: updated,
+        priceOrValue: price,
+        source: "manual",
+        note: "manual price update",
+      }),
+    ]);
+
     // 2. Write back to Google Sheets (always try when config present)
     if (getGoogleDriveConfig()) {
       const SHEET = "Investment";
@@ -855,6 +869,7 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
       let updated = 0;
       let removed = 0;
       const skipped: string[] = [];
+      const syncedAt = new Date();
 
       for (const row of rows) {
         const existing = existingBySymbol.get(row.symbol);
@@ -920,6 +935,23 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
           }))
         );
       }
+
+      await insertPriceHistoryRows(
+        tx,
+        rows.map((row) => {
+          if (row.priceOrValue == null) return null;
+          return buildPriceHistoryRow({
+            assetCode: row.symbol,
+            assetType: row.type,
+            priceOrValue: row.priceOrValue,
+            quantity: row.quantity,
+            currentValue: row.currentValue,
+            source: "import_excel",
+            note: "Investment sheet sync",
+            priceAt: syncedAt,
+          });
+        })
+      );
 
       return {
         clearedTransactions,
