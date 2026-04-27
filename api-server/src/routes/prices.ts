@@ -4,7 +4,7 @@ import {
   GetLatestPricesResponse,
   RefreshPricesResponse,
 } from "../../../lib/api-zod/src/index.ts";
-import { db, priceHistoryTable } from "../../../lib/db/src/index.ts";
+import { db, priceHistoryTable, transactionsTable } from "../../../lib/db/src/index.ts";
 import { fetchAndStorePrices, getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
@@ -68,6 +68,92 @@ router.get("/prices/history", async (req, res): Promise<void> => {
     note: row.note,
     updatedAt: row.updatedAt,
   })));
+});
+
+router.get("/assets/:symbol/timeline", async (req, res): Promise<void> => {
+  const symbol = String(req.params["symbol"] ?? "").trim().toUpperCase();
+  if (!symbol) {
+    res.status(400).json({ error: "symbol is required" });
+    return;
+  }
+
+  const from = typeof req.query["from"] === "string" ? new Date(req.query["from"]) : null;
+  const to = typeof req.query["to"] === "string" ? new Date(req.query["to"]) : null;
+  const limitRaw = Number(req.query["limit"] ?? 1000);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 5000) : 1000;
+
+  const priceFilters = [
+    eq(priceHistoryTable.assetCode, symbol),
+    from && !Number.isNaN(from.getTime()) ? gte(priceHistoryTable.priceAt, from) : undefined,
+    to && !Number.isNaN(to.getTime()) ? lte(priceHistoryTable.priceAt, to) : undefined,
+  ].filter((filter): filter is NonNullable<typeof filter> => filter != null);
+  const transactionFilters = [
+    eq(transactionsTable.symbol, symbol),
+    from && !Number.isNaN(from.getTime()) ? gte(transactionsTable.executedAt, from) : undefined,
+    to && !Number.isNaN(to.getTime()) ? lte(transactionsTable.executedAt, to) : undefined,
+  ].filter((filter): filter is NonNullable<typeof filter> => filter != null);
+
+  const [priceRows, transactionRows] = await Promise.all([
+    db
+      .select()
+      .from(priceHistoryTable)
+      .where(and(...priceFilters))
+      .orderBy(desc(priceHistoryTable.priceAt))
+      .limit(limit),
+    db
+      .select()
+      .from(transactionsTable)
+      .where(and(...transactionFilters))
+      .orderBy(desc(transactionsTable.executedAt))
+      .limit(limit),
+  ]);
+
+  const events = [
+    ...priceRows.map((row) => ({
+      eventType: "price" as const,
+      id: row.id,
+      date: row.priceAt,
+      assetCode: row.assetCode,
+      assetType: row.assetType,
+      priceOrValue: parseFloat(String(row.priceOrValue)),
+      quantity: row.quantity != null ? parseFloat(String(row.quantity)) : null,
+      currentValue: row.currentValue != null ? parseFloat(String(row.currentValue)) : null,
+      source: row.source,
+      note: row.note,
+      updatedAt: row.updatedAt,
+    })),
+    ...transactionRows.map((row) => {
+      const netAmount = parseFloat(String(row.totalValue));
+      const realizedPnl = row.realizedInterest != null ? parseFloat(String(row.realizedInterest)) : null;
+      const costBasisRemoved = row.side === "sell" && realizedPnl != null ? netAmount - realizedPnl : null;
+      return {
+        eventType: "transaction" as const,
+        id: row.id,
+        date: row.executedAt,
+        assetCode: row.symbol,
+        assetType: row.assetType,
+        side: row.side,
+        quantity: parseFloat(String(row.quantity)),
+        unitPrice: row.unitPrice != null ? parseFloat(String(row.unitPrice)) : null,
+        netAmount,
+        realizedPnl,
+        costBasisRemoved,
+        fundingSource: row.fundingSource,
+        origin: row.origin,
+        status: row.status,
+        note: row.note,
+        updatedAt: row.updatedAt,
+      };
+    }),
+  ].sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()).slice(0, limit);
+
+  res.json({
+    symbol,
+    count: events.length,
+    priceCount: priceRows.length,
+    transactionCount: transactionRows.length,
+    events,
+  });
 });
 
 export default router;

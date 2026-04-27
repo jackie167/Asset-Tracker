@@ -68,6 +68,75 @@ async function exportPortfolioXirrDebugCSV() {
   URL.revokeObjectURL(url);
 }
 
+async function exportAssetTimelineCSV(symbol: string) {
+  const res = await fetch(`/api/assets/${encodeURIComponent(symbol)}/timeline?limit=5000`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status} ${res.statusText}`);
+  }
+  const data = await res.json() as {
+    events?: Array<{
+      eventType: "price" | "transaction";
+      date: string;
+      assetCode: string;
+      assetType: string;
+      priceOrValue?: number | null;
+      currentValue?: number | null;
+      source?: string | null;
+      side?: string | null;
+      quantity?: number | null;
+      unitPrice?: number | null;
+      netAmount?: number | null;
+      realizedPnl?: number | null;
+      costBasisRemoved?: number | null;
+      fundingSource?: string | null;
+      origin?: string | null;
+      status?: string | null;
+      note?: string | null;
+    }>;
+  };
+  const headers = [
+    "date",
+    "event_type",
+    "asset",
+    "asset_type",
+    "side",
+    "quantity",
+    "price_or_value",
+    "current_value",
+    "unit_price",
+    "net_amount",
+    "realized_pnl",
+    "cost_basis_removed",
+    "source",
+    "funding_source",
+    "origin",
+    "status",
+    "note",
+  ];
+  const rows = (data.events ?? []).map((event) => [
+    event.date,
+    event.eventType,
+    event.assetCode,
+    event.assetType,
+    event.side ?? "",
+    event.quantity ?? "",
+    event.priceOrValue ?? "",
+    event.currentValue ?? "",
+    event.unitPrice ?? "",
+    event.netAmount ?? "",
+    event.realizedPnl ?? "",
+    event.costBasisRemoved ?? "",
+    event.source ?? "",
+    event.fundingSource ?? "",
+    event.origin ?? "",
+    event.status ?? "",
+    event.note ?? "",
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
+  downloadCSV(csv, `asset-timeline-${symbol}-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
 function csvValue(value: string | number | null | undefined) {
   const text = value == null ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
@@ -330,6 +399,11 @@ export default function TransactionsPage() {
         kind: "item",
         label: `Export Asset Detail — ${filterSymbol}`,
         onSelect: () => exportAssetDetailCSV(filterSymbol, orders),
+      });
+      actions.push({
+        kind: "item",
+        label: `Export Timeline — ${filterSymbol}`,
+        onSelect: () => { void exportAssetTimelineCSV(filterSymbol); },
       });
     }
     actions.push({ kind: "separator" });
