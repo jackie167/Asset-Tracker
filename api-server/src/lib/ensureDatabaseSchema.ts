@@ -33,6 +33,14 @@ export async function ensureDatabaseSchema() {
   `);
 
   await pool.query(`
+    ALTER TABLE transactions
+      ADD COLUMN IF NOT EXISTS gross_amount numeric(18, 2),
+      ADD COLUMN IF NOT EXISTS fee numeric(18, 2),
+      ADD COLUMN IF NOT EXISTS tax numeric(18, 2),
+      ADD COLUMN IF NOT EXISTS net_amount numeric(18, 2)
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS portfolio_cash_flows (
       id serial PRIMARY KEY,
       kind text NOT NULL DEFAULT 'contribution',

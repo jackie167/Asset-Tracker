@@ -11,6 +11,10 @@ const CreateTransactionBody = z.object({
   assetType: z.string().trim().min(1),
   symbol: z.string().trim().min(1),
   quantity: z.coerce.number().positive().optional(),
+  price: z.coerce.number().positive().optional(),
+  grossAmount: z.coerce.number().positive().optional(),
+  fee: z.coerce.number().nonnegative().optional(),
+  tax: z.coerce.number().nonnegative().optional(),
   totalValue: z.coerce.number().positive().optional(),
   netAmount: z.coerce.number().positive().optional(),
   note: z.string().trim().optional().nullable(),
@@ -25,7 +29,12 @@ const UpdateTransactionBody = CreateTransactionBody;
 
 function serializeTransaction(transaction: typeof transactionsTable.$inferSelect) {
   const quantity = parseFloat(String(transaction.quantity));
-  const netAmount = parseFloat(String(transaction.totalValue));
+  const netAmount = transaction.netAmount != null
+    ? parseFloat(String(transaction.netAmount))
+    : parseFloat(String(transaction.totalValue));
+  const grossAmount = transaction.grossAmount != null ? parseFloat(String(transaction.grossAmount)) : netAmount;
+  const fee = transaction.fee != null ? parseFloat(String(transaction.fee)) : 0;
+  const tax = transaction.tax != null ? parseFloat(String(transaction.tax)) : 0;
 
   return {
     id: transaction.id,
@@ -36,6 +45,9 @@ function serializeTransaction(transaction: typeof transactionsTable.$inferSelect
     symbol: transaction.symbol,
     quantity,
     totalValue: netAmount,
+    grossAmount,
+    fee,
+    tax,
     netAmount,
     unitPrice: transaction.unitPrice != null ? parseFloat(String(transaction.unitPrice)) : null,
     realizedInterest: transaction.realizedInterest != null ? parseFloat(String(transaction.realizedInterest)) : null,
@@ -72,8 +84,36 @@ function normalizeTradeQuantity(input: { assetType: string; quantity?: number })
   return input.quantity ?? 0;
 }
 
-function resolveNetAmount(input: { totalValue?: number; netAmount?: number }): number {
-  return input.netAmount ?? input.totalValue ?? 0;
+function resolveTradeAmounts(input: {
+  side: "buy" | "sell";
+  quantity: number;
+  price?: number;
+  grossAmount?: number;
+  fee?: number;
+  tax?: number;
+  totalValue?: number;
+  netAmount?: number;
+}) {
+  const fee = input.fee ?? 0;
+  const tax = input.tax ?? 0;
+  const grossAmount = input.grossAmount ?? (input.price != null ? input.price * input.quantity : null);
+  const netAmount = input.netAmount
+    ?? input.totalValue
+    ?? (grossAmount != null
+      ? input.side === "buy"
+        ? grossAmount + fee + tax
+        : Math.max(0, grossAmount - fee - tax)
+      : 0);
+  const resolvedGrossAmount = grossAmount ?? (input.side === "buy" ? Math.max(0, netAmount - fee - tax) : netAmount + fee + tax);
+  const unitPrice = input.price ?? (input.quantity > 0 ? resolvedGrossAmount / input.quantity : netAmount);
+
+  return {
+    grossAmount: resolvedGrossAmount,
+    fee,
+    tax,
+    netAmount,
+    unitPrice,
+  };
 }
 
 async function getHoldingBySymbol(tx: any, symbol: string) {
@@ -304,14 +344,13 @@ router.post("/transactions", async (req, res): Promise<void> => {
       if (!usesManualPortfolioValue(assetType) && quantity <= 0) {
         throw new Error("Quantity is required for online-priced assets.");
       }
-      const netAmount = resolveNetAmount(parsed.data);
-      const unitPrice = usesManualPortfolioValue(assetType) ? netAmount : netAmount / quantity;
+      const amounts = resolveTradeAmounts({ ...parsed.data, quantity });
       const realizedInterest = await applyTransactionEffect(tx, {
         side: parsed.data.side,
         assetType,
         symbol,
         quantity,
-        totalValue: netAmount,
+        totalValue: amounts.netAmount,
       });
 
       const [created] = await tx
@@ -323,8 +362,12 @@ router.post("/transactions", async (req, res): Promise<void> => {
           assetType,
           symbol,
           quantity: String(quantity),
-          totalValue: String(netAmount),
-          unitPrice: String(unitPrice),
+          totalValue: String(amounts.netAmount),
+          unitPrice: String(usesManualPortfolioValue(assetType) ? amounts.netAmount : amounts.unitPrice),
+          grossAmount: String(amounts.grossAmount),
+          fee: String(amounts.fee),
+          tax: String(amounts.tax),
+          netAmount: String(amounts.netAmount),
           realizedInterest: String(realizedInterest),
           note: parsed.data.note || null,
           status: "applied",
@@ -375,14 +418,13 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
       if (!usesManualPortfolioValue(assetType) && quantity <= 0) {
         throw new Error("Quantity is required for online-priced assets.");
       }
-      const netAmount = resolveNetAmount(parsed.data);
-      const unitPrice = usesManualPortfolioValue(assetType) ? netAmount : netAmount / quantity;
+      const amounts = resolveTradeAmounts({ ...parsed.data, quantity });
       const realizedInterest = await applyTransactionEffect(tx, {
         side: parsed.data.side,
         assetType,
         symbol,
         quantity,
-        totalValue: netAmount,
+        totalValue: amounts.netAmount,
       });
 
       const [updated] = await tx
@@ -393,8 +435,12 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
           assetType,
           symbol,
           quantity: String(quantity),
-          totalValue: String(netAmount),
-          unitPrice: String(unitPrice),
+          totalValue: String(amounts.netAmount),
+          unitPrice: String(usesManualPortfolioValue(assetType) ? amounts.netAmount : amounts.unitPrice),
+          grossAmount: String(amounts.grossAmount),
+          fee: String(amounts.fee),
+          tax: String(amounts.tax),
+          netAmount: String(amounts.netAmount),
           realizedInterest: String(realizedInterest),
           note: parsed.data.note || null,
           status: "applied",

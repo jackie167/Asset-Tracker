@@ -12,6 +12,9 @@ export type TradeOrder = {
   symbol: string;
   quantity: number;
   totalValue: number;
+  grossAmount?: number | null;
+  fee?: number | null;
+  tax?: number | null;
   netAmount?: number | null;
   unitPrice: number | null;
   realizedInterest?: number | null;
