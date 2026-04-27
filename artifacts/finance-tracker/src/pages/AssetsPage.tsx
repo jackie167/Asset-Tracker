@@ -56,8 +56,26 @@ type CashFlow = {
   occurredAt: string;
 };
 
+type ClosedPosition = {
+  symbol: string;
+  assetType: string;
+  sellCount: number;
+  soldQuantity: number;
+  netProceeds: number;
+  realizedPnl: number;
+  costBasisRemoved: number;
+  realizedPnlPercent: number | null;
+  lastSoldAt: string;
+};
+
 async function fetchCashFlows(): Promise<CashFlow[]> {
   const res = await fetch("/api/portfolio/cash-flows");
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function fetchClosedPositions(): Promise<ClosedPosition[]> {
+  const res = await fetch("/api/portfolio/closed-positions");
   if (!res.ok) return [];
   return res.json();
 }
@@ -163,6 +181,10 @@ export default function AssetsPage() {
     queryKey: ["portfolio-cash-flows"],
     queryFn: fetchCashFlows,
   });
+  const closedPositionsQuery = useQuery({
+    queryKey: ["portfolio-closed-positions"],
+    queryFn: fetchClosedPositions,
+  });
   const portfolioXirrQuery = useQuery({
     queryKey: ["portfolio-xirr"],
     queryFn: fetchPortfolioXirr,
@@ -190,6 +212,7 @@ export default function AssetsPage() {
     queryClient.invalidateQueries({ queryKey: getGetPortfolioSummaryQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListSnapshotsQueryKey() });
     queryClient.invalidateQueries({ queryKey: ["portfolio-xirr"] });
+    queryClient.invalidateQueries({ queryKey: ["portfolio-closed-positions"] });
   };
 
   const tradeBodyToRequest = (body: {
@@ -595,6 +618,51 @@ export default function AssetsPage() {
               onUpdatePrice={(symbol, price) => updatePriceMutation.mutate({ symbol, price })}
               readOnly
             />
+
+            {(closedPositionsQuery.data?.length ?? 0) > 0 && (
+              <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
+                <h2 className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Closed Positions</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="text-[9px] text-muted-foreground uppercase tracking-wider border-b border-border">
+                        <th className="py-1.5 pr-3 text-left font-normal">Asset</th>
+                        <th className="py-1.5 px-3 text-right font-normal">Sells</th>
+                        <th className="py-1.5 px-3 text-right font-normal">Proceeds</th>
+                        <th className="py-1.5 px-3 text-right font-normal">Cost Removed</th>
+                        <th className="py-1.5 px-3 text-right font-normal">Realized</th>
+                        <th className="py-1.5 pl-3 text-right font-normal">Realized %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(closedPositionsQuery.data ?? []).map((position) => (
+                        <tr key={position.symbol} className="border-b border-border last:border-0">
+                          <td className="py-2 pr-3">
+                            <div className="font-medium">{position.symbol}</div>
+                            <div className="text-[10px] text-muted-foreground">{position.assetType}</div>
+                          </td>
+                          <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{position.sellCount}</td>
+                          <td className="py-2 px-3 text-right tabular-nums">{formatMoney(position.netProceeds, true)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{formatMoney(position.costBasisRemoved, true)}</td>
+                          <td className={`py-2 px-3 text-right tabular-nums ${position.realizedPnl >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                            {formatMoney(position.realizedPnl, true)}
+                          </td>
+                          <td className={`py-2 pl-3 text-right tabular-nums ${
+                            position.realizedPnlPercent == null
+                              ? "text-muted-foreground"
+                              : position.realizedPnlPercent >= 0
+                                ? "text-emerald-400"
+                                : "text-red-300"
+                          }`}>
+                            {formatPercent(position.realizedPnlPercent)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <TradeOrdersTable
               orders={tradeOrdersQuery.data ?? []}

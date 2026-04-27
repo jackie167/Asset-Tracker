@@ -528,6 +528,69 @@ router.get("/portfolio/summary", async (_req, res): Promise<void> => {
   );
 });
 
+router.get("/portfolio/closed-positions", async (_req, res): Promise<void> => {
+  const [transactions, holdings] = await Promise.all([
+    db.select().from(transactionsTable).where(eq(transactionsTable.status, "applied")),
+    db.select().from(holdingsTable),
+  ]);
+  const holdingsBySymbol = new Map(holdings.map((holding) => [holding.symbol.toUpperCase(), holding]));
+  const totalsBySymbol = new Map<string, {
+    symbol: string;
+    assetType: string;
+    sellCount: number;
+    soldQuantity: number;
+    netProceeds: number;
+    realizedPnl: number;
+    costBasisRemoved: number;
+    lastSoldAt: Date;
+  }>();
+
+  for (const transaction of transactions) {
+    if (transaction.side !== "sell") continue;
+
+    const symbol = transaction.symbol.toUpperCase();
+    const netAmount = parseFloat(String(transaction.netAmount ?? transaction.totalValue));
+    const realizedPnl = parseFloat(String(transaction.realizedInterest ?? 0));
+    const costBasisRemoved = netAmount - realizedPnl;
+    const existing = totalsBySymbol.get(symbol);
+
+    if (existing) {
+      existing.sellCount += 1;
+      existing.soldQuantity += parseFloat(String(transaction.quantity));
+      existing.netProceeds += netAmount;
+      existing.realizedPnl += realizedPnl;
+      existing.costBasisRemoved += costBasisRemoved;
+      if (transaction.executedAt > existing.lastSoldAt) existing.lastSoldAt = transaction.executedAt;
+      continue;
+    }
+
+    totalsBySymbol.set(symbol, {
+      symbol,
+      assetType: transaction.assetType,
+      sellCount: 1,
+      soldQuantity: parseFloat(String(transaction.quantity)),
+      netProceeds: netAmount,
+      realizedPnl,
+      costBasisRemoved,
+      lastSoldAt: transaction.executedAt,
+    });
+  }
+
+  const rows = [...totalsBySymbol.values()]
+    .filter((row) => {
+      const holding = holdingsBySymbol.get(row.symbol);
+      if (!holding) return true;
+      return parseFloat(String(holding.quantity)) <= 0;
+    })
+    .sort((left, right) => right.lastSoldAt.getTime() - left.lastSoldAt.getTime())
+    .map((row) => ({
+      ...row,
+      realizedPnlPercent: row.costBasisRemoved > 0 ? row.realizedPnl / row.costBasisRemoved : null,
+    }));
+
+  res.json(rows);
+});
+
 router.get("/portfolio/xirr", async (_req, res): Promise<void> => {
   const snapshot = await buildPortfolioXirrSnapshot();
   res.json(snapshot);
