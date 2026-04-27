@@ -56,12 +56,14 @@ export interface RefreshResult {
   message: string;
 }
 
+export type SnapshotTypeValues = { [key: string]: number };
+
 export interface Snapshot {
   id: number;
   totalValue: number;
   stockValue: number;
   goldValue: number;
-  typeValues: Record<string, number>;
+  typeValues: SnapshotTypeValues;
   snapshotAt: string;
 }
 
@@ -91,6 +93,16 @@ export interface HoldingWithValue {
   costOfCapital: number | null;
   /** @nullable */
   interest: number | null;
+  quantityRemaining: number;
+  /** @nullable */
+  avgCost: number | null;
+  /** @nullable */
+  costBasisRemaining: number | null;
+  realizedPnl: number;
+  /** @nullable */
+  unrealizedPnl: number | null;
+  /** @nullable */
+  totalPnl: number | null;
 }
 
 export interface PortfolioSummary {

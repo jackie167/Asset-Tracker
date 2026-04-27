@@ -11,9 +11,12 @@ const CreateTransactionBody = z.object({
   assetType: z.string().trim().min(1),
   symbol: z.string().trim().min(1),
   quantity: z.coerce.number().positive().optional(),
-  totalValue: z.coerce.number().positive(),
+  totalValue: z.coerce.number().positive().optional(),
+  netAmount: z.coerce.number().positive().optional(),
   note: z.string().trim().optional().nullable(),
   executedAt: z.coerce.date().optional(),
+}).refine((value) => value.totalValue != null || value.netAmount != null, {
+  message: "totalValue or netAmount is required",
 });
 const UpdateTransactionParams = z.object({
   id: z.coerce.number().int().positive(),
@@ -22,7 +25,7 @@ const UpdateTransactionBody = CreateTransactionBody;
 
 function serializeTransaction(transaction: typeof transactionsTable.$inferSelect) {
   const quantity = parseFloat(String(transaction.quantity));
-  const totalValue = parseFloat(String(transaction.totalValue));
+  const netAmount = parseFloat(String(transaction.totalValue));
 
   return {
     id: transaction.id,
@@ -32,9 +35,11 @@ function serializeTransaction(transaction: typeof transactionsTable.$inferSelect
     assetType: transaction.assetType,
     symbol: transaction.symbol,
     quantity,
-    totalValue,
+    totalValue: netAmount,
+    netAmount,
     unitPrice: transaction.unitPrice != null ? parseFloat(String(transaction.unitPrice)) : null,
     realizedInterest: transaction.realizedInterest != null ? parseFloat(String(transaction.realizedInterest)) : null,
+    realizedPnl: transaction.realizedInterest != null ? parseFloat(String(transaction.realizedInterest)) : null,
     note: transaction.note,
     status: transaction.status,
     executedAt: transaction.executedAt,
@@ -65,6 +70,10 @@ function normalizeTradeQuantity(input: { assetType: string; quantity?: number })
     return 1;
   }
   return input.quantity ?? 0;
+}
+
+function resolveNetAmount(input: { totalValue?: number; netAmount?: number }): number {
+  return input.netAmount ?? input.totalValue ?? 0;
 }
 
 async function getHoldingBySymbol(tx: any, symbol: string) {
@@ -295,13 +304,14 @@ router.post("/transactions", async (req, res): Promise<void> => {
       if (!usesManualPortfolioValue(assetType) && quantity <= 0) {
         throw new Error("Quantity is required for online-priced assets.");
       }
-      const unitPrice = usesManualPortfolioValue(assetType) ? parsed.data.totalValue : parsed.data.totalValue / quantity;
+      const netAmount = resolveNetAmount(parsed.data);
+      const unitPrice = usesManualPortfolioValue(assetType) ? netAmount : netAmount / quantity;
       const realizedInterest = await applyTransactionEffect(tx, {
         side: parsed.data.side,
         assetType,
         symbol,
         quantity,
-        totalValue: parsed.data.totalValue,
+        totalValue: netAmount,
       });
 
       const [created] = await tx
@@ -313,7 +323,7 @@ router.post("/transactions", async (req, res): Promise<void> => {
           assetType,
           symbol,
           quantity: String(quantity),
-          totalValue: String(parsed.data.totalValue),
+          totalValue: String(netAmount),
           unitPrice: String(unitPrice),
           realizedInterest: String(realizedInterest),
           note: parsed.data.note || null,
@@ -365,13 +375,14 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
       if (!usesManualPortfolioValue(assetType) && quantity <= 0) {
         throw new Error("Quantity is required for online-priced assets.");
       }
-      const unitPrice = usesManualPortfolioValue(assetType) ? parsed.data.totalValue : parsed.data.totalValue / quantity;
+      const netAmount = resolveNetAmount(parsed.data);
+      const unitPrice = usesManualPortfolioValue(assetType) ? netAmount : netAmount / quantity;
       const realizedInterest = await applyTransactionEffect(tx, {
         side: parsed.data.side,
         assetType,
         symbol,
         quantity,
-        totalValue: parsed.data.totalValue,
+        totalValue: netAmount,
       });
 
       const [updated] = await tx
@@ -382,7 +393,7 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
           assetType,
           symbol,
           quantity: String(quantity),
-          totalValue: String(parsed.data.totalValue),
+          totalValue: String(netAmount),
           unitPrice: String(unitPrice),
           realizedInterest: String(realizedInterest),
           note: parsed.data.note || null,

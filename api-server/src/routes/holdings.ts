@@ -30,6 +30,36 @@ function resolveHoldingCurrentValue(input: { type: string; quantity: number; cur
   return usesManualPortfolioValue(input.type) ? input.currentPrice : input.quantity * input.currentPrice;
 }
 
+function buildHoldingPnLFields(input: {
+  type: string;
+  quantity: number;
+  costOfCapital: number | null;
+  interest: number | null;
+  currentValue: number | null;
+}) {
+  const quantityRemaining = input.quantity;
+  const costBasisRemaining = input.costOfCapital;
+  const realizedPnl = input.interest ?? 0;
+  const avgCost =
+    costBasisRemaining != null && quantityRemaining > 0 && !usesManualPortfolioValue(input.type)
+      ? costBasisRemaining / quantityRemaining
+      : costBasisRemaining;
+  const unrealizedPnl =
+    input.currentValue != null && costBasisRemaining != null
+      ? input.currentValue - costBasisRemaining
+      : null;
+  const totalPnl = unrealizedPnl != null ? unrealizedPnl + realizedPnl : null;
+
+  return {
+    quantityRemaining,
+    avgCost,
+    costBasisRemaining,
+    realizedPnl,
+    unrealizedPnl,
+    totalPnl,
+  };
+}
+
 function rejectManualPortfolioWrite(res: { status: (code: number) => { json: (body: unknown) => void } }): void {
   res.status(403).json({
     error: "Danh muc Tai san dang dong bo tu Investment sheet. Hay cap nhat Excel roi bam Sync.",
@@ -187,6 +217,9 @@ async function getPortfolioCurrentValueSnapshot() {
       else otherValue += currentValue;
     }
 
+    const costOfCapital = h.costOfCapital != null ? parseFloat(String(h.costOfCapital)) : null;
+    const interest = h.interest != null ? parseFloat(String(h.interest)) : null;
+
     return {
       id: h.id,
       type: h.type,
@@ -197,8 +230,15 @@ async function getPortfolioCurrentValueSnapshot() {
       change: priceData?.change ?? null,
       changePercent: priceData?.changePercent ?? null,
       manualPrice: manualUnitPrice,
-      costOfCapital: h.costOfCapital != null ? parseFloat(String(h.costOfCapital)) : null,
-      interest: h.interest != null ? parseFloat(String(h.interest)) : null,
+      costOfCapital,
+      interest,
+      ...buildHoldingPnLFields({
+        type: h.type,
+        quantity: qty,
+        costOfCapital,
+        interest,
+        currentValue,
+      }),
     };
   });
 

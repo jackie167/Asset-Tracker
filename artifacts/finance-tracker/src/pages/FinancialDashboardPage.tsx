@@ -40,7 +40,9 @@ type DashboardTransaction = {
   fundingSource: string;
   symbol: string;
   totalValue: number;
+  netAmount?: number | null;
   realizedInterest?: number | null;
+  realizedPnl?: number | null;
 };
 
 type CashFlow = {
@@ -53,7 +55,7 @@ function buildRealizedPnLBySymbol(transactions: DashboardTransaction[] | undefin
   const realized = new Map<string, number>();
   for (const transaction of transactions ?? []) {
     if (transaction.side !== "sell" || transaction.status !== "applied") continue;
-    const value = transaction.realizedInterest ?? 0;
+    const value = transaction.realizedPnl ?? transaction.realizedInterest ?? 0;
     if (!Number.isFinite(value)) continue;
     const symbol = normalizeSymbol(transaction.symbol);
     realized.set(symbol, (realized.get(symbol) ?? 0) + value);
@@ -86,7 +88,7 @@ function calculateCashCostBasis(transactions: DashboardTransaction[] | undefined
     if (transaction.side !== "buy") return sum;
     if (transaction.status !== "applied") return sum;
     if (transaction.fundingSource.trim().toUpperCase() !== "CASH") return sum;
-    return sum + transaction.totalValue;
+    return sum + (transaction.netAmount ?? transaction.totalValue);
   }, 0);
 
   return cashHolding.costOfCapital - totalBuyFromCash + calculateNetExternalCashFlow(cashFlows);
@@ -94,7 +96,7 @@ function calculateCashCostBasis(transactions: DashboardTransaction[] | undefined
 
 function resolveRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
   const symbol = normalizeSymbol(holding.symbol);
-  return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.interest ?? 0;
+  return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.realizedPnl ?? holding.interest ?? 0;
 }
 
 function calculateHoldingPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>, cashCostBasis: number | null) {
@@ -102,7 +104,7 @@ function calculateHoldingPnL(holding: HoldingItem, realizedPnLBySymbol: Map<stri
     const costBasis = cashCostBasis ?? holding.costOfCapital ?? 0;
     return (holding.currentValue ?? 0) - costBasis;
   }
-  const costBasis = holding.costOfCapital ?? 0;
+  const costBasis = holding.costBasisRemaining ?? holding.costOfCapital ?? 0;
   const currentValue = holding.currentValue ?? 0;
   return currentValue - costBasis + resolveRealizedPnL(holding, realizedPnLBySymbol);
 }
@@ -269,7 +271,9 @@ export default function FinancialDashboardPage() {
 
   const costTotal = useMemo(
     () => investmentHoldings.reduce((sum, h) => {
-      return sum + (isCashHolding(h) ? cashCostBasis ?? h.costOfCapital ?? 0 : h.costOfCapital ?? 0);
+      return sum + (isCashHolding(h)
+        ? cashCostBasis ?? h.costOfCapital ?? 0
+        : h.costBasisRemaining ?? h.costOfCapital ?? 0);
     }, 0),
     [cashCostBasis, investmentHoldings]
   );

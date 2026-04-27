@@ -12,14 +12,20 @@ export type TradeOrder = {
   symbol: string;
   quantity: number;
   totalValue: number;
+  netAmount?: number | null;
   unitPrice: number | null;
   realizedInterest?: number | null;
+  realizedPnl?: number | null;
   note?: string | null;
   status: string;
   executedAt: string;
   createdAt?: string;
   updatedAt?: string;
 };
+
+export function getTradeNetAmount(order: Pick<TradeOrder, "netAmount" | "totalValue">) {
+  return order.netAmount ?? order.totalValue;
+}
 
 type TradeOrdersTableProps = {
   orders: TradeOrder[];
@@ -91,7 +97,7 @@ export default function TradeOrdersTable({
                 <th className="py-1.5 pr-3 text-left font-normal">Side</th>
                 <th className="py-1.5 px-3 text-left font-normal">Asset</th>
                 <th className="py-1.5 px-3 text-right font-normal">Qty</th>
-                <th className="py-1.5 px-3 text-right font-normal">Total</th>
+                <th className="py-1.5 px-3 text-right font-normal">Net</th>
                 <th className="py-1.5 px-3 text-left font-normal">Source</th>
                 <th className="py-1.5 pl-3 text-right font-normal">Date</th>
                 {hasActions && <th className="py-1.5 pl-3 text-right font-normal">Actions</th>}
@@ -114,7 +120,7 @@ export default function TradeOrdersTable({
                     {order.quantity.toLocaleString("vi-VN")}
                   </td>
                   <td className="py-2 px-3 text-right tabular-nums font-medium">
-                    {formatVNDFull(order.totalValue)}
+                    {formatVNDFull(getTradeNetAmount(order))}
                   </td>
                   <td className="py-2 px-3 text-muted-foreground">{order.fundingSource}</td>
                   <td className="py-2 pl-3 text-right tabular-nums text-muted-foreground">

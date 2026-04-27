@@ -17,6 +17,12 @@ export type HoldingItem = {
   manualPrice?: number | null;
   costOfCapital?: number | null;
   interest?: number | null;
+  quantityRemaining?: number;
+  avgCost?: number | null;
+  costBasisRemaining?: number | null;
+  realizedPnl?: number;
+  unrealizedPnl?: number | null;
+  totalPnl?: number | null;
 };
 
 export type SortOrder = "none" | "asc" | "desc";

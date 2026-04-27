@@ -14,7 +14,7 @@ import {
   getListHoldingsQueryKey,
   getListSnapshotsQueryKey,
 } from "@workspace/api-client-react";
-import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTable";
+import TradeOrdersTable, { getTradeNetAmount, type TradeOrder } from "@/pages/assets/TradeOrdersTable";
 import TradeDialog from "@/pages/assets/TradeDialog";
 import type { HoldingItem } from "@/pages/assets/types";
 import PageHeader from "@/pages/PageHeader";
@@ -38,6 +38,9 @@ type CashFlow = {
   createdAt: string;
   updatedAt: string;
 };
+
+const EMPTY_TRADE_ORDERS: TradeOrder[] = [];
+const EMPTY_CASH_FLOWS: CashFlow[] = [];
 
 async function fetchCashFlows(): Promise<CashFlow[]> {
   const res = await fetch("/api/portfolio/cash-flows");
@@ -84,10 +87,10 @@ function downloadCSV(csv: string, filename: string) {
 }
 
 function exportTradeOrdersCSV(orders: TradeOrder[], symbol?: string) {
-  const headers = ["id","side","origin","asset","asset_type","quantity","total_value","unit_price","realized_interest","funding_source","status","executed_at","note"];
+  const headers = ["id","side","origin","asset","asset_type","quantity","net_amount","unit_price","realized_pnl","funding_source","status","executed_at","note"];
   const rows = orders.map((o) => [
     o.id, o.side, o.origin ?? "", o.symbol, o.assetType,
-    o.quantity, o.totalValue, o.unitPrice ?? "", o.realizedInterest ?? "",
+    o.quantity, getTradeNetAmount(o), o.unitPrice ?? "", o.realizedPnl ?? o.realizedInterest ?? "",
     o.fundingSource, o.status, o.executedAt, o.note ?? "",
   ]);
   const csv = [headers, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
@@ -104,17 +107,18 @@ function exportAssetDetailCSV(symbol: string, orders: TradeOrder[]) {
   let totalInvested = 0;
   let cumulativePnL = 0;
 
-  const headers = ["date","side","qty","unit_price","total_value","running_qty","avg_cost","realized_pnl","cumulative_pnl","note"];
+  const headers = ["date","side","qty","unit_price","net_amount","running_qty","avg_cost","realized_pnl","cumulative_pnl","note"];
   const rows = sorted.map((o) => {
+    const netAmount = getTradeNetAmount(o);
     let realizedPnL = 0;
     const avgCostBefore = runningQty > 0 ? totalInvested / runningQty : 0;
 
     if (o.side === "buy") {
       runningQty += o.quantity;
-      totalInvested += o.totalValue;
+      totalInvested += netAmount;
     } else {
       const costBasis = o.quantity * avgCostBefore;
-      realizedPnL = o.totalValue - costBasis;
+      realizedPnL = netAmount - costBasis;
       cumulativePnL += realizedPnL;
       runningQty = Math.max(0, runningQty - o.quantity);
       totalInvested = Math.max(0, totalInvested - costBasis);
@@ -126,8 +130,8 @@ function exportAssetDetailCSV(symbol: string, orders: TradeOrder[]) {
       new Date(o.executedAt).toISOString().slice(0, 10),
       o.side,
       o.quantity,
-      o.unitPrice ?? (o.quantity > 0 ? Math.round(o.totalValue / o.quantity) : ""),
-      o.totalValue,
+      o.unitPrice ?? (o.quantity > 0 ? Math.round(netAmount / o.quantity) : ""),
+      netAmount,
       runningQty,
       Math.round(avgCostAfter),
       o.side === "sell" ? Math.round(realizedPnL) : "",
@@ -166,7 +170,7 @@ export default function TransactionsPage() {
     queryClient.invalidateQueries({ queryKey: ["portfolio-xirr"] });
   };
 
-  const tradeBody = (body: { side: "buy"|"sell"; fundingSource: string; assetType: string; symbol: string; quantity: number; totalValue: number; note?: string; executedAt?: string }) =>
+  const tradeBody = (body: { side: "buy"|"sell"; fundingSource: string; assetType: string; symbol: string; quantity: number; totalValue: number; netAmount?: number; note?: string; executedAt?: string }) =>
     ({ ...body, fundingSource: "CASH" });
 
   const createTrade = useMutation({
@@ -207,8 +211,8 @@ export default function TransactionsPage() {
   const [cashFlowNote, setCashFlowNote] = useState("");
   const [editingCashFlow, setEditingCashFlow] = useState<CashFlow | null>(null);
 
-  const orders = tradeOrdersQuery.data ?? [];
-  const cashFlows = cashFlowsQuery.data ?? [];
+  const orders = tradeOrdersQuery.data ?? EMPTY_TRADE_ORDERS;
+  const cashFlows = cashFlowsQuery.data ?? EMPTY_CASH_FLOWS;
 
   const assetOptions = useMemo(() => {
     const symbols = [...new Set(orders.map((o) => o.symbol))].sort();

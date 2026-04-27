@@ -15,7 +15,7 @@ import HoldingsTable from "@/pages/assets/HoldingsTable";
 import PerformanceChart from "@/pages/assets/PerformanceChart";
 import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
 import TradeDialog from "@/pages/assets/TradeDialog";
-import TradeOrdersTable, { type TradeOrder } from "@/pages/assets/TradeOrdersTable";
+import TradeOrdersTable, { getTradeNetAmount, type TradeOrder } from "@/pages/assets/TradeOrdersTable";
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 
@@ -42,7 +42,7 @@ function buildRealizedPnLBySymbol(orders: TradeOrder[] | undefined) {
   const realized = new Map<string, number>();
   for (const order of orders ?? []) {
     if (order.side !== "sell" || order.status !== "applied") continue;
-    const value = order.realizedInterest ?? 0;
+    const value = order.realizedPnl ?? order.realizedInterest ?? 0;
     if (!Number.isFinite(value)) continue;
     const symbol = normalizeSymbol(order.symbol);
     realized.set(symbol, (realized.get(symbol) ?? 0) + value);
@@ -81,7 +81,7 @@ function calculateCashCostBasis(orders: TradeOrder[] | undefined, cashHolding: H
     if (order.side !== "buy") return sum;
     if (order.status !== "applied") return sum;
     if (order.fundingSource.trim().toUpperCase() !== "CASH") return sum;
-    return sum + order.totalValue;
+    return sum + getTradeNetAmount(order);
   }, 0);
 
   return cashHolding.costOfCapital - totalBuyFromCash + calculateNetExternalCashFlow(cashFlows);
@@ -89,7 +89,7 @@ function calculateCashCostBasis(orders: TradeOrder[] | undefined, cashHolding: H
 
 function resolveRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
   const symbol = normalizeSymbol(holding.symbol);
-  return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.interest ?? 0;
+  return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.realizedPnl ?? holding.interest ?? 0;
 }
 
 function calculateHoldingPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>, cashCostBasis: number | null) {
@@ -106,7 +106,7 @@ function calculateHoldingPnL(holding: HoldingItem, realizedPnLBySymbol: Map<stri
     };
   }
 
-  const costBasis = holding.costOfCapital ?? 0;
+  const costBasis = holding.costBasisRemaining ?? holding.costOfCapital ?? 0;
   const currentValue = holding.currentValue ?? 0;
   const unrealizedPnL = currentValue - costBasis;
   const realizedPnL = resolveRealizedPnL(holding, realizedPnLBySymbol);
@@ -199,11 +199,13 @@ export default function AssetsPage() {
     symbol: string;
     quantity: number;
     totalValue: number;
+    netAmount?: number;
     note?: string;
     executedAt?: string;
   }) => ({
     ...body,
     fundingSource: "CASH",
+    netAmount: body.netAmount ?? body.totalValue,
   });
 
   const createTradeMutation = useMutation({
@@ -214,6 +216,7 @@ export default function AssetsPage() {
       symbol: string;
       quantity: number;
       totalValue: number;
+      netAmount?: number;
       note?: string;
       executedAt?: string;
     }) => {
@@ -248,6 +251,7 @@ export default function AssetsPage() {
       symbol: string;
       quantity: number;
       totalValue: number;
+      netAmount?: number;
       note?: string;
       executedAt?: string;
     }) => {
@@ -384,7 +388,9 @@ export default function AssetsPage() {
       return holdingSymbols.has(symbol) ? sum : sum + value;
     }, 0);
     const totalCapital = holdings.reduce((sum, holding) => {
-      return sum + (isCashHolding(holding) ? cashCostBasis ?? holding.costOfCapital ?? 0 : holding.costOfCapital ?? 0);
+      return sum + (isCashHolding(holding)
+        ? cashCostBasis ?? holding.costOfCapital ?? 0
+        : holding.costBasisRemaining ?? holding.costOfCapital ?? 0);
     }, 0);
     const totalPnL = openHoldingPnL + closedPositionRealizedPnL;
     const totalPnLPercent = totalCapital > 0 ? totalPnL / totalCapital : null;
@@ -424,7 +430,9 @@ export default function AssetsPage() {
       holding.quantity != null ? formatNumber(holding.quantity) : "",
       holding.currentPrice != null ? formatNumber(holding.currentPrice) : "",
       holding.currentValue != null ? formatNumber(Math.round(holding.currentValue)) : "",
-      holding.costOfCapital != null ? formatNumber(Math.round(holding.costOfCapital)) : "",
+      holding.costBasisRemaining != null || holding.costOfCapital != null
+        ? formatNumber(Math.round(holding.costBasisRemaining ?? holding.costOfCapital ?? 0))
+        : "",
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))

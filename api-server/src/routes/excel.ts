@@ -550,7 +550,9 @@ function parseTransactionRowsFromRaw(rows: unknown[][]): TransactionImportRow[] 
   const assetIndex = header.findIndex((value) => value === "asset" || value === "symbol" || value === "tai_san");
   const typeIndex = header.findIndex((value) => value === "asset_type" || value === "type" || value === "loai");
   const quantityIndex = header.findIndex((value) => value === "quantity" || value === "qty" || value === "ql" || value === "sl");
-  const totalValueIndex = header.findIndex((value) => value === "total_value" || value === "total" || value === "tong_gia_tri");
+  const totalValueIndex = header.findIndex((value) =>
+    value === "net_amount" || value === "total_value" || value === "total" || value === "tong_gia_tri"
+  );
   const unitPriceIndex = header.findIndex((value) => value === "unit_price" || value === "price" || value === "gia");
   const realizedInterestIndex = header.findIndex((value) => value === "realized_interest" || value === "interest");
   const fundingSourceIndex = header.findIndex((value) => value === "funding_source" || value === "source" || value === "nguon_tien");
@@ -564,7 +566,7 @@ function parseTransactionRowsFromRaw(rows: unknown[][]): TransactionImportRow[] 
   if (assetIndex === -1) missing.push("asset");
   if (typeIndex === -1) missing.push("asset_type");
   if (quantityIndex === -1) missing.push("quantity");
-  if (totalValueIndex === -1) missing.push("total_value");
+  if (totalValueIndex === -1) missing.push("net_amount/total_value");
   if (executedAtIndex === -1) missing.push("executed_at");
   if (missing.length) {
     throw new Error(`Transactions sheet is missing required columns: ${missing.join(", ")}`);
@@ -599,7 +601,7 @@ function parseTransactionRowsFromRaw(rows: unknown[][]): TransactionImportRow[] 
       throw new Error(`Transactions row ${rowNumber}: quantity must be greater than 0`);
     }
     if (totalValue == null || totalValue <= 0) {
-      throw new Error(`Transactions row ${rowNumber}: total_value must be greater than 0`);
+      throw new Error(`Transactions row ${rowNumber}: net_amount/total_value must be greater than 0`);
     }
 
     const executedAt = parseDateCell(cell(executedAtIndex));

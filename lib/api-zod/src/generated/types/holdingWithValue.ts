@@ -25,4 +25,14 @@ export interface HoldingWithValue {
   costOfCapital: number | null;
   /** @nullable */
   interest: number | null;
+  quantityRemaining: number;
+  /** @nullable */
+  avgCost: number | null;
+  /** @nullable */
+  costBasisRemaining: number | null;
+  realizedPnl: number;
+  /** @nullable */
+  unrealizedPnl: number | null;
+  /** @nullable */
+  totalPnl: number | null;
 }

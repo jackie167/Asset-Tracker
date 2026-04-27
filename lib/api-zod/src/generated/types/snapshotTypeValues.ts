@@ -6,8 +6,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface UpdateHoldingBody {
-  type: string;
-  quantity: number;
-  manualPrice?: number | null;
-}
+export type SnapshotTypeValues = { [key: string]: number };

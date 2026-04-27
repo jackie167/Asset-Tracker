@@ -123,7 +123,7 @@ export const RefreshPricesResponse = zod.object({
 });
 
 /**
- * @summary Get portfolio value snapshots for the selected range
+ * @summary Get portfolio value snapshots for the last 7 days
  */
 export const ListSnapshotsResponseItem = zod.object({
   id: zod.number(),
@@ -156,6 +156,12 @@ export const GetPortfolioSummaryResponse = zod.object({
       manualPrice: zod.number().nullable(),
       costOfCapital: zod.number().nullable(),
       interest: zod.number().nullable(),
+      quantityRemaining: zod.number(),
+      avgCost: zod.number().nullable(),
+      costBasisRemaining: zod.number().nullable(),
+      realizedPnl: zod.number(),
+      unrealizedPnl: zod.number().nullable(),
+      totalPnl: zod.number().nullable(),
     }),
   ),
 });

@@ -26,6 +26,7 @@ type TradeDialogProps = {
     symbol: string;
     quantity: number;
     totalValue: number;
+    netAmount: number;
     note?: string;
     executedAt?: string;
   }) => void;
@@ -78,7 +79,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
       setAssetType(existingHolding?.type.toLowerCase() ?? editingOrder.assetType);
       setSymbol(editingOrder.symbol);
       setQuantity(usesManualPortfolioValue(existingHolding?.type.toLowerCase() ?? editingOrder.assetType) ? "" : String(editingOrder.quantity));
-      setTotalValue(String(editingOrder.totalValue));
+      setTotalValue(String(editingOrder.netAmount ?? editingOrder.totalValue));
       setExecutedAt(formatDateInputValue(editingOrder.executedAt));
       setNote(editingOrder.note ?? "");
       return;
@@ -107,6 +108,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
       symbol: symbol.trim(),
       quantity: isManualAssetType ? 1 : parsedQuantity,
       totalValue: parsedTotalValue,
+      netAmount: parsedTotalValue,
       note: note.trim() || undefined,
       executedAt,
     });
@@ -196,7 +198,7 @@ export default function TradeDialog({ open, holdings, editingOrder, isSaving, on
               )}
             </div>
             <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Total Value</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Net Amount</label>
               <Input
                 value={totalValue}
                 onChange={(event) => setTotalValue(event.target.value)}

@@ -63,7 +63,7 @@ function isCashHolding(holding: HoldingItem) {
 
 function getRealizedPnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>) {
   const symbol = holding.symbol.trim().toUpperCase();
-  return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.interest ?? 0;
+  return realizedPnLBySymbol.has(symbol) ? realizedPnLBySymbol.get(symbol)! : holding.realizedPnl ?? holding.interest ?? 0;
 }
 
 function calculatePnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, number>, cashAdjustedCost: number | null) {
@@ -77,7 +77,7 @@ function calculatePnL(holding: HoldingItem, realizedPnLBySymbol: Map<string, num
     };
   }
 
-  const effectiveCostOfCapital = holding.costOfCapital ?? 0;
+  const effectiveCostOfCapital = holding.costBasisRemaining ?? holding.costOfCapital ?? 0;
   const unrealizedPnL = (holding.currentValue ?? 0) - effectiveCostOfCapital;
   const totalPnL = unrealizedPnL + getRealizedPnL(holding, realizedPnLBySymbol);
   return {
@@ -214,7 +214,7 @@ export default function HoldingsTable({
           case "currentPrice":
             return row.holding.currentPrice;
           case "costOfCapital":
-            return row.holding.costOfCapital;
+            return row.holding.costBasisRemaining ?? row.holding.costOfCapital;
           case "unrealizedPnL":
             return row.unrealizedPnL;
           case "unrealizedPnLPercent":
@@ -467,7 +467,7 @@ export default function HoldingsTable({
 
                     {showCostOfCapitalCol && (
                       <span className="text-[11px] text-right tabular-nums text-muted-foreground">
-                        {formatMoney(holding.costOfCapital, true)}
+                        {formatMoney(holding.costBasisRemaining ?? holding.costOfCapital, true)}
                       </span>
                     )}
 
