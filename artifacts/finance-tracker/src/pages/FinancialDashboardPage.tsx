@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useGetPortfolioSummary } from "@workspace/api-client-react";
@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import type { HoldingItem } from "@/pages/assets/types";
 import { formatVND, formatVNDFull } from "@/pages/assets/utils";
 import { CASHFLOW_SOURCE_SHEET, fetchCashflowData, fetchTotalAssetData } from "@/lib/excel-sheets";
+import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -217,14 +218,17 @@ function HealthRow({ label, value, pct, low, high, hint }: HealthRowProps) {
 export default function FinancialDashboardPage() {
   const [hideValues, setHideValues] = useState(() => localStorage.getItem("hide_values") === "1");
 
-  const wealthSnapshotQuery = useQuery({
-    queryKey: ["wealth-snapshots-latest"],
-    queryFn: async () => {
-      const res = await fetch("/api/wealth/snapshots/latest");
-      if (!res.ok) return null;
-      return res.json() as Promise<{ totalAsset: number; debt: number; netAsset: number; snapshotAt: string } | null>;
-    },
-  });
+  const [wealthHoldings, setWealthHoldings] = useState<HoldingItem[]>([]);
+  const [wealthLoading, setWealthLoading] = useState(false);
+
+  const loadWealth = useCallback(async () => {
+    setWealthLoading(true);
+    try { setWealthHoldings(await fetchWealthAllocationHoldings()); }
+    catch { /* silently ignore */ }
+    finally { setWealthLoading(false); }
+  }, []);
+
+  useEffect(() => { loadWealth(); }, [loadWealth]);
 
   const investmentQuery = useGetPortfolioSummary();
   const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
@@ -235,8 +239,10 @@ export default function FinancialDashboardPage() {
 
   // ── derived values ─────────────────────────────────────────────────────────
 
-  const snapshot = wealthSnapshotQuery.data ?? null;
-  const netWorth = snapshot?.totalAsset ?? 0;
+  const netWorth = useMemo(
+    () => wealthHoldings.reduce((s, h) => s + (h.currentValue ?? 0), 0),
+    [wealthHoldings]
+  );
 
   const investmentHoldings: HoldingItem[] = useMemo(
     () => investmentQuery.data?.holdings ?? [],
@@ -333,26 +339,26 @@ export default function FinancialDashboardPage() {
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Tài sản</p>
               <StatCard
                 label="Tổng tài sản"
-                value={fmt(snapshot?.totalAsset ?? null, true)}
+                value={fmt(netWorth, true)}
                 sub="Tất cả danh mục"
-                loading={wealthSnapshotQuery.isLoading}
+                loading={wealthLoading}
                 href="/wealth-allocation"
               />
               <StatCard
                 label="Nợ"
-                value={fmt(snapshot?.debt ?? null, true)}
-                sub={snapshot && snapshot.totalAsset > 0 && snapshot.debt > 0
-                  ? `${formatPercent(snapshot.debt / snapshot.totalAsset)} tổng tài sản`
+                value={fmt(totalAssetQuery.data?.debt ?? null, true)}
+                sub={netWorth > 0 && totalAssetQuery.data?.debt
+                  ? `${formatPercent(totalAssetQuery.data.debt / netWorth)} tổng tài sản`
                   : undefined}
                 tone="negative"
-                loading={wealthSnapshotQuery.isLoading}
+                loading={totalAssetQuery.isLoading}
               />
               <StatCard
                 label="Tài sản ròng"
-                value={fmt(snapshot?.netAsset ?? null, true)}
+                value={fmt(netWorth > 0 ? netWorth - (totalAssetQuery.data?.debt ?? 0) : null, true)}
                 sub="Sau khi trừ nợ"
                 tone="positive"
-                loading={wealthSnapshotQuery.isLoading}
+                loading={wealthLoading || totalAssetQuery.isLoading}
               />
             </div>
 
