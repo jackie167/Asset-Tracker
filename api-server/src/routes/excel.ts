@@ -468,8 +468,8 @@ function parseInvestmentRowsFromRaw(rows: unknown[][]): InvestmentRow[] {
   }
 
   const header = rows[headerIndex].map((cell) => normalizeHeaderName(cell as string | number | boolean | null));
-  const assetIndex = header.findIndex((value) => value === "tai_san" || value === "symbol" || value === "asset");
-  const typeIndex = header.findIndex((value) => value === "loai" || value === "type");
+  const assetIndex = header.findIndex((value) => value === "tai_san" || value === "symbol" || value === "asset" || value === "asset_code");
+  const typeIndex = header.findIndex((value) => value === "loai" || value === "type" || value === "asset_type");
   const currentIndex = header.findIndex((value) => value === "current" || value === "current_value");
   const interestIndex = header.findIndex((value) => value === "interest");
   const costOfCapitalIndex = header.findIndex((value) => value === "cost_of_capital");
@@ -577,7 +577,7 @@ function parseTransactionRowsFromRaw(rows: unknown[][]): TransactionImportRow[] 
 
   const header = rows[headerIndex].map((cell) => normalizeHeaderName(cell as string | number | boolean | null));
   const sideIndex = header.findIndex((value) => value === "side");
-  const assetIndex = header.findIndex((value) => value === "asset" || value === "symbol" || value === "tai_san");
+  const assetIndex = header.findIndex((value) => value === "asset" || value === "symbol" || value === "tai_san" || value === "asset_code");
   const typeIndex = header.findIndex((value) => value === "asset_type" || value === "type" || value === "loai");
   const quantityIndex = header.findIndex((value) => value === "quantity" || value === "qty" || value === "ql" || value === "sl");
   const totalValueIndex = header.findIndex((value) =>
