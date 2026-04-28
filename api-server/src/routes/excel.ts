@@ -4,9 +4,17 @@ import { execFileSync } from "node:child_process";
 import { createSign } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { eq } from "drizzle-orm";
-import { db, holdingsTable, transactionsTable } from "../../../lib/db/src/index.ts";
+import { desc, eq } from "drizzle-orm";
+import {
+  db,
+  holdingsTable,
+  portfolioCashFlowsTable,
+  priceHistoryTable,
+  snapshotsTable,
+  transactionsTable,
+} from "../../../lib/db/src/index.ts";
 import { buildPriceHistoryRow, buildPriceHistoryRowFromHolding, insertPriceHistoryRows } from "../lib/priceHistory.js";
+import { getLatestPrices } from "../lib/priceFetcher.js";
 
 const router: IRouter = Router();
 
@@ -16,6 +24,7 @@ const DEFAULT_SOURCE = path.join(STORAGE_DIR, "excel-source.xlsx");
 const CALCULATED_FILE = path.join(STORAGE_DIR, "excel-source-calculated.xlsx");
 const TMP_INPUT = path.join(STORAGE_DIR, "excel-source-input.xlsx");
 const EXCEL_EXPORT_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const XLSX_EXPORT_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 type ExcelSourceInfo = {
   mode: "local" | "google_drive";
@@ -315,6 +324,22 @@ function parseVNNumber(value: string | number | boolean | null | undefined): num
 
   const parsed = parseFloat(s);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function num(value: unknown): number | null {
+  if (value == null) return null;
+  const parsed = parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function usesManualPortfolioValue(type: string): boolean {
+  const normalized = type.trim().toLowerCase();
+  return normalized !== "stock" && normalized !== "gold" && normalized !== "crypto";
+}
+
+function appendJsonSheet(workbook: XLSX.WorkBook, name: string, rows: Array<Record<string, unknown>>): void {
+  const sheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{}]);
+  XLSX.utils.book_append_sheet(workbook, sheet, name.slice(0, 31));
 }
 
 type InvestmentRow = {
@@ -979,6 +1004,216 @@ router.post("/excel/investment/sync", async (req, res): Promise<void> => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Không thể sync sheet Investment.";
     res.status(500).json({ error: message });
+  }
+});
+
+router.get("/investment/debug-export", async (_req, res): Promise<void> => {
+  try {
+    const [
+      holdings,
+      latestPrices,
+      transactions,
+      cashFlows,
+      priceHistory,
+      snapshots,
+    ] = await Promise.all([
+      db.select().from(holdingsTable).orderBy(holdingsTable.type, holdingsTable.symbol),
+      getLatestPrices(),
+      db.select().from(transactionsTable).orderBy(desc(transactionsTable.executedAt)),
+      db.select().from(portfolioCashFlowsTable).orderBy(desc(portfolioCashFlowsTable.occurredAt)),
+      db.select().from(priceHistoryTable).orderBy(desc(priceHistoryTable.priceAt)).limit(10000),
+      db.select().from(snapshotsTable).orderBy(desc(snapshotsTable.snapshotAt)).limit(1000),
+    ]);
+
+    const priceBySymbol = new Map(latestPrices.map((price) => [price.symbol.toUpperCase(), num(price.price)]));
+    const goldBenchmark = latestPrices.find((price) => price.type.trim().toLowerCase() === "gold");
+    const goldPrice = goldBenchmark ? num(goldBenchmark.price) : null;
+    const transactionsBySymbol = new Map<string, number>();
+    for (const transaction of transactions) {
+      if (transaction.side !== "sell" || transaction.status !== "applied") continue;
+      const symbol = transaction.symbol.toUpperCase();
+      const realized = num(transaction.realizedInterest) ?? 0;
+      transactionsBySymbol.set(symbol, (transactionsBySymbol.get(symbol) ?? 0) + realized);
+    }
+
+    const holdingRows = holdings.map((holding) => {
+      const type = holding.type.trim().toLowerCase();
+      const quantity = num(holding.quantity) ?? 0;
+      const manualPrice = num(holding.manualPrice);
+      const price = priceBySymbol.get(holding.symbol.toUpperCase()) ?? (type === "gold" ? goldPrice : null) ?? manualPrice;
+      const currentValue = price == null ? null : usesManualPortfolioValue(type) ? price : quantity * price;
+      const costBasis = num(holding.costOfCapital);
+      const realizedPnl = transactionsBySymbol.get(holding.symbol.toUpperCase()) ?? num(holding.interest) ?? 0;
+      const unrealizedPnl = currentValue != null && costBasis != null ? currentValue - costBasis : null;
+      const totalPnl = unrealizedPnl != null ? unrealizedPnl + realizedPnl : null;
+
+      return {
+        asset_code: holding.symbol,
+        asset_type: holding.type,
+        quantity_remaining: quantity,
+        current_price_or_value: price,
+        current_value: currentValue,
+        cost_basis_remaining: costBasis,
+        avg_cost: costBasis != null && quantity > 0 && !usesManualPortfolioValue(type) ? costBasis / quantity : costBasis,
+        realized_pnl: realizedPnl,
+        unrealized_pnl: unrealizedPnl,
+        total_pnl: totalPnl,
+        manual_price: manualPrice,
+        updated_at: holding.updatedAt,
+      };
+    });
+
+    const totalNav = holdingRows.reduce((sum, row) => sum + (typeof row.current_value === "number" ? row.current_value : 0), 0);
+    const totalCostBasis = holdingRows.reduce((sum, row) => sum + (typeof row.cost_basis_remaining === "number" ? row.cost_basis_remaining : 0), 0);
+    const totalRealizedPnl = holdingRows.reduce((sum, row) => sum + (typeof row.realized_pnl === "number" ? row.realized_pnl : 0), 0);
+    const totalUnrealizedPnl = holdingRows.reduce((sum, row) => sum + (typeof row.unrealized_pnl === "number" ? row.unrealized_pnl : 0), 0);
+    const totalPnl = totalRealizedPnl + totalUnrealizedPnl;
+
+    const transactionRows = transactions.map((transaction) => {
+      const netAmount = num(transaction.netAmount) ?? num(transaction.totalValue) ?? 0;
+      const realizedPnl = num(transaction.realizedInterest);
+      return {
+        date: transaction.executedAt,
+        side: transaction.side,
+        asset_code: transaction.symbol,
+        asset_type: transaction.assetType,
+        quantity: num(transaction.quantity),
+        unit_price: num(transaction.unitPrice),
+        gross_amount: num(transaction.grossAmount),
+        fee: num(transaction.fee) ?? 0,
+        tax: num(transaction.tax) ?? 0,
+        net_amount: netAmount,
+        realized_pnl: realizedPnl,
+        cost_basis_removed: transaction.side === "sell" && realizedPnl != null ? netAmount - realizedPnl : null,
+        funding_source: transaction.fundingSource,
+        origin: transaction.origin,
+        status: transaction.status,
+        note: transaction.note,
+        created_at: transaction.createdAt,
+        updated_at: transaction.updatedAt,
+      };
+    });
+
+    const cashFlowRows = cashFlows.map((flow) => {
+      const amount = num(flow.amount) ?? 0;
+      const kind = flow.kind.trim().toLowerCase();
+      const signedAmount = kind === "deposit" || kind === "contribution" ? -amount : kind === "withdrawal" ? amount : null;
+      return {
+        date: flow.occurredAt,
+        kind: flow.kind,
+        account: flow.account,
+        amount,
+        signed_amount_for_xirr: signedAmount,
+        origin: flow.origin,
+        source: flow.source,
+        note: flow.note,
+        created_at: flow.createdAt,
+        updated_at: flow.updatedAt,
+      };
+    });
+
+    const priceHistoryRows = priceHistory.map((row) => ({
+      date: row.priceAt,
+      asset_code: row.assetCode,
+      asset_type: row.assetType,
+      price_or_value: num(row.priceOrValue),
+      quantity: num(row.quantity),
+      current_value: num(row.currentValue),
+      source: row.source,
+      note: row.note,
+      updated_at: row.updatedAt,
+    }));
+
+    const timelineRows = [
+      ...priceHistoryRows.map((row) => ({
+        date: row.date,
+        event_type: "price",
+        asset_code: row.asset_code,
+        asset_type: row.asset_type,
+        side: "",
+        quantity: row.quantity,
+        price_or_value: row.price_or_value,
+        current_value: row.current_value,
+        net_amount: "",
+        realized_pnl: "",
+        source: row.source,
+        note: row.note,
+      })),
+      ...transactionRows.map((row) => ({
+        date: row.date,
+        event_type: "transaction",
+        asset_code: row.asset_code,
+        asset_type: row.asset_type,
+        side: row.side,
+        quantity: row.quantity,
+        price_or_value: row.unit_price,
+        current_value: "",
+        net_amount: row.net_amount,
+        realized_pnl: row.realized_pnl,
+        source: row.origin,
+        note: row.note,
+      })),
+    ].sort((left, right) => new Date(String(right.date)).getTime() - new Date(String(left.date)).getTime());
+
+    const closedPositionRows = transactionRows
+      .filter((row) => row.side === "sell")
+      .reduce((map, row) => {
+        const existing = map.get(row.asset_code) ?? {
+          asset_code: row.asset_code,
+          asset_type: row.asset_type,
+          sell_count: 0,
+          sold_quantity: 0,
+          net_proceeds: 0,
+          cost_basis_removed: 0,
+          realized_pnl: 0,
+          last_sold_at: row.date,
+        };
+        existing.sell_count += 1;
+        existing.sold_quantity += Number(row.quantity ?? 0);
+        existing.net_proceeds += Number(row.net_amount ?? 0);
+        existing.cost_basis_removed += Number(row.cost_basis_removed ?? 0);
+        existing.realized_pnl += Number(row.realized_pnl ?? 0);
+        if (new Date(String(row.date)) > new Date(String(existing.last_sold_at))) existing.last_sold_at = row.date;
+        map.set(row.asset_code, existing);
+        return map;
+      }, new Map<string, Record<string, unknown>>());
+
+    const snapshotRows = snapshots.map((snapshot) => ({
+      snapshot_at: snapshot.snapshotAt,
+      total_value: num(snapshot.totalValue),
+      stock_value: num(snapshot.stockValue),
+      gold_value: num(snapshot.goldValue),
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    appendJsonSheet(workbook, "Summary", [{
+      generated_at: new Date(),
+      total_nav: totalNav,
+      total_cost_basis: totalCostBasis,
+      total_realized_pnl: totalRealizedPnl,
+      total_unrealized_pnl: totalUnrealizedPnl,
+      total_pnl: totalPnl,
+      holding_count: holdings.length,
+      transaction_count: transactions.length,
+      cash_flow_count: cashFlows.length,
+      price_history_count: priceHistory.length,
+      snapshot_count: snapshots.length,
+    }]);
+    appendJsonSheet(workbook, "Holdings", holdingRows);
+    appendJsonSheet(workbook, "Transactions", transactionRows);
+    appendJsonSheet(workbook, "CashFlows", cashFlowRows);
+    appendJsonSheet(workbook, "PriceHistory", priceHistoryRows);
+    appendJsonSheet(workbook, "AssetTimeline", timelineRows);
+    appendJsonSheet(workbook, "ClosedPositions", [...closedPositionRows.values()]);
+    appendJsonSheet(workbook, "Snapshots", snapshotRows);
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const fileDate = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", XLSX_EXPORT_MIME);
+    res.setHeader("Content-Disposition", `attachment; filename="investment-debug-${fileDate}.xlsx"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unable to export investment debug workbook." });
   }
 });
 

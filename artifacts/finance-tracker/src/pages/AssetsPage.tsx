@@ -469,6 +469,30 @@ export default function AssetsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportDebug = async () => {
+    const res = await fetch("/api/investment/debug-export");
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      toast({
+        title: "Export debug failed",
+        description: data?.error || `HTTP ${res.status}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get("content-disposition") || "";
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = filenameMatch?.[1] || `investment-debug-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const sortLabel =
     sortOrder === "desc" ? "↓ High → Low" : sortOrder === "asc" ? "↑ Low → High" : "Sort";
 
@@ -512,6 +536,7 @@ export default function AssetsPage() {
         lastUpdated={lastUpdated}
         hasHoldings={holdings.length > 0}
         onExport={handleExportCSV}
+        onDebugExport={() => { void handleExportDebug(); }}
         onTrade={() => {
           setEditingTradeOrder(null);
           setTradeDialogOpen(true);
