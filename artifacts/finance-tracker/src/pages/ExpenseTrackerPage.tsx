@@ -1,11 +1,11 @@
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/pages/PageHeader";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatVNDFull } from "@/pages/assets/utils";
-import { fetchCashflowData } from "@/lib/excel-sheets";
+import { CASHFLOW_SOURCE_SHEET, fetchCashflowData } from "@/lib/excel-sheets";
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -190,7 +190,7 @@ export default function ExpenseTrackerPage() {
 
   const expensesQuery = useQuery({ queryKey: ["expenses", year], queryFn: () => getExpenses(year) });
   const summaryQuery  = useQuery({ queryKey: ["expenses-summary", year], queryFn: () => getSummary(year) });
-  const cashflowQuery = useQuery({ queryKey: ["excel-cashflow"], queryFn: fetchCashflowData });
+  const cashflowQuery = useQuery({ queryKey: ["excel-function-cashflow"], queryFn: fetchCashflowData });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["expenses", year] });
@@ -204,9 +204,8 @@ export default function ExpenseTrackerPage() {
   // Budget = annual Want (no monthly division)
   const annualBudget = alloc.want > 0 ? alloc.want : null;
   const income = cashflowQuery.data?.income ?? 0;
-  const totalAlloc = alloc.invest + alloc.needTotal + alloc.want;
 
-  // Total = income from Cashflow sheet (auto-updates when Excel changes)
+  // Total = income from the Function sheet (auto-updates when Excel changes)
   const totalIncome = income > 0 ? income : alloc.invest + alloc.needTotal + alloc.want;
 
   const totalSpent = summaryQuery.data?.totalSpent ?? 0;
@@ -313,7 +312,7 @@ export default function ExpenseTrackerPage() {
           </Card>
           {income > 0 && (
             <p className="text-[11px] text-muted-foreground">
-              Total lấy từ sheet Cashflow năm {cashflowQuery.data?.year ?? year}
+              Total lấy từ sheet {CASHFLOW_SOURCE_SHEET} năm {cashflowQuery.data?.year ?? year}
             </p>
           )}
         </section>

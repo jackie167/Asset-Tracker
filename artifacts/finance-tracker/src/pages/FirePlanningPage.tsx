@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import PageHeader from "@/pages/PageHeader";
 import type { HoldingItem } from "@/pages/assets/types";
 import { formatVNDFull } from "@/pages/assets/utils";
-import { fetchCashflowData, fetchTotalAssetData } from "@/lib/excel-sheets";
+import { CASHFLOW_SOURCE_SHEET, fetchCashflowData, fetchTotalAssetData } from "@/lib/excel-sheets";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -133,7 +133,7 @@ export default function FirePlanningPage() {
   // Queries
   const investQuery = useQuery({ queryKey: ["dashboard-investment"], queryFn: fetchInvestmentSummary });
   const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
-  const cashflowQuery = useQuery({ queryKey: ["excel-cashflow"], queryFn: fetchCashflowData });
+  const cashflowQuery = useQuery({ queryKey: ["excel-function-cashflow"], queryFn: fetchCashflowData });
   const totalAssetQuery = useQuery({ queryKey: ["excel-total-asset"], queryFn: fetchTotalAssetData });
 
   const isLoading = investQuery.isLoading || cashflowQuery.isLoading;
@@ -247,7 +247,7 @@ export default function FirePlanningPage() {
             </div>
             {autoSpend > 0 && customSpend === 0 && (
               <p className="mt-3 text-[11px] text-muted-foreground">
-                Chi tiêu tự động từ sheet Cashflow ({cashflowQuery.data?.year}): {fmt(autoSpend, hide)} / năm
+                Chi tiêu tự động từ sheet {CASHFLOW_SOURCE_SHEET} ({cashflowQuery.data?.year}): {fmt(autoSpend, hide)} / năm
               </p>
             )}
             {xirrActual != null && (

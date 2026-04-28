@@ -15,6 +15,8 @@ export type TotalAssetData = {
   debtRatio: number | null;
 };
 
+export const CASHFLOW_SOURCE_SHEET = "Function";
+
 export function parseNum(v: unknown): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const n = parseFloat(String(v ?? "").replace(/[^0-9.,-]/g, ""));
@@ -29,7 +31,7 @@ export function findColIdx(headers: unknown[], names: string[]): number {
 }
 
 export async function fetchCashflowData(): Promise<CashflowData | null> {
-  const res = await fetch("/api/excel/sheet?name=Cashflow");
+  const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CASHFLOW_SOURCE_SHEET)}`);
   if (!res.ok) return null;
   const data = await res.json();
   const rows: unknown[][] = data?.rows ?? [];
@@ -37,7 +39,7 @@ export async function fetchCashflowData(): Promise<CashflowData | null> {
 
   const headers = rows[0];
   const yearCol = findColIdx(headers, ["year", "năm"]);
-  const incomeCol = findColIdx(headers, ["income"]);
+  const incomeCol = findColIdx(headers, ["income", "thu nhập", "thu nhap"]);
   const expenseCol = findColIdx(headers, ["tiêu dùng", "tieu dung", "expense", "tiêu dụng"]);
   const interestCol = findColIdx(headers, ["total interest", "interest"]);
   if (yearCol < 0 || incomeCol < 0) return null;
