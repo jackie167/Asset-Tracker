@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod/v4";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { db, wealthSnapshotsTable, wealthSnapshotItemsTable } from "../../../lib/db/src/index.ts";
 
 const router = Router();
@@ -36,11 +36,7 @@ router.get("/wealth/snapshots", async (_req, res): Promise<void> => {
     ? await db
         .select()
         .from(wealthSnapshotItemsTable)
-        .where(
-          ids.length === 1
-            ? eq(wealthSnapshotItemsTable.snapshotId, ids[0]!)
-            : wealthSnapshotItemsTable.snapshotId.in(ids)
-        )
+        .where(inArray(wealthSnapshotItemsTable.snapshotId, ids))
     : [];
 
   const itemsBySnapshot = new Map<number, typeof items>();
@@ -102,13 +98,25 @@ router.post("/wealth/snapshots", async (req, res): Promise<void> => {
     })
     .returning();
 
-  const savedItems = items.length
+  // Group by type to avoid unique constraint violation
+  const grouped = new Map<string, { label: string | null; value: number }>();
+  for (const item of items) {
+    const existing = grouped.get(item.type);
+    if (existing) {
+      existing.value += item.value;
+    } else {
+      grouped.set(item.type, { label: item.label ?? null, value: item.value });
+    }
+  }
+  const groupedItems = Array.from(grouped.entries()).map(([type, { label, value }]) => ({ type, label, value }));
+
+  const savedItems = groupedItems.length
     ? await db
         .insert(wealthSnapshotItemsTable)
-        .values(items.map((item) => ({
+        .values(groupedItems.map((item) => ({
           snapshotId: snapshot!.id,
           type: item.type,
-          label: item.label ?? null,
+          label: item.label,
           value: String(item.value),
         })))
         .returning()
