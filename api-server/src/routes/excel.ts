@@ -1217,4 +1217,110 @@ router.get("/investment/debug-export", async (_req, res): Promise<void> => {
   }
 });
 
+router.get("/investment/sync-export", async (_req, res): Promise<void> => {
+  try {
+    const [holdings, latestPrices, transactions, cashFlows, priceHistory] = await Promise.all([
+      db.select().from(holdingsTable).orderBy(holdingsTable.type, holdingsTable.symbol),
+      getLatestPrices(),
+      db.select().from(transactionsTable).orderBy(desc(transactionsTable.executedAt)),
+      db.select().from(portfolioCashFlowsTable).orderBy(desc(portfolioCashFlowsTable.occurredAt)),
+      db.select().from(priceHistoryTable).orderBy(desc(priceHistoryTable.priceAt)).limit(10000),
+    ]);
+
+    const priceBySymbol = new Map(latestPrices.map((price) => [price.symbol.toUpperCase(), num(price.price)]));
+    const goldBenchmark = latestPrices.find((price) => price.type.trim().toLowerCase() === "gold");
+    const goldPrice = goldBenchmark ? num(goldBenchmark.price) : null;
+
+    const investmentRows = holdings.map((holding) => {
+      const type = holding.type.trim().toLowerCase();
+      const quantity = num(holding.quantity) ?? 0;
+      const manualPrice = num(holding.manualPrice);
+      const currentPrice = priceBySymbol.get(holding.symbol.toUpperCase()) ?? (type === "gold" ? goldPrice : null) ?? manualPrice;
+      const currentValue = currentPrice == null ? null : usesManualPortfolioValue(type) ? currentPrice : quantity * currentPrice;
+      return {
+        asset_code: holding.symbol,
+        asset_type: holding.type,
+        quantity,
+        current_price: currentPrice,
+        current_value: currentValue,
+        cost_of_capital: num(holding.costOfCapital),
+        interest: num(holding.interest),
+        note: "",
+        updated_at: holding.updatedAt,
+      };
+    });
+
+    const transactionRows = transactions.map((transaction) => {
+      const netAmount = num(transaction.netAmount) ?? num(transaction.totalValue) ?? 0;
+      return {
+        side: transaction.side,
+        date: transaction.executedAt,
+        asset_code: transaction.symbol,
+        asset_type: transaction.assetType,
+        quantity: num(transaction.quantity),
+        price: num(transaction.unitPrice),
+        gross_amount: num(transaction.grossAmount),
+        fee: num(transaction.fee) ?? 0,
+        tax: num(transaction.tax) ?? 0,
+        net_amount: netAmount,
+        funding_source: transaction.fundingSource,
+        realized_pnl: num(transaction.realizedInterest),
+        note: transaction.note,
+        status: transaction.status,
+        origin: transaction.origin,
+        created_at: transaction.createdAt,
+        updated_at: transaction.updatedAt,
+      };
+    });
+
+    const cashFlowRows = cashFlows.map((flow) => ({
+      date: flow.occurredAt,
+      kind: flow.kind,
+      account: flow.account,
+      amount: num(flow.amount),
+      source: flow.source,
+      note: flow.note,
+      origin: flow.origin,
+      created_at: flow.createdAt,
+      updated_at: flow.updatedAt,
+    }));
+
+    const priceHistoryRows = priceHistory.map((row) => ({
+      date: row.priceAt,
+      asset_code: row.assetCode,
+      asset_type: row.assetType,
+      price_or_value: num(row.priceOrValue),
+      quantity: num(row.quantity),
+      current_value: num(row.currentValue),
+      source: row.source,
+      note: row.note,
+      updated_at: row.updatedAt,
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    appendJsonSheet(workbook, "Meta", [{
+      schema_version: "investment_sync_v1",
+      exported_at: new Date(),
+      source: "asset_tracker_web",
+      timezone: "Asia/Ho_Chi_Minh",
+      investment_rows: investmentRows.length,
+      transaction_rows: transactionRows.length,
+      cash_flow_rows: cashFlowRows.length,
+      price_history_rows: priceHistoryRows.length,
+    }]);
+    appendJsonSheet(workbook, "Investment", investmentRows);
+    appendJsonSheet(workbook, "Transactions", transactionRows);
+    appendJsonSheet(workbook, "CashFlows", cashFlowRows);
+    appendJsonSheet(workbook, "PriceHistory", priceHistoryRows);
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const fileDate = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", XLSX_EXPORT_MIME);
+    res.setHeader("Content-Disposition", `attachment; filename="investment-sync-${fileDate}.xlsx"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unable to export investment sync workbook." });
+  }
+});
+
 export default router;

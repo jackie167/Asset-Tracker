@@ -6,6 +6,7 @@ type AssetsHeaderProps = {
   lastUpdated?: string | null;
   hasHoldings: boolean;
   onExport: () => void;
+  onSyncExport?: () => void;
   onDebugExport?: () => void;
   onTrade?: () => void;
   onImport?: () => void;
@@ -17,6 +18,7 @@ export default function AssetsHeader({
   lastUpdated,
   hasHoldings,
   onExport,
+  onSyncExport,
   onDebugExport,
   onTrade,
   onImport,
@@ -26,6 +28,7 @@ export default function AssetsHeader({
 
   if (onTrade)  actions.push({ kind: "item", label: "Trade",  onSelect: onTrade });
                 actions.push({ kind: "item", label: "Export CSV", onSelect: onExport, disabled: !hasHoldings });
+  if (onSyncExport) actions.push({ kind: "item", label: "Export Sync Workbook", onSelect: onSyncExport, disabled: !hasHoldings });
   if (onDebugExport) actions.push({ kind: "item", label: "Export Debug", onSelect: onDebugExport, disabled: !hasHoldings });
   if (onImport) actions.push({ kind: "item", label: "Import", onSelect: onImport });
   if (onAdd)    actions.push({ kind: "item", label: "Add",    onSelect: onAdd });
