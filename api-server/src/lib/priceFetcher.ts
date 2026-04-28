@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
-import { db, pricesTable, holdingsTable, snapshotsTable, snapshotTypeValuesTable } from "../../../lib/db/src/index.ts";
-import { buildPriceHistoryRow, insertPriceHistoryRows } from "./priceHistory.js";
-import { desc } from "drizzle-orm";
+import { db, pricesTable, holdingsTable, snapshotsTable, snapshotTypeValuesTable, priceHistoryTable } from "../../../lib/db/src/index.ts";
+import { buildPriceHistoryRow, getUtcDayRange } from "./priceHistory.js";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { createPriceScheduler } from "./priceScheduler.js";
 
 const USER_AGENT =
@@ -431,22 +431,41 @@ export async function fetchAndStorePrices(): Promise<{ updated: number; message:
   }
 
   const holdingBySymbol = new Map(holdings.map((holding) => [holding.symbol.toUpperCase(), holding]));
-  await insertPriceHistoryRows(
-    db,
-    prices.map((price) => {
-      const holding = holdingBySymbol.get(price.symbol.toUpperCase());
-      const quantity = holding ? parseFloat(String(holding.quantity)) : null;
-      return buildPriceHistoryRow({
+  const { start: historyDayStart, end: historyDayEnd } = getUtcDayRange(fetchedAt);
+  for (const price of prices) {
+    const holding = holdingBySymbol.get(price.symbol.toUpperCase());
+    const quantity = holding ? parseFloat(String(holding.quantity)) : null;
+    const historyRow = buildPriceHistoryRow({
         assetCode: price.symbol,
         assetType: price.type,
         priceOrValue: price.price,
         quantity,
         source: "online_api",
-        note: "price refresh",
+        note: "daily online price",
         priceAt: fetchedAt,
-      });
-    })
-  );
+    });
+    const [existing] = await db
+      .select({ id: priceHistoryTable.id })
+      .from(priceHistoryTable)
+      .where(
+        and(
+          eq(priceHistoryTable.assetCode, price.symbol.toUpperCase()),
+          eq(priceHistoryTable.source, "online_api"),
+          gte(priceHistoryTable.priceAt, historyDayStart),
+          lt(priceHistoryTable.priceAt, historyDayEnd),
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(priceHistoryTable)
+        .set(historyRow)
+        .where(eq(priceHistoryTable.id, existing.id));
+    } else {
+      await db.insert(priceHistoryTable).values(historyRow);
+    }
+  }
 
   await savePortfolioSnapshot(holdings, prices);
 

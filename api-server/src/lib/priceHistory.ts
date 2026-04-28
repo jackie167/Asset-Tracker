@@ -82,3 +82,9 @@ export async function insertPriceHistoryRows(
   if (!values.length) return;
   await dbOrTx.insert(priceHistoryTable).values(values);
 }
+
+export function getUtcDayRange(date = new Date()) {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
+  return { start, end };
+}
