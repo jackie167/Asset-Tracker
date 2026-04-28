@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import AllocationChart from "@/pages/assets/AllocationChart";
 import AssetsHeader from "@/pages/assets/AssetsHeader";
 import HoldingsTable from "@/pages/assets/HoldingsTable";
 import PerformanceChart from "@/pages/assets/PerformanceChart";
-import PortfolioSummaryCard from "@/pages/assets/PortfolioSummaryCard";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatTypeLabel, formatVND, formatVNDFull } from "@/pages/assets/utils";
 import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
+import { fetchTotalAssetData } from "@/lib/excel-sheets";
+import { useToast } from "@/hooks/use-toast";
 
 export default function WealthAllocationPage() {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [snapshotRange, setSnapshotRange] = useState<SnapshotRange>("1m");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [holdingsCollapsed, setHoldingsCollapsed] = useState<boolean>(
@@ -21,6 +27,8 @@ export default function WealthAllocationPage() {
   const [showQtyCol, setShowQtyCol] = useState<boolean>(() => localStorage.getItem("wealth_col_qty") === "1");
   const [showPriceCol, setShowPriceCol] = useState<boolean>(() => localStorage.getItem("wealth_col_price") === "1");
   const [holdings, setHoldings] = useState<HoldingItem[]>([]);
+  const [debt, setDebt] = useState<number>(0);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,9 +36,16 @@ export default function WealthAllocationPage() {
     setIsLoading(true);
     setError(null);
     try {
-      setHoldings(await fetchWealthAllocationHoldings());
+      const [wealthHoldings, totalAssetData, latestSnapshot] = await Promise.all([
+        fetchWealthAllocationHoldings(),
+        fetchTotalAssetData(),
+        fetch("/api/wealth/snapshots/latest").then((r) => r.ok ? r.json() : null).catch(() => null),
+      ]);
+      setHoldings(wealthHoldings);
+      setDebt(totalAssetData?.debt ?? 0);
+      if (latestSnapshot) setLastSavedAt(latestSnapshot.snapshotAt);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load wealth allocation sheet.");
+      setError(err instanceof Error ? err.message : "Unable to load wealth allocation.");
     } finally {
       setIsLoading(false);
     }
@@ -130,6 +145,37 @@ export default function WealthAllocationPage() {
     URL.revokeObjectURL(url);
   };
 
+  const netAsset = totalValue - debt;
+
+  const saveSnapshotMutation = useMutation({
+    mutationFn: async () => {
+      const body = {
+        totalAsset: totalValue,
+        debt,
+        netAsset,
+        items: holdings.map((h) => ({
+          type: h.type,
+          label: h.symbol,
+          value: h.currentValue ?? 0,
+        })).filter((i) => i.value > 0),
+      };
+      const res = await fetch("/api/wealth/snapshots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Unable to save snapshot.");
+      return data as { snapshotAt: string };
+    },
+    onSuccess: (data) => {
+      setLastSavedAt(data.snapshotAt);
+      void queryClient.invalidateQueries({ queryKey: ["wealth-snapshots"] });
+      toast({ title: "Đã lưu snapshot tài sản" });
+    },
+    onError: (err) => toast({ title: "Lỗi", description: err instanceof Error ? err.message : "", variant: "destructive" }),
+  });
+
   const handleOpenAssetType = (type: string) => {
     navigate(`/wealth-allocation/type/${encodeURIComponent(type)}`);
   };
@@ -149,11 +195,45 @@ export default function WealthAllocationPage() {
           <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
         ) : (
           <>
-            <PortfolioSummaryCard
-              totalValueLabel={formatMoney(totalValue, true)}
-              hideValues={hideValues}
-              onToggleHideValues={toggleHideValues}
-            />
+            {/* ── Tổng quan tài sản ─────────────────────────────────── */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Tổng tài sản", value: totalValue, color: "text-foreground" },
+                { label: "Nợ", value: debt, color: debt > 0 ? "text-amber-400" : "text-muted-foreground" },
+                { label: "Tài sản ròng", value: netAsset, color: netAsset >= 0 ? "text-emerald-400" : "text-red-400" },
+              ].map((card) => (
+                <Card key={card.label} className="p-4 space-y-1">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{card.label}</p>
+                  <p className={`text-sm sm:text-base md:text-lg font-bold tabular-nums break-all leading-snug ${card.color}`}>
+                    {formatMoney(card.value, true)}
+                  </p>
+                </Card>
+              ))}
+            </div>
+
+            {/* ── Save + last saved ─────────────────────────────────── */}
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={toggleHideValues}
+                className="text-[10px] text-muted-foreground hover:text-foreground uppercase tracking-widest transition-colors"
+              >
+                {hideValues ? "Hiện số liệu" : "Ẩn số liệu"}
+              </button>
+              <p className="text-[10px] text-muted-foreground">
+                {lastSavedAt
+                  ? `Lần lưu cuối: ${new Date(lastSavedAt).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
+                  : "Chưa lưu snapshot nào"}
+              </p>
+              <Button
+                size="sm"
+                className="h-8 text-xs"
+                disabled={saveSnapshotMutation.isPending || totalValue === 0}
+                onClick={() => saveSnapshotMutation.mutate()}
+              >
+                {saveSnapshotMutation.isPending ? "Đang lưu..." : "Lưu snapshot"}
+              </Button>
+            </div>
 
             {(totalValue > 0 || holdings.length > 0) && (
               <div className="grid md:grid-cols-2 gap-4">

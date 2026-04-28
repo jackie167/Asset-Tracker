@@ -6,3 +6,4 @@ export * from "./snapshot-type-values";
 export * from "./transactions";
 export * from "./portfolio-cash-flows";
 export * from "./expenses";
+export * from "./wealth-snapshots";
