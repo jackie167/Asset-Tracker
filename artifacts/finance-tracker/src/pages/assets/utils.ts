@@ -11,6 +11,7 @@ const TYPE_META: Record<string, { label: string; shortLabel: string; decoratedLa
   gold: { label: "Gold", shortLabel: "Gold", decoratedLabel: "🥇 Gold" },
   crypto: { label: "Crypto", shortLabel: "Crypto", decoratedLabel: "🪙 Crypto" },
   other: { label: "Other", shortLabel: "Other", decoratedLabel: "💼 Other" },
+  financial: { label: "Financial", shortLabel: "Financial", decoratedLabel: "📊 Financial" },
 };
 
 function toTitleCase(value: string): string {

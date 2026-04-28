@@ -76,9 +76,44 @@ export function parseCurrentAssetRows(rows: Array<Array<string | number>>): Hold
 }
 
 export async function fetchWealthAllocationHoldings() {
-  const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`);
-  const data = await readJsonSafe(res);
-  if (!res.ok) throw new Error(data?.error || "Unable to load wealth allocation sheet.");
-  const rows = Array.isArray(data?.rows) ? data.rows : [];
-  return parseCurrentAssetRows(rows);
+  const [sheetRes, summaryRes] = await Promise.all([
+    fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`),
+    fetch("/api/portfolio/summary"),
+  ]);
+
+  const sheetData = await readJsonSafe(sheetRes);
+  if (!sheetRes.ok) throw new Error(sheetData?.error || "Unable to load wealth allocation sheet.");
+  const rows = Array.isArray(sheetData?.rows) ? sheetData.rows : [];
+
+  // Exclude "financial" rows from sheet — they have broken formulas (#N/A)
+  // We'll replace them with computed data from the portfolio summary
+  const sheetHoldings = parseCurrentAssetRows(rows).filter(
+    (h) => !h.type.startsWith("financial")
+  );
+
+  // Sum all investment holdings (excluding real_estate) as one "Financial" entry
+  if (summaryRes.ok) {
+    const summary = await summaryRes.json().catch(() => null) as { holdings?: Array<{ type: string; currentValue: number | null }> } | null;
+    const financialTotal = (summary?.holdings ?? []).reduce((sum, h) => {
+      const t = String(h.type ?? "").toLowerCase();
+      if (t === "real_estate") return sum;
+      return sum + (h.currentValue ?? 0);
+    }, 0);
+
+    if (financialTotal > 0) {
+      sheetHoldings.push({
+        id: 999999,
+        symbol: "Financial",
+        type: "financial",
+        quantity: 1,
+        currentPrice: financialTotal,
+        currentValue: financialTotal,
+        change: null,
+        changePercent: null,
+        manualPrice: financialTotal,
+      });
+    }
+  }
+
+  return sheetHoldings;
 }
