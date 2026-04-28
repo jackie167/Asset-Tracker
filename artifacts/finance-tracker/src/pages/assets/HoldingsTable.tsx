@@ -374,7 +374,7 @@ export default function HoldingsTable({
                   No assets in this type.
                 </p>
               ) : (
-                <table className="w-max min-w-full table-auto border-separate border-spacing-0 text-xs">
+                <table className="w-max table-auto border-separate border-spacing-0 text-xs">
                   <thead>
                     <tr>
                       <th className={`${headerCellClass} text-left`}>
