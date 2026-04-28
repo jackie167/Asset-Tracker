@@ -260,23 +260,6 @@ export default function HoldingsTable({
     });
   }, [cashAdjustedCost, filteredHoldings, filterType, filteredTotal, realizedPnLBySymbol, sortDirection, sortKey, totalValue]);
 
-  const colTemplate = [
-    "minmax(108px, 1fr)",
-    "minmax(84px, 0.72fr)",
-    "minmax(48px, 0.5fr)",
-    "minmax(118px, 1.05fr)",
-    showQtyCol ? "minmax(52px, 0.58fr)" : null,
-    showPriceCol ? "minmax(102px, 0.9fr)" : null,
-    showCostOfCapitalCol ? "minmax(108px, 0.95fr)" : null,
-    showReturnCols ? "minmax(112px, 0.95fr)" : null,
-    showReturnCols ? "minmax(112px, 0.95fr)" : null,
-    showReturnCols ? "minmax(112px, 0.95fr)" : null,
-    showReturnCols ? "minmax(62px, 0.6fr)" : null,
-    showReturnCols ? "minmax(72px, 0.65fr)" : null,
-    showReturnCols ? "minmax(72px, 0.65fr)" : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
@@ -290,6 +273,10 @@ export default function HoldingsTable({
     if (sortKey !== key) return "";
     return sortDirection === "asc" ? " ↑" : " ↓";
   };
+
+  const headerCellClass = "px-2 py-1.5 text-[9px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap";
+  const cellClass = "px-2 py-2.5 border-b border-border align-middle whitespace-nowrap";
+  const numericCellClass = `${cellClass} text-right tabular-nums`;
 
   return (
     <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -382,40 +369,71 @@ export default function HoldingsTable({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <div className="min-w-full" style={{ width: "max-content" }}>
-                <div
-                  className="grid gap-x-1 text-[9px] text-muted-foreground uppercase tracking-wider py-1.5 border-b border-border"
-                  style={{ gridTemplateColumns: colTemplate }}
-                >
-                  <button type="button" onClick={() => handleSort("symbol")} className="text-left hover:text-foreground transition-colors">Asset{sortIndicator("symbol")}</button>
-                  <button type="button" onClick={() => handleSort("type")} className="text-center hover:text-foreground transition-colors">Type{sortIndicator("type")}</button>
-                  <button type="button" onClick={() => handleSort("weight")} className="text-right hover:text-foreground transition-colors">%{sortIndicator("weight")}</button>
-                  <button type="button" onClick={() => handleSort("currentValue")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Total Value{sortIndicator("currentValue")}</button>
-                  {showQtyCol && <button type="button" onClick={() => handleSort("quantity")} className="text-right hover:text-foreground transition-colors">Qty{sortIndicator("quantity")}</button>}
-                  {showPriceCol && <button type="button" onClick={() => handleSort("currentPrice")} className="text-right hover:text-foreground transition-colors">Price{sortIndicator("currentPrice")}</button>}
-                  {showCostOfCapitalCol && <button type="button" onClick={() => handleSort("costOfCapital")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Cost{sortIndicator("costOfCapital")}</button>}
-                  {showReturnCols && <button type="button" onClick={() => handleSort("unrealizedPnL")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Unrealized{sortIndicator("unrealizedPnL")}</button>}
-                  {showReturnCols && <button type="button" onClick={() => handleSort("realizedPnL")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Realized{sortIndicator("realizedPnL")}</button>}
-                  {showReturnCols && <button type="button" onClick={() => handleSort("totalPnL")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">Total P/L{sortIndicator("totalPnL")}</button>}
-                  {showReturnCols && <button type="button" onClick={() => handleSort("unrealizedPnLPercent")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">P/L %{sortIndicator("unrealizedPnLPercent")}</button>}
-                  {showReturnCols && <button type="button" onClick={() => handleSort("xirrAnnual")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">XIRR Year{sortIndicator("xirrAnnual")}</button>}
-                  {showReturnCols && <button type="button" onClick={() => handleSort("xirrMonthly")} className="text-right whitespace-nowrap hover:text-foreground transition-colors">XIRR Month{sortIndicator("xirrMonthly")}</button>}
-                </div>
+              {filteredHoldings.length === 0 && filterType !== "all" ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No assets in this type.
+                </p>
+              ) : (
+                <table className="w-max min-w-full table-auto border-separate border-spacing-0 text-xs">
+                  <thead>
+                    <tr>
+                      <th className={`${headerCellClass} text-left`}>
+                        <button type="button" onClick={() => handleSort("symbol")} className="hover:text-foreground transition-colors">Asset{sortIndicator("symbol")}</button>
+                      </th>
+                      <th className={`${headerCellClass} text-center`}>
+                        <button type="button" onClick={() => handleSort("type")} className="hover:text-foreground transition-colors">Type{sortIndicator("type")}</button>
+                      </th>
+                      <th className={`${headerCellClass} text-right`}>
+                        <button type="button" onClick={() => handleSort("weight")} className="hover:text-foreground transition-colors">%{sortIndicator("weight")}</button>
+                      </th>
+                      <th className={`${headerCellClass} text-right`}>
+                        <button type="button" onClick={() => handleSort("currentValue")} className="hover:text-foreground transition-colors">Total Value{sortIndicator("currentValue")}</button>
+                      </th>
+                      {showQtyCol && (
+                        <th className={`${headerCellClass} text-right`}>
+                          <button type="button" onClick={() => handleSort("quantity")} className="hover:text-foreground transition-colors">Qty{sortIndicator("quantity")}</button>
+                        </th>
+                      )}
+                      {showPriceCol && (
+                        <th className={`${headerCellClass} text-right`}>
+                          <button type="button" onClick={() => handleSort("currentPrice")} className="hover:text-foreground transition-colors">Price{sortIndicator("currentPrice")}</button>
+                        </th>
+                      )}
+                      {showCostOfCapitalCol && (
+                        <th className={`${headerCellClass} text-right`}>
+                          <button type="button" onClick={() => handleSort("costOfCapital")} className="hover:text-foreground transition-colors">Cost{sortIndicator("costOfCapital")}</button>
+                        </th>
+                      )}
+                      {showReturnCols && (
+                        <>
+                          <th className={`${headerCellClass} text-right`}>
+                            <button type="button" onClick={() => handleSort("unrealizedPnL")} className="hover:text-foreground transition-colors">Unrealized{sortIndicator("unrealizedPnL")}</button>
+                          </th>
+                          <th className={`${headerCellClass} text-right`}>
+                            <button type="button" onClick={() => handleSort("realizedPnL")} className="hover:text-foreground transition-colors">Realized{sortIndicator("realizedPnL")}</button>
+                          </th>
+                          <th className={`${headerCellClass} text-right`}>
+                            <button type="button" onClick={() => handleSort("totalPnL")} className="hover:text-foreground transition-colors">Total P/L{sortIndicator("totalPnL")}</button>
+                          </th>
+                          <th className={`${headerCellClass} text-right`}>
+                            <button type="button" onClick={() => handleSort("unrealizedPnLPercent")} className="hover:text-foreground transition-colors">P/L %{sortIndicator("unrealizedPnLPercent")}</button>
+                          </th>
+                          <th className={`${headerCellClass} text-right`}>
+                            <button type="button" onClick={() => handleSort("xirrAnnual")} className="hover:text-foreground transition-colors">XIRR Year{sortIndicator("xirrAnnual")}</button>
+                          </th>
+                          <th className={`${headerCellClass} text-right`}>
+                            <button type="button" onClick={() => handleSort("xirrMonthly")} className="hover:text-foreground transition-colors">XIRR Month{sortIndicator("xirrMonthly")}</button>
+                          </th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
 
-                {filteredHoldings.length === 0 && filterType !== "all" && (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    No assets in this type.
-                  </p>
-                )}
-
-                {sortedFilteredHoldings.map(({ holding, unrealizedPnL, realizedPnL, totalPnL, unrealizedPnLPercent, xirrAnnual, xirrMonthly, weight }) => (
-                  <div
-                    key={holding.id}
-                    className="grid gap-x-1 items-center py-2.5 border-b border-border last:border-0"
-                    style={{ gridTemplateColumns: colTemplate }}
-                  >
-                    <div className="overflow-hidden">
-                      <p className="text-sm font-medium truncate">{holding.symbol}</p>
+                  <tbody>
+                    {sortedFilteredHoldings.map(({ holding, unrealizedPnL, realizedPnL, totalPnL, unrealizedPnLPercent, xirrAnnual, xirrMonthly, weight }) => (
+                      <tr key={holding.id}>
+                        <td className={cellClass}>
+                          <p className="text-sm font-medium">{holding.symbol}</p>
                       {!readOnly && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <ChangeChip change={holding.change} changePercent={holding.changePercent} />
@@ -436,28 +454,31 @@ export default function HoldingsTable({
                           </>
                         </div>
                       )}
-                    </div>
+                        </td>
 
-                    <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug truncate block">
-                      {formatTypeShortLabel(holding.type)}
-                    </span>
+                        <td className={`${cellClass} text-center`}>
+                          <span className="inline-block text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug">
+                            {formatTypeShortLabel(holding.type)}
+                          </span>
+                        </td>
 
-                    <span className="text-[10px] text-right tabular-nums text-muted-foreground">
-                      {weight != null ? `${(weight * 100).toFixed(1)}%` : "—"}
-                    </span>
+                        <td className={`${numericCellClass} text-[10px] text-muted-foreground`}>
+                          {weight != null ? `${(weight * 100).toFixed(1)}%` : "—"}
+                        </td>
 
-                    <span className="text-sm font-semibold text-right tabular-nums whitespace-nowrap">
-                      {formatMoney(holding.currentValue, true)}
-                    </span>
+                        <td className={`${numericCellClass} text-sm font-semibold`}>
+                          {formatMoney(holding.currentValue, true)}
+                        </td>
 
                     {showQtyCol && (
-                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                      <td className={`${numericCellClass} text-[11px] text-muted-foreground`}>
                         {holding.quantity.toLocaleString("vi-VN")}
-                      </span>
+                      </td>
                     )}
 
                     {showPriceCol && (
-                      <span className="text-[11px] text-right tabular-nums text-muted-foreground flex items-center justify-end gap-1">
+                      <td className={`${numericCellClass} text-[11px] text-muted-foreground`}>
+                        <span className="flex items-center justify-end gap-1">
                         {editingPrice === holding.symbol ? (
                           <input
                             ref={priceInputRef}
@@ -485,118 +506,105 @@ export default function HoldingsTable({
                             )}
                           </>
                         )}
-                      </span>
+                        </span>
+                      </td>
                     )}
 
                     {showCostOfCapitalCol && (
-                      <span className="text-[11px] text-right tabular-nums text-muted-foreground">
+                      <td className={`${numericCellClass} text-[11px] text-muted-foreground`}>
                         {formatMoney(holding.costBasisRemaining ?? holding.costOfCapital, true)}
-                      </span>
+                      </td>
                     )}
 
                     {showReturnCols && (
-                      <span className={`text-[11px] text-right tabular-nums ${(unrealizedPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
-                        {formatVNDFull(unrealizedPnL)}
-                      </span>
+                      <>
+                        <td className={`${numericCellClass} text-[11px] ${(unrealizedPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                          {formatVNDFull(unrealizedPnL)}
+                        </td>
+                        <td className={`${numericCellClass} text-[11px] ${(realizedPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                          {formatVNDFull(realizedPnL)}
+                        </td>
+                        <td className={`${numericCellClass} text-[11px] ${(totalPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                          {formatVNDFull(totalPnL)}
+                        </td>
+                        <td className={`${numericCellClass} text-[11px] ${
+                          unrealizedPnLPercent == null
+                            ? "text-muted-foreground"
+                            : unrealizedPnLPercent >= 0
+                              ? "text-emerald-400"
+                              : "text-red-300"
+                        }`}>
+                          {formatPercent(unrealizedPnLPercent)}
+                        </td>
+                        <td className={`${numericCellClass} text-[11px] ${
+                          xirrAnnual == null
+                            ? "text-muted-foreground"
+                            : xirrAnnual >= 0
+                              ? "text-emerald-400"
+                              : "text-red-300"
+                        }`}>
+                          {formatPercent(xirrAnnual)}
+                        </td>
+                        <td className={`${numericCellClass} text-[11px] ${
+                          xirrMonthly == null
+                            ? "text-muted-foreground"
+                            : xirrMonthly >= 0
+                              ? "text-emerald-400"
+                              : "text-red-300"
+                        }`}>
+                          {formatPercent(xirrMonthly)}
+                        </td>
+                      </>
                     )}
-
-                    {showReturnCols && (
-                      <span className={`text-[11px] text-right tabular-nums ${(realizedPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
-                        {formatVNDFull(realizedPnL)}
-                      </span>
-                    )}
-
-                    {showReturnCols && (
-                      <span className={`text-[11px] text-right tabular-nums ${(totalPnL ?? 0) >= 0 ? "text-emerald-400" : "text-red-300"}`}>
-                        {formatVNDFull(totalPnL)}
-                      </span>
-                    )}
-
-                    {showReturnCols && (
-                      <span className={`text-[11px] text-right tabular-nums ${
-                        unrealizedPnLPercent == null
-                          ? "text-muted-foreground"
-                          : unrealizedPnLPercent >= 0
-                            ? "text-emerald-400"
-                            : "text-red-300"
-                      }`}>
-                        {formatPercent(unrealizedPnLPercent)}
-                      </span>
-                    )}
-
-                    {showReturnCols && (
-                      <span className={`text-[11px] text-right tabular-nums ${
-                        xirrAnnual == null
-                          ? "text-muted-foreground"
-                          : xirrAnnual >= 0
-                            ? "text-emerald-400"
-                            : "text-red-300"
-                      }`}>
-                        {formatPercent(xirrAnnual)}
-                      </span>
-                    )}
-
-                    {showReturnCols && (
-                      <span className={`text-[11px] text-right tabular-nums ${
-                        xirrMonthly == null
-                          ? "text-muted-foreground"
-                          : xirrMonthly >= 0
-                            ? "text-emerald-400"
-                            : "text-red-300"
-                      }`}>
-                        {formatPercent(xirrMonthly)}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                      </tr>
+                    ))}
 
                 {filteredHoldings.length > 0 && (
-                  <div
-                    className="grid gap-x-1 items-center pt-2.5 mt-0.5"
-                    style={{ gridTemplateColumns: colTemplate }}
-                  >
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  <tr>
+                    <td className="px-2 pt-2.5 align-middle whitespace-nowrap">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
                       {filterType === "all"
                         ? "Portfolio Total"
                         : `${formatTypeLabel(filterType)} Total`}
-                    </span>
-                    <span />
-                    <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-muted-foreground">
+                      </span>
+                    </td>
+                    <td className="px-2 pt-2.5" />
+                    <td className="px-2 pt-2.5 text-sm font-bold text-right tabular-nums whitespace-nowrap text-muted-foreground">
                       {filteredHoldings.length > 0 ? "100.0%" : "—"}
-                    </span>
-                    <span className="text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
+                    </td>
+                    <td className="px-2 pt-2.5 text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">
                       {formatMoney(filteredTotal, true)}
-                    </span>
-                    {showQtyCol && <span />}
-                    {showPriceCol && <span />}
-                    {showCostOfCapitalCol && <span />}
+                    </td>
+                    {showQtyCol && <td className="px-2 pt-2.5" />}
+                    {showPriceCol && <td className="px-2 pt-2.5" />}
+                    {showCostOfCapitalCol && <td className="px-2 pt-2.5" />}
                     {showReturnCols && (
-                      <span className={`text-sm font-bold text-right tabular-nums whitespace-nowrap ${
+                      <>
+                      <td className={`px-2 pt-2.5 text-sm font-bold text-right tabular-nums whitespace-nowrap ${
                         filteredUnrealizedPnLTotal >= 0 ? "text-emerald-400" : "text-red-300"
                       }`}>
                         {formatVNDFull(filteredUnrealizedPnLTotal)}
-                      </span>
-                    )}
-                    {showReturnCols && (
-                      <span className={`text-sm font-bold text-right tabular-nums whitespace-nowrap ${
+                      </td>
+                      <td className={`px-2 pt-2.5 text-sm font-bold text-right tabular-nums whitespace-nowrap ${
                         filteredRealizedPnLTotal >= 0 ? "text-emerald-400" : "text-red-300"
                       }`}>
                         {formatVNDFull(filteredRealizedPnLTotal)}
-                      </span>
-                    )}
-                    {showReturnCols && (
-                      <span className={`text-sm font-bold text-right tabular-nums whitespace-nowrap ${
+                      </td>
+                      <td className={`px-2 pt-2.5 text-sm font-bold text-right tabular-nums whitespace-nowrap ${
                         filteredPnLTotal >= 0 ? "text-emerald-400" : "text-red-300"
                       }`}>
                         {formatVNDFull(filteredPnLTotal)}
-                      </span>
+                      </td>
+                      <td className="px-2 pt-2.5" />
+                      <td className="px-2 pt-2.5" />
+                      <td className="px-2 pt-2.5" />
+                      </>
                     )}
-                    {showReturnCols && <span />}
-                    {showReturnCols && <span />}
-                    {showReturnCols && <span />}
-                  </div>
+                  </tr>
                 )}
-              </div>
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
         </>
