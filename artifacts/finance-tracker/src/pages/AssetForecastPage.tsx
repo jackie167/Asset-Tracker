@@ -13,11 +13,15 @@ const LS = {
 };
 
 async function fetchCurrentAssetData(): Promise<HoldingItem[]> {
-  const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  const rows = Array.isArray(data?.rows) ? data.rows : [];
-  return parseCurrentAssetRows(rows);
+  try {
+    const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const rows = Array.isArray(data?.rows) ? data.rows : [];
+    return parseCurrentAssetRows(rows);
+  } catch {
+    return [];
+  }
 }
 
 function parseInputNumber(value: string): number {

@@ -767,8 +767,12 @@ router.get("/excel/sheet", async (req, res) => {
   try {
     const config = getGoogleDriveConfig();
     if (config && await isNativeGoogleSheet()) {
-      const rows = await getGoogleSheetsValues(name);
-      res.json({ name, rows, source: getExcelSourceInfo() });
+      const sheetNames = await getGoogleSheetNames();
+      const resolvedName =
+        sheetNames.find((sheetName) => normalizeSheetLookupName(sheetName) === normalizeSheetLookupName(name)) ??
+        name;
+      const rows = await getGoogleSheetsValues(resolvedName);
+      res.json({ name: resolvedName, rows, source: getExcelSourceInfo() });
       return;
     }
     // Local file fallback
