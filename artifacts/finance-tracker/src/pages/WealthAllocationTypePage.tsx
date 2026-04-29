@@ -8,40 +8,6 @@ import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/
 import { formatTypeLabel, formatVND, formatVNDFull } from "@/pages/assets/utils";
 import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
 
-const REAL_ESTATE_TYPES = ["real_estate", "realestate", "real estate"];
-
-async function fetchFinancialHoldings(): Promise<HoldingItem[]> {
-  const res = await fetch("/api/portfolio/summary");
-  if (!res.ok) throw new Error("Unable to load investment data.");
-  const data = await res.json();
-  const holdings: HoldingItem[] = data?.holdings ?? [];
-  const financial = holdings.filter((h) => !REAL_ESTATE_TYPES.includes(h.type.toLowerCase().trim()));
-
-  // Group by type → one row per category (Cash, Stock, Gold, Fund, Crypto...)
-  const grouped = new Map<string, { currentValue: number; costOfCapital: number }>();
-  for (const h of financial) {
-    const key = h.type.toLowerCase().trim();
-    const existing = grouped.get(key) ?? { currentValue: 0, costOfCapital: 0 };
-    grouped.set(key, {
-      currentValue: existing.currentValue + (h.currentValue ?? 0),
-      costOfCapital: existing.costOfCapital + (h.costOfCapital ?? 0),
-    });
-  }
-
-  return Array.from(grouped.entries()).map(([type, agg], idx) => ({
-    id: idx + 1,
-    symbol: type.charAt(0).toUpperCase() + type.slice(1),
-    type,
-    quantity: 1,
-    currentValue: agg.currentValue,
-    costOfCapital: agg.costOfCapital,
-    currentPrice: null,
-    change: null,
-    changePercent: null,
-    manualPrice: null,
-  }));
-}
-
 type RouteParams = {
   type: string;
 };
@@ -63,31 +29,24 @@ export default function WealthAllocationTypePage() {
 
   const normalizedType = decodeURIComponent(params?.type ?? "").toLowerCase();
   const typeLabel = normalizedType ? formatTypeLabel(normalizedType) : "Asset Type";
-  const isFinancialType = normalizedType === "financial";
 
   const loadHoldings = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      if (isFinancialType) {
-        setHoldings(await fetchFinancialHoldings());
-      } else {
-        const all = await fetchWealthAllocationHoldings();
-        setHoldings(all.filter((h) => h.type.toLowerCase() === normalizedType));
-      }
+      const all = await fetchWealthAllocationHoldings();
+      setHoldings(all.filter((h) => h.type.toLowerCase() === normalizedType));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load data.");
     } finally {
       setIsLoading(false);
     }
-  }, [isFinancialType, normalizedType]);
+  }, [normalizedType]);
 
   useEffect(() => {
     loadHoldings();
   }, [loadHoldings]);
 
-  // For financial type, holdings are already filtered by investment DB (no real estate)
-  // For other types, holdings are pre-filtered in loadHoldings
   const typeHoldings = holdings;
 
   const sortedHoldings = useMemo(() => {
@@ -200,7 +159,7 @@ export default function WealthAllocationTypePage() {
               ↓ Export
             </Button>
             <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-              {isFinancialType ? "Source: Investment sheet" : "Source: Current Asset sheet"}
+              Source: Current Asset sheet
             </span>
           </div>
         </div>
