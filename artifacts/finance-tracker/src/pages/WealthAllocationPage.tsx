@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import AllocationChart from "@/pages/assets/AllocationChart";
 import AssetsHeader from "@/pages/assets/AssetsHeader";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import type { ChartPoint, HoldingItem, SnapshotRange, SortOrder } from "@/pages/assets/types";
 import { formatTypeLabel, formatVND, formatVNDFull } from "@/pages/assets/utils";
 import { fetchWealthAllocationHoldings } from "@/pages/wealthAllocationData";
-import { fetchTotalAssetData } from "@/lib/excel-sheets";
+import { fetchTotalAssetData, fetchTotalAssetRows, type TotalAssetRow } from "@/lib/excel-sheets";
 import { useToast } from "@/hooks/use-toast";
 
 export default function WealthAllocationPage() {
@@ -50,6 +50,8 @@ export default function WealthAllocationPage() {
       setIsLoading(false);
     }
   }, []);
+
+  const loanRowsQuery = useQuery({ queryKey: ["excel-total-asset-rows"], queryFn: fetchTotalAssetRows });
 
   useEffect(() => {
     loadWealthAllocation();
@@ -256,6 +258,62 @@ export default function WealthAllocationPage() {
                 )}
               </div>
             )}
+
+            {/* ── Theo dõi khoản vay ───────────────────────────────── */}
+            {(() => {
+              const rows: TotalAssetRow[] = loanRowsQuery.data ?? [];
+              const debtRows = rows.filter((r, i, arr) =>
+                r.debt > 0 || (arr[i - 1]?.debt ?? 0) > 0
+              );
+              if (!loanRowsQuery.isLoading && debtRows.length === 0) return null;
+              return (
+                <section className="space-y-2">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Theo dõi khoản vay</p>
+                  <Card className="overflow-hidden">
+                    {loanRowsQuery.isLoading ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">Loading...</div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-xs">
+                          <thead>
+                            <tr className="text-[9px] text-muted-foreground uppercase tracking-wider border-b border-border">
+                              <th className="py-2 px-4 text-left font-normal">Năm</th>
+                              <th className="py-2 px-4 text-right font-normal">Nợ đầu năm</th>
+                              <th className="py-2 px-4 text-right font-normal">Thanh toán</th>
+                              <th className="py-2 px-4 text-right font-normal">Nợ cuối năm</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {debtRows.map((row, i, arr) => {
+                              const prev = arr[i - 1];
+                              const debtStart = prev?.debt ?? null;
+                              const payment = debtStart != null ? Math.max(0, debtStart - row.debt) : null;
+                              const isCurrentYear = row.year === new Date().getFullYear();
+                              return (
+                                <tr key={row.year} className={`border-b border-border last:border-0 ${isCurrentYear ? "bg-primary/5" : ""}`}>
+                                  <td className={`py-2.5 px-4 font-semibold ${isCurrentYear ? "text-primary" : ""}`}>
+                                    {row.year}{isCurrentYear && <span className="ml-1.5 text-[9px] text-primary/70 uppercase tracking-wider">hiện tại</span>}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right tabular-nums text-muted-foreground">
+                                    {debtStart != null ? formatMoney(debtStart, true) : "—"}
+                                  </td>
+                                  <td className={`py-2.5 px-4 text-right tabular-nums font-medium ${payment && payment > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>
+                                    {payment != null && payment > 0 ? formatMoney(payment, true) : "—"}
+                                  </td>
+                                  <td className={`py-2.5 px-4 text-right tabular-nums font-semibold ${row.debt > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                                    {row.debt > 0 ? formatMoney(row.debt, true) : "Đã trả hết"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </Card>
+                </section>
+              );
+            })()}
 
             <HoldingsTable
               holdings={holdings}
