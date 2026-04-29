@@ -159,7 +159,7 @@ export default function WealthAllocationTypePage() {
               ↓ Export
             </Button>
             <span className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-              Source: Current Asset sheet
+              Source: Current Asset + Investment
             </span>
           </div>
         </div>

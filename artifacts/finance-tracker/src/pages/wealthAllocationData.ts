@@ -2,6 +2,9 @@ import type { HoldingItem } from "@/pages/assets/types";
 
 export const CURRENT_ASSET_SHEET = "Current asset";
 
+const FINANCIAL_TYPES = new Set(["financial"]);
+const REAL_ESTATE_TYPES = new Set(["real_estate", "realestate", "real estate"]);
+
 async function readJsonSafe(res: Response) {
   const contentType = res.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
@@ -92,11 +95,24 @@ export function parseCurrentAssetRows(rows: Array<Array<string | number>>): Hold
 }
 
 export async function fetchWealthAllocationHoldings() {
-  const sheetRes = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`);
+  const [sheetRes, summaryRes] = await Promise.all([
+    fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`),
+    fetch("/api/portfolio/summary"),
+  ]);
 
   const sheetData = await readJsonSafe(sheetRes);
   if (!sheetRes.ok) throw new Error(sheetData?.error || "Unable to load wealth allocation sheet.");
   const rows = Array.isArray(sheetData?.rows) ? sheetData.rows : [];
 
-  return parseCurrentAssetRows(rows);
+  const sheetHoldings = parseCurrentAssetRows(rows).filter((holding) => !FINANCIAL_TYPES.has(holding.type));
+
+  if (!summaryRes.ok) return sheetHoldings;
+
+  const summary = await summaryRes.json().catch(() => null) as { holdings?: HoldingItem[] } | null;
+  const investmentHoldings = (summary?.holdings ?? []).filter((holding) => {
+    const type = String(holding.type ?? "").toLowerCase().trim();
+    return !REAL_ESTATE_TYPES.has(type) && (holding.currentValue ?? 0) > 0;
+  });
+
+  return [...sheetHoldings, ...investmentHoldings];
 }
