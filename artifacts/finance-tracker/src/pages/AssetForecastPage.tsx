@@ -8,6 +8,18 @@ import { CURRENT_ASSET_SHEET, parseCurrentAssetRows } from "@/pages/wealthAlloca
 import type { HoldingItem } from "@/pages/assets/types";
 
 const FORECAST_YEARS = [2026, 2027, 2028, 2029, 2030];
+const FREE_CASH_ALLOCATION = {
+  cash: 0.1,
+  gold: 0.3,
+  fund: 0.1,
+  crypto: 0.1,
+};
+const STOCK_FREE_CASH_RATIO =
+  1 -
+  FREE_CASH_ALLOCATION.cash -
+  FREE_CASH_ALLOCATION.gold -
+  FREE_CASH_ALLOCATION.fund -
+  FREE_CASH_ALLOCATION.crypto;
 
 type FreeCashRow = {
   year: number;
@@ -329,6 +341,70 @@ export default function AssetForecastPage() {
                           <td className={`py-2 pl-4 text-right tabular-nums font-semibold whitespace-nowrap ${row.freeCash >= 0 ? "text-emerald-400" : "text-red-300"}`}>
                             {formatVNDFull(row.freeCash)}
                           </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </section>
+
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Phân bổ free cash cho investment
+            </p>
+            <p className="text-[10px] text-muted-foreground">Stock là phần còn lại</p>
+          </div>
+          <Card className="p-4 md:p-5">
+            {freeCashQuery.isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((row) => (
+                  <div key={row} className="h-8 rounded bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : freeCashRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Chưa có dữ liệu free cash để phân bổ.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-xs">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                      <th className="py-2 pr-4 text-left font-medium">Free cash</th>
+                      <th className="py-2 px-4 text-right font-medium">Cash</th>
+                      <th className="py-2 px-4 text-right font-medium">Gold</th>
+                      <th className="py-2 px-4 text-right font-medium">Fund</th>
+                      <th className="py-2 px-4 text-right font-medium">Crypto</th>
+                      <th className="py-2 pl-4 text-right font-medium">Stock</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    <tr className="bg-muted/20">
+                      <td className="py-2 pr-4 font-medium whitespace-nowrap">Ratio</td>
+                      <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(FREE_CASH_ALLOCATION.cash * 100)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(FREE_CASH_ALLOCATION.gold * 100)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(FREE_CASH_ALLOCATION.fund * 100)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(FREE_CASH_ALLOCATION.crypto * 100)}</td>
+                      <td className="py-2 pl-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(STOCK_FREE_CASH_RATIO * 100)}</td>
+                    </tr>
+                    {freeCashRows.map((row) => {
+                      const allocatableFreeCash = Math.max(row.freeCash, 0);
+                      const isSelected = row.year === selectedYear;
+                      return (
+                        <tr key={`allocation-${row.year}`} className={isSelected ? "bg-primary/5" : undefined}>
+                          <td className="py-2 pr-4 whitespace-nowrap">
+                            <span className="font-medium">{row.year}</span>
+                            <span className={`ml-3 tabular-nums ${row.freeCash >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                              {formatVNDFull(row.freeCash)}
+                            </span>
+                          </td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(allocatableFreeCash * FREE_CASH_ALLOCATION.cash)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(allocatableFreeCash * FREE_CASH_ALLOCATION.gold)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(allocatableFreeCash * FREE_CASH_ALLOCATION.fund)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(allocatableFreeCash * FREE_CASH_ALLOCATION.crypto)}</td>
+                          <td className="py-2 pl-4 text-right tabular-nums font-semibold whitespace-nowrap">{formatVNDFull(allocatableFreeCash * STOCK_FREE_CASH_RATIO)}</td>
                         </tr>
                       );
                     })}
