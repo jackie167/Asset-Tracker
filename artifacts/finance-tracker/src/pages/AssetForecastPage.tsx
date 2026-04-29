@@ -52,6 +52,10 @@ function assetReturnKey(holding: HoldingItem) {
   return `${holding.type.trim().toLowerCase()}::${holding.symbol.trim().toUpperCase()}`;
 }
 
+function assetValueKey(holding: HoldingItem) {
+  return assetReturnKey(holding);
+}
+
 async function fetchCurrentAssetData(): Promise<HoldingItem[]> {
   try {
     const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`);
@@ -176,6 +180,7 @@ export default function AssetForecastPage() {
   const [freeCashRatioInput, setFreeCashRatioInput] = useState(() => LS.get("asset_forecast_free_cash_ratio", "100"));
   const [extraCashInput, setExtraCashInput] = useState(() => LS.get("asset_forecast_extra_cash", "0"));
   const [assetReturnInputs, setAssetReturnInputs] = useState(() => readJsonRecord("asset_forecast_asset_returns"));
+  const [assetValueInputs, setAssetValueInputs] = useState(() => readJsonRecord("asset_forecast_asset_values"));
 
   const currentAssetQuery = useQuery({ queryKey: ["asset-forecast-current-asset"], queryFn: fetchCurrentAssetData });
   const freeCashQuery = useQuery({ queryKey: ["asset-forecast-free-cash-rows"], queryFn: fetchFreeCashRows });
@@ -187,7 +192,11 @@ export default function AssetForecastPage() {
     freeCashRows.find((row) => row.year === selectedYear) ??
     freeCashRows.find((row) => row.year === 2026) ??
     null;
-  const currentAssetTotal = currentAssetRows.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
+  const currentAssetTotal = currentAssetRows.reduce((sum, holding) => {
+    const valueInput = assetValueInputs[assetValueKey(holding)];
+    const currentValue = valueInput == null ? holding.currentValue ?? 0 : parseInputNumber(valueInput);
+    return sum + currentValue;
+  }, 0);
   const autoBeginningAsset = currentAssetTotal;
   const beginningAsset = beginningAssetInput.trim() ? parseInputNumber(beginningAssetInput) : autoBeginningAsset;
   const returnRate = parseInputNumber(returnRateInput) / 100;
@@ -198,7 +207,8 @@ export default function AssetForecastPage() {
   const freeCash = selectedFreeCashRow?.freeCash ?? 0;
   const investableFreeCash = freeCash * Math.max(freeCashRatio, 0) + extraCash;
   const currentAssetGrowth = currentAssetRows.reduce((sum, holding) => {
-    const currentValue = holding.currentValue ?? 0;
+    const valueInput = assetValueInputs[assetValueKey(holding)];
+    const currentValue = valueInput == null ? holding.currentValue ?? 0 : parseInputNumber(valueInput);
     const rateInput = assetReturnInputs[assetReturnKey(holding)] ?? returnRateInput;
     return sum + currentValue * (parseInputNumber(rateInput) / 100);
   }, 0);
@@ -227,6 +237,15 @@ export default function AssetForecastPage() {
     setAssetReturnInputs((current) => {
       const next = { ...current, [key]: value };
       LS.set("asset_forecast_asset_returns", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const saveAssetValueInput = (holding: HoldingItem, value: string) => {
+    const key = assetValueKey(holding);
+    setAssetValueInputs((current) => {
+      const next = { ...current, [key]: value };
+      LS.set("asset_forecast_asset_values", JSON.stringify(next));
       return next;
     });
   };
@@ -492,7 +511,8 @@ export default function AssetForecastPage() {
                   </thead>
                   <tbody className="divide-y divide-border/40">
                     {currentAssetRows.map((holding) => {
-                      const currentValue = holding.currentValue ?? 0;
+                      const valueInput = assetValueInputs[assetValueKey(holding)] ?? String(Math.round(holding.currentValue ?? 0));
+                      const currentValue = parseInputNumber(valueInput);
                       const weight = currentAssetTotal > 0 ? currentValue / currentAssetTotal : null;
                       const returnInput = assetReturnInputs[assetReturnKey(holding)] ?? returnRateInput;
                       const assetReturnRate = parseInputNumber(returnInput) / 100;
@@ -503,7 +523,17 @@ export default function AssetForecastPage() {
                         <tr key={`${holding.type}-${holding.symbol}`}>
                           <td className="py-2 pr-4 font-medium whitespace-nowrap">{holding.symbol}</td>
                           <td className="py-2 px-4 text-muted-foreground whitespace-nowrap">{formatTypeLabel(holding.type)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(currentValue)}</td>
+                          <td className="py-2 px-4 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 focus-within:ring-1 focus-within:ring-primary">
+                              <input
+                                value={valueInput}
+                                onChange={(event) => saveAssetValueInput(holding, event.target.value)}
+                                inputMode="numeric"
+                                className="w-32 bg-transparent text-right text-[11px] tabular-nums outline-none"
+                              />
+                              <span className="text-[10px] text-muted-foreground">đ</span>
+                            </div>
+                          </td>
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground whitespace-nowrap">
                             {weight == null ? "—" : formatPercentValue(weight * 100)}
                           </td>
