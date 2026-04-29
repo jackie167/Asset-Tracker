@@ -39,6 +39,19 @@ const LS = {
   set: (key: string, value: string) => localStorage.setItem(key, value),
 };
 
+function readJsonRecord(key: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, string> : {};
+  } catch {
+    return {};
+  }
+}
+
+function assetReturnKey(holding: HoldingItem) {
+  return `${holding.type.trim().toLowerCase()}::${holding.symbol.trim().toUpperCase()}`;
+}
+
 async function fetchCurrentAssetData(): Promise<HoldingItem[]> {
   try {
     const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`);
@@ -162,6 +175,7 @@ export default function AssetForecastPage() {
   const [returnRateInput, setReturnRateInput] = useState(() => LS.get("asset_forecast_return_rate", "8"));
   const [freeCashRatioInput, setFreeCashRatioInput] = useState(() => LS.get("asset_forecast_free_cash_ratio", "100"));
   const [extraCashInput, setExtraCashInput] = useState(() => LS.get("asset_forecast_extra_cash", "0"));
+  const [assetReturnInputs, setAssetReturnInputs] = useState(() => readJsonRecord("asset_forecast_asset_returns"));
 
   const currentAssetQuery = useQuery({ queryKey: ["asset-forecast-current-asset"], queryFn: fetchCurrentAssetData });
   const freeCashQuery = useQuery({ queryKey: ["asset-forecast-free-cash-rows"], queryFn: fetchFreeCashRows });
@@ -183,9 +197,14 @@ export default function AssetForecastPage() {
   const annualExpense = selectedFreeCashRow?.totalExpense ?? 0;
   const freeCash = selectedFreeCashRow?.freeCash ?? 0;
   const investableFreeCash = freeCash * Math.max(freeCashRatio, 0) + extraCash;
+  const currentAssetGrowth = currentAssetRows.reduce((sum, holding) => {
+    const currentValue = holding.currentValue ?? 0;
+    const rateInput = assetReturnInputs[assetReturnKey(holding)] ?? returnRateInput;
+    return sum + currentValue * (parseInputNumber(rateInput) / 100);
+  }, 0);
 
   const forecast = useMemo(() => {
-    const investmentGain = beginningAsset * returnRate;
+    const investmentGain = beginningAssetInput.trim() ? beginningAsset * returnRate : currentAssetGrowth;
     const endingAsset = beginningAsset + investmentGain + investableFreeCash;
     const totalIncrease = endingAsset - beginningAsset;
     const totalIncreaseRate = beginningAsset > 0 ? totalIncrease / beginningAsset : null;
@@ -196,11 +215,20 @@ export default function AssetForecastPage() {
       totalIncrease,
       totalIncreaseRate,
     };
-  }, [beginningAsset, investableFreeCash, returnRate]);
+  }, [beginningAsset, beginningAssetInput, currentAssetGrowth, investableFreeCash, returnRate]);
 
   const saveField = (key: string, setter: (value: string) => void) => (value: string) => {
     setter(value);
     LS.set(key, value);
+  };
+
+  const saveAssetReturnInput = (holding: HoldingItem, value: string) => {
+    const key = assetReturnKey(holding);
+    setAssetReturnInputs((current) => {
+      const next = { ...current, [key]: value };
+      LS.set("asset_forecast_asset_returns", JSON.stringify(next));
+      return next;
+    });
   };
 
   return (
@@ -228,7 +256,7 @@ export default function AssetForecastPage() {
                 placeholder={currentAssetQuery.isLoading ? "Đang tải..." : formatVNDFull(autoBeginningAsset)}
               />
               <Field
-                label="Tỷ suất tăng trưởng giả định"
+                label="Tỷ suất mặc định"
                 value={returnRateInput}
                 onChange={saveField("asset_forecast_return_rate", setReturnRateInput)}
                 suffix="%/năm"
@@ -278,7 +306,7 @@ export default function AssetForecastPage() {
                       ["Tổng chi", formatVNDFull(annualExpense)],
                       ["Free cash trước phân bổ", formatVNDFull(freeCash)],
                       ["Free cash đưa vào tài sản", formatVNDFull(investableFreeCash)],
-                      ["Tỷ suất tăng trưởng giả định", formatPercentValue(returnRate * 100)],
+                      ["Tỷ suất mặc định", formatPercentValue(returnRate * 100)],
                       ["Tổng tăng tài sản", formatVNDFull(forecast.totalIncrease)],
                       ["Tỷ lệ tăng tổng", forecast.totalIncreaseRate == null ? "—" : formatPercentValue(forecast.totalIncreaseRate * 100)],
                     ].map(([label, value]) => (
@@ -466,7 +494,9 @@ export default function AssetForecastPage() {
                     {currentAssetRows.map((holding) => {
                       const currentValue = holding.currentValue ?? 0;
                       const weight = currentAssetTotal > 0 ? currentValue / currentAssetTotal : null;
-                      const growth = currentValue * returnRate;
+                      const returnInput = assetReturnInputs[assetReturnKey(holding)] ?? returnRateInput;
+                      const assetReturnRate = parseInputNumber(returnInput) / 100;
+                      const growth = currentValue * assetReturnRate;
                       const endingValue = currentValue + growth;
 
                       return (
@@ -477,8 +507,16 @@ export default function AssetForecastPage() {
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground whitespace-nowrap">
                             {weight == null ? "—" : formatPercentValue(weight * 100)}
                           </td>
-                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                            {formatPercentValue(returnRate * 100)}
+                          <td className="py-2 px-4 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 focus-within:ring-1 focus-within:ring-primary">
+                              <input
+                                value={returnInput}
+                                onChange={(event) => saveAssetReturnInput(holding, event.target.value)}
+                                inputMode="decimal"
+                                className="w-14 bg-transparent text-right text-[11px] tabular-nums outline-none"
+                              />
+                              <span className="text-[10px] text-muted-foreground">%</span>
+                            </div>
                           </td>
                           <td className={`py-2 px-4 text-right tabular-nums whitespace-nowrap ${growth >= 0 ? "text-emerald-400" : "text-red-300"}`}>
                             {formatVNDFull(growth)}
@@ -496,9 +534,9 @@ export default function AssetForecastPage() {
                       <td className="pt-3 px-4 text-right tabular-nums text-muted-foreground">100.00%</td>
                       <td />
                       <td className={`pt-3 px-4 text-right tabular-nums font-semibold whitespace-nowrap ${forecast.investmentGain >= 0 ? "text-emerald-400" : "text-red-300"}`}>
-                        {formatVNDFull(currentAssetTotal * returnRate)}
+                        {formatVNDFull(currentAssetGrowth)}
                       </td>
-                      <td className="pt-3 pl-4 text-right tabular-nums font-semibold whitespace-nowrap">{formatVNDFull(currentAssetTotal * (1 + returnRate))}</td>
+                      <td className="pt-3 pl-4 text-right tabular-nums font-semibold whitespace-nowrap">{formatVNDFull(currentAssetTotal + currentAssetGrowth)}</td>
                     </tr>
                   </tfoot>
                 </table>
