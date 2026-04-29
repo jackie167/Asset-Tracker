@@ -88,6 +88,40 @@ export default function WealthAllocationPage() {
 
   const chartData: ChartPoint[] = [];
 
+  // ── Investment Growth Forecast ────────────────────────────────────────────
+  const INVEST_TYPES = ["cash", "stock", "gold", "fund", "crypto", "bond"] as const;
+  type InvestType = typeof INVEST_TYPES[number];
+  const DEFAULT_RATES: Record<InvestType, number> = { cash: 4, stock: 15, gold: 8, fund: 9, crypto: 15, bond: 7 };
+  const TYPE_LABELS: Record<InvestType, string> = { cash: "Cash", stock: "Stock", gold: "Gold", fund: "Fund", crypto: "Crypto", bond: "Bond" };
+
+  const [growthRates, setGrowthRates] = useState<Record<InvestType, number>>(() => {
+    const stored = localStorage.getItem("wealth_growth_rates");
+    return stored ? { ...DEFAULT_RATES, ...JSON.parse(stored) } : DEFAULT_RATES;
+  });
+
+  const updateRate = (type: InvestType, value: number) => {
+    const next = { ...growthRates, [type]: value };
+    setGrowthRates(next);
+    localStorage.setItem("wealth_growth_rates", JSON.stringify(next));
+  };
+
+  const investRows = useMemo(() => {
+    const grouped = new Map<string, number>();
+    for (const h of holdings) {
+      const t = h.type.toLowerCase();
+      if (!INVEST_TYPES.includes(t as InvestType)) continue;
+      grouped.set(t, (grouped.get(t) ?? 0) + (h.currentValue ?? 0));
+    }
+    return INVEST_TYPES
+      .filter((t) => grouped.has(t))
+      .map((t) => {
+        const value = grouped.get(t) ?? 0;
+        const rate = (growthRates[t] ?? DEFAULT_RATES[t]) / 100;
+        const gain = value * rate;
+        return { type: t, label: TYPE_LABELS[t], value, rate: growthRates[t] ?? DEFAULT_RATES[t], gain, projected: value + gain };
+      });
+  }, [holdings, growthRates]);
+
   const formatMoney = (value: number | null | undefined, full = false) =>
     hideValues ? "****" : full ? formatVNDFull(value) : formatVND(value);
 
@@ -257,6 +291,69 @@ export default function WealthAllocationPage() {
                   />
                 )}
               </div>
+            )}
+
+            {/* ── Dự báo Gia tăng Investment ───────────────────────── */}
+            {investRows.length > 0 && (
+              <section className="space-y-2">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Dự báo Gia tăng Investment</p>
+                <Card className="overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="text-[9px] text-muted-foreground uppercase tracking-wider border-b border-border">
+                          <th className="py-2 px-4 text-left font-normal">Tài sản</th>
+                          <th className="py-2 px-4 text-right font-normal">Giá trị hiện tại</th>
+                          <th className="py-2 px-4 text-right font-normal">% / năm</th>
+                          <th className="py-2 px-4 text-right font-normal">Kỳ vọng tăng</th>
+                          <th className="py-2 px-4 text-right font-normal">Dự báo cuối năm</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {investRows.map((row) => (
+                          <tr key={row.type} className="border-b border-border last:border-0 hover:bg-muted/20">
+                            <td className="py-2.5 px-4 font-medium">{row.label}</td>
+                            <td className="py-2.5 px-4 text-right tabular-nums">{formatMoney(row.value, true)}</td>
+                            <td className="py-2.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step={0.5}
+                                  value={row.rate}
+                                  onChange={(e) => updateRate(row.type as InvestType, Number(e.target.value))}
+                                  className="w-16 rounded border border-border bg-background px-2 py-0.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                                <span className="text-muted-foreground">%</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-4 text-right tabular-nums font-medium text-emerald-400">
+                              +{formatMoney(row.gain, true)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right tabular-nums font-semibold">
+                              {formatMoney(row.projected, true)}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="border-t-2 border-border bg-muted/10">
+                          <td className="py-2.5 px-4 font-bold">Tổng</td>
+                          <td className="py-2.5 px-4 text-right tabular-nums font-bold">
+                            {formatMoney(investRows.reduce((s, r) => s + r.value, 0), true)}
+                          </td>
+                          <td />
+                          <td className="py-2.5 px-4 text-right tabular-nums font-bold text-emerald-400">
+                            +{formatMoney(investRows.reduce((s, r) => s + r.gain, 0), true)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right tabular-nums font-bold">
+                            {formatMoney(investRows.reduce((s, r) => s + r.projected, 0), true)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </section>
             )}
 
             {/* ── Theo dõi khoản vay ───────────────────────────────── */}
