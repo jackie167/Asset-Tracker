@@ -2,22 +2,22 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import PageHeader from "@/pages/PageHeader";
 import { Card } from "@/components/ui/card";
-import { formatVNDFull } from "@/pages/assets/utils";
+import { formatTypeLabel, formatVNDFull } from "@/pages/assets/utils";
 import { CASHFLOW_SOURCE_SHEET, fetchCashflowData } from "@/lib/excel-sheets";
-
-type PortfolioSummary = {
-  totalValue: number;
-};
+import { CURRENT_ASSET_SHEET, parseCurrentAssetRows } from "@/pages/wealthAllocationData";
+import type { HoldingItem } from "@/pages/assets/types";
 
 const LS = {
   get: (key: string, fallback: string) => localStorage.getItem(key) ?? fallback,
   set: (key: string, value: string) => localStorage.setItem(key, value),
 };
 
-async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> {
-  const res = await fetch("/api/portfolio/summary");
-  if (!res.ok) return null;
-  return res.json();
+async function fetchCurrentAssetData(): Promise<HoldingItem[]> {
+  const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CURRENT_ASSET_SHEET)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  return parseCurrentAssetRows(rows);
 }
 
 function parseInputNumber(value: string): number {
@@ -86,10 +86,12 @@ export default function AssetForecastPage() {
   const [freeCashRatioInput, setFreeCashRatioInput] = useState(() => LS.get("asset_forecast_free_cash_ratio", "100"));
   const [extraCashInput, setExtraCashInput] = useState(() => LS.get("asset_forecast_extra_cash", "0"));
 
-  const portfolioQuery = useQuery({ queryKey: ["asset-forecast-portfolio"], queryFn: fetchPortfolioSummary });
+  const currentAssetQuery = useQuery({ queryKey: ["asset-forecast-current-asset"], queryFn: fetchCurrentAssetData });
   const cashflowQuery = useQuery({ queryKey: ["asset-forecast-function-cashflow"], queryFn: fetchCashflowData });
 
-  const autoBeginningAsset = portfolioQuery.data?.totalValue ?? 0;
+  const currentAssetRows = currentAssetQuery.data ?? [];
+  const currentAssetTotal = currentAssetRows.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
+  const autoBeginningAsset = currentAssetTotal;
   const beginningAsset = beginningAssetInput.trim() ? parseInputNumber(beginningAssetInput) : autoBeginningAsset;
   const returnRate = parseInputNumber(returnRateInput) / 100;
   const freeCashRatio = parseInputNumber(freeCashRatioInput) / 100;
@@ -140,7 +142,7 @@ export default function AssetForecastPage() {
                 value={beginningAssetInput}
                 onChange={saveField("asset_forecast_beginning_asset", setBeginningAssetInput)}
                 suffix="đ"
-                placeholder={portfolioQuery.isLoading ? "Đang tải..." : formatVNDFull(autoBeginningAsset)}
+                placeholder={currentAssetQuery.isLoading ? "Đang tải..." : formatVNDFull(autoBeginningAsset)}
               />
               <Field
                 label="Tỷ suất tăng trưởng giả định"
@@ -162,7 +164,7 @@ export default function AssetForecastPage() {
               />
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Nếu để trống tài sản đầu năm, hệ thống dùng giá trị portfolio hiện tại làm mặc định. Free cash lấy từ sheet {CASHFLOW_SOURCE_SHEET}.
+              Nếu để trống tài sản đầu năm, hệ thống dùng tổng từ sheet {CURRENT_ASSET_SHEET}. Free cash lấy từ sheet {CASHFLOW_SOURCE_SHEET}.
             </p>
           </Card>
 
@@ -207,6 +209,83 @@ export default function AssetForecastPage() {
               </div>
             </Card>
           </div>
+        </section>
+
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Data chuẩn bị từ sheet {CURRENT_ASSET_SHEET}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {currentAssetRows.length} dòng · tổng {formatVNDFull(currentAssetTotal)}
+            </p>
+          </div>
+          <Card className="p-4 md:p-5">
+            {currentAssetQuery.isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((row) => (
+                  <div key={row} className="h-8 rounded bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : currentAssetRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Chưa đọc được dữ liệu từ sheet {CURRENT_ASSET_SHEET}.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-xs">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                      <th className="py-2 pr-4 text-left font-medium">Asset</th>
+                      <th className="py-2 px-4 text-left font-medium">Type</th>
+                      <th className="py-2 px-4 text-right font-medium">Current asset</th>
+                      <th className="py-2 px-4 text-right font-medium">Weight</th>
+                      <th className="py-2 px-4 text-right font-medium">Assumed return</th>
+                      <th className="py-2 px-4 text-right font-medium">Growth</th>
+                      <th className="py-2 pl-4 text-right font-medium">End value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {currentAssetRows.map((holding) => {
+                      const currentValue = holding.currentValue ?? 0;
+                      const weight = currentAssetTotal > 0 ? currentValue / currentAssetTotal : null;
+                      const growth = currentValue * returnRate;
+                      const endingValue = currentValue + growth;
+
+                      return (
+                        <tr key={`${holding.type}-${holding.symbol}`}>
+                          <td className="py-2 pr-4 font-medium whitespace-nowrap">{holding.symbol}</td>
+                          <td className="py-2 px-4 text-muted-foreground whitespace-nowrap">{formatTypeLabel(holding.type)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(currentValue)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                            {weight == null ? "—" : formatPercentValue(weight * 100)}
+                          </td>
+                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                            {formatPercentValue(returnRate * 100)}
+                          </td>
+                          <td className={`py-2 px-4 text-right tabular-nums whitespace-nowrap ${growth >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                            {formatVNDFull(growth)}
+                          </td>
+                          <td className="py-2 pl-4 text-right tabular-nums font-semibold whitespace-nowrap">{formatVNDFull(endingValue)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-border">
+                      <td className="pt-3 pr-4 text-[10px] uppercase tracking-wider text-muted-foreground">Total</td>
+                      <td />
+                      <td className="pt-3 px-4 text-right tabular-nums font-semibold whitespace-nowrap">{formatVNDFull(currentAssetTotal)}</td>
+                      <td className="pt-3 px-4 text-right tabular-nums text-muted-foreground">100.00%</td>
+                      <td />
+                      <td className={`pt-3 px-4 text-right tabular-nums font-semibold whitespace-nowrap ${forecast.investmentGain >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                        {formatVNDFull(currentAssetTotal * returnRate)}
+                      </td>
+                      <td className="pt-3 pl-4 text-right tabular-nums font-semibold whitespace-nowrap">{formatVNDFull(currentAssetTotal * (1 + returnRate))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </Card>
         </section>
       </main>
     </div>
