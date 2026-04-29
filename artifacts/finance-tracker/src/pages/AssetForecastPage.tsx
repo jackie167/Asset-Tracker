@@ -194,6 +194,8 @@ export default function AssetForecastPage() {
   type InvestType = typeof INVEST_TYPES[number];
   const DEFAULT_RATES: Record<InvestType, number> = { cash: 4, stock: 15, gold: 8, fund: 9, crypto: 15, bond: 7 };
   const TYPE_LABELS: Record<InvestType, string> = { cash: "Cash", stock: "Stock", gold: "Gold", fund: "Fund", crypto: "Crypto", bond: "Bond" };
+  // Financial rows in the sheet have type="financial" but symbol tells us what they are
+  const SYMBOL_TYPE_MAP: Record<string, InvestType> = { cash: "cash", stock: "stock", gold: "gold", fund: "fund", crypto: "crypto", bond: "bond" };
 
   const [growthRates, setGrowthRates] = useState<Record<InvestType, number>>(() => {
     const stored = localStorage.getItem("wealth_growth_rates");
@@ -209,11 +211,13 @@ export default function AssetForecastPage() {
   const investRows = useMemo(() => {
     const grouped = new Map<string, number>();
     for (const h of currentAssetRows) {
-      const t = h.type.toLowerCase() as InvestType;
-      if (!INVEST_TYPES.includes(t)) continue;
-      const val = assetValueInputs[assetValueKey(h)] != null
-        ? parseInputNumber(assetValueInputs[assetValueKey(h)]!)
-        : (h.currentValue ?? 0);
+      // Match by type directly OR by symbol (Financial rows: type="financial", symbol="Cash" etc.)
+      const byType = INVEST_TYPES.includes(h.type.toLowerCase() as InvestType) ? h.type.toLowerCase() as InvestType : null;
+      const bySymbol = SYMBOL_TYPE_MAP[h.symbol.toLowerCase()];
+      const t = byType ?? bySymbol;
+      if (!t) continue;
+      const override = assetValueInputs[assetValueKey(h)];
+      const val = override != null ? parseInputNumber(override) : (h.currentValue ?? 0);
       grouped.set(t, (grouped.get(t) ?? 0) + val);
     }
     return INVEST_TYPES.filter((t) => grouped.has(t)).map((t) => {
@@ -546,7 +550,11 @@ export default function AssetForecastPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40">
-                    {currentAssetRows.map((holding) => {
+                    {currentAssetRows.filter((h) => {
+                      const t = h.type.toLowerCase();
+                      const sym = h.symbol.toLowerCase();
+                      return t !== "financial" && !SYMBOL_TYPE_MAP[sym];
+                    }).map((holding) => {
                       const valueInput = assetValueInputs[assetValueKey(holding)] ?? String(Math.round(holding.currentValue ?? 0));
                       const currentValue = parseInputNumber(valueInput);
                       const weight = currentAssetTotal > 0 ? currentValue / currentAssetTotal : null;
