@@ -356,7 +356,7 @@ export default function AssetForecastPage() {
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
               Phân bổ free cash cho investment
             </p>
-            <p className="text-[10px] text-muted-foreground">Stock là phần còn lại</p>
+            <p className="text-[10px] text-muted-foreground">Free cash cuối năm N phân bổ cho N+1</p>
           </div>
           <Card className="p-4 md:p-5">
             {freeCashQuery.isLoading ? (
@@ -390,12 +390,13 @@ export default function AssetForecastPage() {
                       <td className="py-2 pl-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(STOCK_FREE_CASH_RATIO * 100)}</td>
                     </tr>
                     {freeCashRows.map((row) => {
+                      const allocationYear = row.year + 1;
                       const allocatableFreeCash = row.freeCash;
-                      const isSelected = row.year === selectedYear;
+                      const isSelected = allocationYear === selectedYear;
                       return (
-                        <tr key={`allocation-${row.year}`} className={isSelected ? "bg-primary/5" : undefined}>
+                        <tr key={`allocation-${allocationYear}`} className={isSelected ? "bg-primary/5" : undefined}>
                           <td className="py-2 pr-4 whitespace-nowrap">
-                            <span className="font-medium">{row.year}</span>
+                            <span className="font-medium">{allocationYear}</span>
                             <span className={`ml-3 tabular-nums ${row.freeCash >= 0 ? "text-emerald-400" : "text-red-300"}`}>
                               {formatVNDFull(row.freeCash)}
                             </span>
