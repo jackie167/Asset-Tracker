@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import PageHeader from "@/pages/PageHeader";
 import type { HoldingItem } from "@/pages/assets/types";
 import { formatVNDFull } from "@/pages/assets/utils";
-import { CASHFLOW_SOURCE_SHEET, fetchCashflowData, fetchTotalAssetData } from "@/lib/excel-sheets";
+import { CASHFLOW_SOURCE_SHEET, fetchCashflowData, fetchTotalAssetData, fetchTotalAssetRows } from "@/lib/excel-sheets";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -135,6 +135,7 @@ export default function FirePlanningPage() {
   const xirrQuery = useQuery({ queryKey: ["portfolio-xirr"], queryFn: fetchXirr });
   const cashflowQuery = useQuery({ queryKey: ["excel-function-cashflow"], queryFn: fetchCashflowData });
   const totalAssetQuery = useQuery({ queryKey: ["excel-total-asset"], queryFn: fetchTotalAssetData });
+  const totalAssetRowsQuery = useQuery({ queryKey: ["excel-total-asset-rows"], queryFn: fetchTotalAssetRows });
 
   const isLoading = investQuery.isLoading || cashflowQuery.isLoading;
 
@@ -453,6 +454,55 @@ export default function FirePlanningPage() {
                 );
               })}
             </div>
+          </Card>
+        </section>
+
+        {/* ── Theo dõi khoản vay ───────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Theo dõi khoản vay</p>
+          <Card className="overflow-hidden">
+            {totalAssetRowsQuery.isLoading ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">Loading...</div>
+            ) : !totalAssetRowsQuery.data?.some((r) => r.debt > 0) ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">Không có khoản vay.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="text-[9px] text-muted-foreground uppercase tracking-wider border-b border-border">
+                      <th className="py-2 px-4 text-left font-normal">Năm</th>
+                      <th className="py-2 px-4 text-right font-normal">Nợ đầu năm</th>
+                      <th className="py-2 px-4 text-right font-normal">Thanh toán</th>
+                      <th className="py-2 px-4 text-right font-normal">Nợ cuối năm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(totalAssetRowsQuery.data ?? []).filter((r) => r.debt > 0 || (totalAssetRowsQuery.data ?? []).findIndex((x) => x.year === r.year - 1 && x.debt > 0) >= 0).map((row, i, arr) => {
+                      const prev = arr[i - 1];
+                      const debtStart = prev?.debt ?? null;
+                      const payment = debtStart != null ? Math.max(0, debtStart - row.debt) : null;
+                      const isCurrentYear = row.year === new Date().getFullYear();
+                      return (
+                        <tr key={row.year} className={`border-b border-border last:border-0 ${isCurrentYear ? "bg-primary/5" : ""}`}>
+                          <td className={`py-2.5 px-4 font-semibold ${isCurrentYear ? "text-primary" : ""}`}>
+                            {row.year}{isCurrentYear && <span className="ml-1.5 text-[9px] text-primary/70 uppercase tracking-wider">hiện tại</span>}
+                          </td>
+                          <td className="py-2.5 px-4 text-right tabular-nums text-muted-foreground">
+                            {debtStart != null ? fmt(debtStart, hide) : "—"}
+                          </td>
+                          <td className={`py-2.5 px-4 text-right tabular-nums font-medium ${payment && payment > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>
+                            {payment != null ? (payment > 0 ? fmt(payment, hide) : "—") : "—"}
+                          </td>
+                          <td className={`py-2.5 px-4 text-right tabular-nums font-semibold ${row.debt > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                            {row.debt > 0 ? fmt(row.debt, hide) : "Đã trả hết"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
         </section>
 

@@ -67,6 +67,38 @@ export async function fetchCashflowData(): Promise<CashflowData | null> {
   };
 }
 
+export type TotalAssetRow = {
+  year: number;
+  totalAsset: number;
+  netAsset: number;
+  debt: number;
+};
+
+export async function fetchTotalAssetRows(): Promise<TotalAssetRow[]> {
+  const res = await fetch("/api/excel/sheet?name=Total Asset");
+  if (!res.ok) return [];
+  const data = await res.json();
+  const rows: unknown[][] = data?.rows ?? [];
+  if (rows.length < 2) return [];
+
+  const headers = rows[0];
+  const yearCol  = findColIdx(headers, ["year", "năm"]);
+  const totalCol = findColIdx(headers, ["net asset", "tổng tài sản", "tong tai san"]);
+  const netCol   = findColIdx(headers, ["asset", "tài sản ròng", "tai san rong"]);
+  const debtCol  = findColIdx(headers, ["total loan", "loan", "nợ", "no"]);
+  if (yearCol < 0) return [];
+
+  return rows
+    .slice(1)
+    .map((r) => ({
+      year:       Number(r[yearCol]),
+      totalAsset: parseNum(totalCol >= 0 ? r[totalCol] : 0),
+      netAsset:   netCol >= 0 ? parseNum(r[netCol]) : 0,
+      debt:       Math.abs(parseNum(debtCol >= 0 ? r[debtCol] : 0)),
+    }))
+    .filter((r) => r.year > 1900 && r.year < 2200);
+}
+
 export async function fetchTotalAssetData(): Promise<TotalAssetData | null> {
   const res = await fetch("/api/excel/sheet?name=Total Asset");
   if (!res.ok) return null;
