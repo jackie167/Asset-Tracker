@@ -390,7 +390,7 @@ export default function AssetForecastPage() {
                       <td className="py-2 pl-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(STOCK_FREE_CASH_RATIO * 100)}</td>
                     </tr>
                     {freeCashRows.map((row) => {
-                      const allocatableFreeCash = Math.max(row.freeCash, 0);
+                      const allocatableFreeCash = row.freeCash;
                       const isSelected = row.year === selectedYear;
                       return (
                         <tr key={`allocation-${row.year}`} className={isSelected ? "bg-primary/5" : undefined}>
