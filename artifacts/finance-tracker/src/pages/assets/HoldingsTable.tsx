@@ -275,8 +275,11 @@ export default function HoldingsTable({
   };
 
   const headerCellClass = "px-2 py-1.5 text-[9px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap";
+  const compactHeaderCellClass = `${headerCellClass} w-px`;
   const cellClass = "px-2 py-2.5 border-b border-border align-middle whitespace-nowrap";
+  const compactCellClass = `${cellClass} w-px`;
   const numericCellClass = `${cellClass} text-right tabular-nums`;
+  const compactNumericCellClass = `${compactCellClass} text-right tabular-nums`;
 
   return (
     <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -377,13 +380,13 @@ export default function HoldingsTable({
                 <table className="w-max table-auto border-separate border-spacing-0 text-xs">
                   <thead>
                     <tr>
-                      <th className={`${headerCellClass} text-left`}>
+                      <th className={`${compactHeaderCellClass} text-left`}>
                         <button type="button" onClick={() => handleSort("symbol")} className="hover:text-foreground transition-colors">Asset{sortIndicator("symbol")}</button>
                       </th>
-                      <th className={`${headerCellClass} text-center`}>
+                      <th className={`${compactHeaderCellClass} text-center`}>
                         <button type="button" onClick={() => handleSort("type")} className="hover:text-foreground transition-colors">Type{sortIndicator("type")}</button>
                       </th>
-                      <th className={`${headerCellClass} text-right`}>
+                      <th className={`${compactHeaderCellClass} text-right`}>
                         <button type="button" onClick={() => handleSort("weight")} className="hover:text-foreground transition-colors">%{sortIndicator("weight")}</button>
                       </th>
                       <th className={`${headerCellClass} text-right`}>
@@ -432,7 +435,7 @@ export default function HoldingsTable({
                   <tbody>
                     {sortedFilteredHoldings.map(({ holding, unrealizedPnL, realizedPnL, totalPnL, unrealizedPnLPercent, xirrAnnual, xirrMonthly, weight }) => (
                       <tr key={holding.id}>
-                        <td className={cellClass}>
+                        <td className={compactCellClass}>
                           <p className="text-sm font-medium">{holding.symbol}</p>
                       {!readOnly && (
                         <div className="flex items-center gap-1 mt-0.5">
@@ -456,13 +459,13 @@ export default function HoldingsTable({
                       )}
                         </td>
 
-                        <td className={`${cellClass} text-center`}>
+                        <td className={`${compactCellClass} text-center`}>
                           <span className="inline-block text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground text-center leading-snug">
                             {formatTypeShortLabel(holding.type)}
                           </span>
                         </td>
 
-                        <td className={`${numericCellClass} text-[10px] text-muted-foreground`}>
+                        <td className={`${compactNumericCellClass} text-[10px] text-muted-foreground`}>
                           {weight != null ? `${(weight * 100).toFixed(1)}%` : "—"}
                         </td>
 
@@ -561,15 +564,15 @@ export default function HoldingsTable({
 
                 {filteredHoldings.length > 0 && (
                   <tr>
-                    <td className="px-2 pt-2.5 align-middle whitespace-nowrap">
+                    <td className="w-px px-2 pt-2.5 align-middle whitespace-nowrap">
                       <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
                       {filterType === "all"
                         ? "Portfolio Total"
                         : `${formatTypeLabel(filterType)} Total`}
                       </span>
                     </td>
-                    <td className="px-2 pt-2.5" />
-                    <td className="px-2 pt-2.5 text-sm font-bold text-right tabular-nums whitespace-nowrap text-muted-foreground">
+                    <td className="w-px px-2 pt-2.5" />
+                    <td className="w-px px-2 pt-2.5 text-sm font-bold text-right tabular-nums whitespace-nowrap text-muted-foreground">
                       {filteredHoldings.length > 0 ? "100.0%" : "—"}
                     </td>
                     <td className="px-2 pt-2.5 text-sm font-bold text-right tabular-nums whitespace-nowrap text-primary">

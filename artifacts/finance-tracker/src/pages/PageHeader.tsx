@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { href: "/excel",             label: "Excel" },
   { href: "/dashboard",         label: "Dashboard" },
   { href: "/fire",              label: "FIRE Planning" },
+  { href: "/asset-forecast",    label: "Dự báo tài sản" },
   { href: "/expenses",          label: "Chi tiêu" },
 ];
 

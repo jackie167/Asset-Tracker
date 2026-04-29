@@ -1,0 +1,214 @@
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import PageHeader from "@/pages/PageHeader";
+import { Card } from "@/components/ui/card";
+import { formatVNDFull } from "@/pages/assets/utils";
+import { CASHFLOW_SOURCE_SHEET, fetchCashflowData } from "@/lib/excel-sheets";
+
+type PortfolioSummary = {
+  totalValue: number;
+};
+
+const LS = {
+  get: (key: string, fallback: string) => localStorage.getItem(key) ?? fallback,
+  set: (key: string, value: string) => localStorage.setItem(key, value),
+};
+
+async function fetchPortfolioSummary(): Promise<PortfolioSummary | null> {
+  const res = await fetch("/api/portfolio/summary");
+  if (!res.ok) return null;
+  return res.json();
+}
+
+function parseInputNumber(value: string): number {
+  const normalized = value.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatPercentValue(value: number) {
+  return `${value.toFixed(2)}%`;
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  suffix,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  suffix?: string;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-2 rounded border border-border bg-background px-3 py-2 focus-within:ring-1 focus-within:ring-primary">
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          inputMode="decimal"
+          placeholder={placeholder}
+          className="min-w-0 flex-1 bg-transparent text-sm tabular-nums outline-none"
+        />
+        {suffix && <span className="text-xs text-muted-foreground shrink-0">{suffix}</span>}
+      </div>
+    </label>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "positive" | "muted";
+}) {
+  const color = tone === "positive" ? "text-emerald-400" : tone === "muted" ? "text-muted-foreground" : "text-foreground";
+  return (
+    <div className="border-b border-border/30 pb-3 last:border-0 last:pb-0">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-sm font-semibold tabular-nums ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+export default function AssetForecastPage() {
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(() => LS.get("asset_forecast_year", String(currentYear)));
+  const [beginningAssetInput, setBeginningAssetInput] = useState(() => LS.get("asset_forecast_beginning_asset", ""));
+  const [returnRateInput, setReturnRateInput] = useState(() => LS.get("asset_forecast_return_rate", "8"));
+  const [freeCashRatioInput, setFreeCashRatioInput] = useState(() => LS.get("asset_forecast_free_cash_ratio", "100"));
+  const [extraCashInput, setExtraCashInput] = useState(() => LS.get("asset_forecast_extra_cash", "0"));
+
+  const portfolioQuery = useQuery({ queryKey: ["asset-forecast-portfolio"], queryFn: fetchPortfolioSummary });
+  const cashflowQuery = useQuery({ queryKey: ["asset-forecast-function-cashflow"], queryFn: fetchCashflowData });
+
+  const autoBeginningAsset = portfolioQuery.data?.totalValue ?? 0;
+  const beginningAsset = beginningAssetInput.trim() ? parseInputNumber(beginningAssetInput) : autoBeginningAsset;
+  const returnRate = parseInputNumber(returnRateInput) / 100;
+  const freeCashRatio = parseInputNumber(freeCashRatioInput) / 100;
+  const extraCash = parseInputNumber(extraCashInput);
+  const annualIncome = cashflowQuery.data?.income ?? 0;
+  const annualExpense = cashflowQuery.data?.expense ?? 0;
+  const freeCash = Math.max(annualIncome - annualExpense, 0);
+  const investableFreeCash = freeCash * Math.max(freeCashRatio, 0) + extraCash;
+
+  const forecast = useMemo(() => {
+    const investmentGain = beginningAsset * returnRate;
+    const endingAsset = beginningAsset + investmentGain + investableFreeCash;
+    const totalIncrease = endingAsset - beginningAsset;
+    const totalIncreaseRate = beginningAsset > 0 ? totalIncrease / beginningAsset : null;
+
+    return {
+      investmentGain,
+      endingAsset,
+      totalIncrease,
+      totalIncreaseRate,
+    };
+  }, [beginningAsset, investableFreeCash, returnRate]);
+
+  const saveField = (key: string, setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    LS.set(key, value);
+  };
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <PageHeader
+        title="Dự báo tài sản"
+        subtitle="Ước tính tài sản cuối năm từ tài sản đầu năm, tăng trưởng giả định và free cash"
+      />
+
+      <main className="w-full max-w-screen-sm md:max-w-5xl xl:max-w-7xl mx-auto px-3 sm:px-4 md:px-6 xl:px-8 py-6 space-y-6">
+        <section className="grid lg:grid-cols-[minmax(0,420px)_1fr] gap-6 items-start">
+          <Card className="p-4 md:p-5 space-y-4">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Giả định</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-1 gap-4">
+              <Field
+                label="Năm dự báo"
+                value={year}
+                onChange={saveField("asset_forecast_year", setYear)}
+              />
+              <Field
+                label="Tài sản đầu năm"
+                value={beginningAssetInput}
+                onChange={saveField("asset_forecast_beginning_asset", setBeginningAssetInput)}
+                suffix="đ"
+                placeholder={portfolioQuery.isLoading ? "Đang tải..." : formatVNDFull(autoBeginningAsset)}
+              />
+              <Field
+                label="Tỷ suất tăng trưởng giả định"
+                value={returnRateInput}
+                onChange={saveField("asset_forecast_return_rate", setReturnRateInput)}
+                suffix="%/năm"
+              />
+              <Field
+                label="Tỷ lệ free cash đưa vào đầu tư"
+                value={freeCashRatioInput}
+                onChange={saveField("asset_forecast_free_cash_ratio", setFreeCashRatioInput)}
+                suffix="%"
+              />
+              <Field
+                label="Bổ sung thủ công"
+                value={extraCashInput}
+                onChange={saveField("asset_forecast_extra_cash", setExtraCashInput)}
+                suffix="đ"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Nếu để trống tài sản đầu năm, hệ thống dùng giá trị portfolio hiện tại làm mặc định. Free cash lấy từ sheet {CASHFLOW_SOURCE_SHEET}.
+            </p>
+          </Card>
+
+          <div className="space-y-6">
+            <Card className="p-4 md:p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Kết quả năm {year || currentYear}</p>
+                {cashflowQuery.data && (
+                  <span className="text-[10px] text-muted-foreground">Cashflow {cashflowQuery.data.year}</span>
+                )}
+              </div>
+
+              <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <Metric label="Tài sản đầu năm" value={formatVNDFull(beginningAsset)} />
+                <Metric label="Lãi tăng trưởng" value={formatVNDFull(forecast.investmentGain)} tone={forecast.investmentGain >= 0 ? "positive" : "neutral"} />
+                <Metric label="Free cash bổ sung" value={formatVNDFull(investableFreeCash)} tone="positive" />
+                <Metric label="Tài sản cuối năm" value={formatVNDFull(forecast.endingAsset)} tone="positive" />
+              </div>
+            </Card>
+
+            <Card className="p-4 md:p-5">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Chi tiết dòng tính</p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[620px] text-xs">
+                  <tbody className="divide-y divide-border/40">
+                    {[
+                      ["Thu nhập năm", formatVNDFull(annualIncome)],
+                      ["Chi tiêu năm", formatVNDFull(annualExpense)],
+                      ["Free cash trước phân bổ", formatVNDFull(freeCash)],
+                      ["Free cash đưa vào tài sản", formatVNDFull(investableFreeCash)],
+                      ["Tỷ suất tăng trưởng giả định", formatPercentValue(returnRate * 100)],
+                      ["Tổng tăng tài sản", formatVNDFull(forecast.totalIncrease)],
+                      ["Tỷ lệ tăng tổng", forecast.totalIncreaseRate == null ? "—" : formatPercentValue(forecast.totalIncreaseRate * 100)],
+                    ].map(([label, value]) => (
+                      <tr key={label}>
+                        <td className="py-2 pr-4 text-muted-foreground">{label}</td>
+                        <td className="py-2 text-right font-medium tabular-nums whitespace-nowrap">{value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
