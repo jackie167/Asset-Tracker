@@ -38,6 +38,15 @@ function findColumn(headers: unknown[], aliases: string[]) {
   return headers.findIndex((header) => aliases.includes(normalizeHeader(header)));
 }
 
+function findColumnByPriority(headers: unknown[], aliases: string[]) {
+  const normalizedHeaders = headers.map(normalizeHeader);
+  for (const alias of aliases) {
+    const index = normalizedHeaders.findIndex((header) => header === alias);
+    if (index >= 0) return index;
+  }
+  return -1;
+}
+
 export function parseCurrentAssetRows(rows: Array<Array<string | number>>): HoldingItem[] {
   const headerIndex = rows.findIndex((row) => {
     const headers = row.map(normalizeHeader);
@@ -49,7 +58,14 @@ export function parseCurrentAssetRows(rows: Array<Array<string | number>>): Hold
   const headers = rows[headerIndex] ?? [];
   const assetCol = findColumn(headers, ["asset", "tai san", "tài sản"]);
   const typeCol = findColumn(headers, ["type", "loai", "loại"]);
-  const valueCol = findColumn(headers, ["current price", "current", "value", "usd"]);
+  const valueCol = findColumnByPriority(headers, [
+    "current asset",
+    "current value",
+    "current",
+    "value",
+    "usd",
+    "current price",
+  ]);
 
   if (assetCol < 0 || typeCol < 0 || valueCol < 0) return [];
 
