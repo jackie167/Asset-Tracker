@@ -3,9 +3,23 @@ import { useQuery } from "@tanstack/react-query";
 import PageHeader from "@/pages/PageHeader";
 import { Card } from "@/components/ui/card";
 import { formatTypeLabel, formatVNDFull } from "@/pages/assets/utils";
-import { CASHFLOW_SOURCE_SHEET, fetchCashflowData } from "@/lib/excel-sheets";
+import { CASHFLOW_SOURCE_SHEET, findColIdx, parseNum } from "@/lib/excel-sheets";
 import { CURRENT_ASSET_SHEET, parseCurrentAssetRows } from "@/pages/wealthAllocationData";
 import type { HoldingItem } from "@/pages/assets/types";
+
+const FORECAST_YEARS = [2026, 2027, 2028, 2029, 2030];
+
+type FreeCashRow = {
+  year: number;
+  income: number;
+  otherIncome: number;
+  expense: number;
+  otherExpense: number;
+  totalInterest: number;
+  totalIncome: number;
+  totalExpense: number;
+  freeCash: number;
+};
 
 const LS = {
   get: (key: string, fallback: string) => localStorage.getItem(key) ?? fallback,
@@ -19,6 +33,52 @@ async function fetchCurrentAssetData(): Promise<HoldingItem[]> {
     const data = await res.json();
     const rows = Array.isArray(data?.rows) ? data.rows : [];
     return parseCurrentAssetRows(rows);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchFreeCashRows(): Promise<FreeCashRow[]> {
+  try {
+    const res = await fetch(`/api/excel/sheet?name=${encodeURIComponent(CASHFLOW_SOURCE_SHEET)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const rows: unknown[][] = data?.rows ?? [];
+    if (rows.length < 2) return [];
+
+    const headers = rows[0];
+    const yearCol = findColIdx(headers, ["year", "năm"]);
+    const incomeCol = findColIdx(headers, ["income", "thu nhập", "thu nhap"]);
+    const otherIncomeCol = findColIdx(headers, ["other income", "thu nhập khác", "thu nhap khac"]);
+    const expenseCol = findColIdx(headers, ["expense", "tiêu dùng", "tieu dung", "tiêu dụng"]);
+    const otherExpenseCol = findColIdx(headers, ["other expense", "chi phí khác", "chi phi khac"]);
+    const interestCol = findColIdx(headers, ["total interest", "interest", "lãi vay", "lai vay"]);
+    if (yearCol < 0 || incomeCol < 0) return [];
+
+    return rows.slice(1).flatMap((row) => {
+      const year = Number(row[yearCol]);
+      if (!FORECAST_YEARS.includes(year)) return [];
+
+      const income = parseNum(row[incomeCol]);
+      const otherIncome = otherIncomeCol >= 0 ? parseNum(row[otherIncomeCol]) : 0;
+      const expense = Math.abs(expenseCol >= 0 ? parseNum(row[expenseCol]) : 0);
+      const otherExpense = Math.abs(otherExpenseCol >= 0 ? parseNum(row[otherExpenseCol]) : 0);
+      const totalInterest = Math.abs(interestCol >= 0 ? parseNum(row[interestCol]) : 0);
+      const totalIncome = income + otherIncome;
+      const totalExpense = expense + otherExpense + totalInterest;
+
+      return [{
+        year,
+        income,
+        otherIncome,
+        expense,
+        otherExpense,
+        totalInterest,
+        totalIncome,
+        totalExpense,
+        freeCash: totalIncome - totalExpense,
+      }];
+    });
   } catch {
     return [];
   }
@@ -84,25 +144,31 @@ function Metric({
 
 export default function AssetForecastPage() {
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(() => LS.get("asset_forecast_year", String(currentYear)));
+  const [year, setYear] = useState(() => LS.get("asset_forecast_year", String(Math.max(2026, currentYear))));
   const [beginningAssetInput, setBeginningAssetInput] = useState(() => LS.get("asset_forecast_beginning_asset", ""));
   const [returnRateInput, setReturnRateInput] = useState(() => LS.get("asset_forecast_return_rate", "8"));
   const [freeCashRatioInput, setFreeCashRatioInput] = useState(() => LS.get("asset_forecast_free_cash_ratio", "100"));
   const [extraCashInput, setExtraCashInput] = useState(() => LS.get("asset_forecast_extra_cash", "0"));
 
   const currentAssetQuery = useQuery({ queryKey: ["asset-forecast-current-asset"], queryFn: fetchCurrentAssetData });
-  const cashflowQuery = useQuery({ queryKey: ["asset-forecast-function-cashflow"], queryFn: fetchCashflowData });
+  const freeCashQuery = useQuery({ queryKey: ["asset-forecast-free-cash-rows"], queryFn: fetchFreeCashRows });
 
   const currentAssetRows = currentAssetQuery.data ?? [];
+  const freeCashRows = freeCashQuery.data ?? [];
+  const selectedYear = Number(year);
+  const selectedFreeCashRow =
+    freeCashRows.find((row) => row.year === selectedYear) ??
+    freeCashRows.find((row) => row.year === 2026) ??
+    null;
   const currentAssetTotal = currentAssetRows.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0);
   const autoBeginningAsset = currentAssetTotal;
   const beginningAsset = beginningAssetInput.trim() ? parseInputNumber(beginningAssetInput) : autoBeginningAsset;
   const returnRate = parseInputNumber(returnRateInput) / 100;
   const freeCashRatio = parseInputNumber(freeCashRatioInput) / 100;
   const extraCash = parseInputNumber(extraCashInput);
-  const annualIncome = cashflowQuery.data?.income ?? 0;
-  const annualExpense = cashflowQuery.data?.expense ?? 0;
-  const freeCash = Math.max(annualIncome - annualExpense, 0);
+  const annualIncome = selectedFreeCashRow?.totalIncome ?? 0;
+  const annualExpense = selectedFreeCashRow?.totalExpense ?? 0;
+  const freeCash = selectedFreeCashRow?.freeCash ?? 0;
   const investableFreeCash = freeCash * Math.max(freeCashRatio, 0) + extraCash;
 
   const forecast = useMemo(() => {
@@ -176,8 +242,8 @@ export default function AssetForecastPage() {
             <Card className="p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Kết quả năm {year || currentYear}</p>
-                {cashflowQuery.data && (
-                  <span className="text-[10px] text-muted-foreground">Cashflow {cashflowQuery.data.year}</span>
+                {selectedFreeCashRow && (
+                  <span className="text-[10px] text-muted-foreground">Free cash {selectedFreeCashRow.year}</span>
                 )}
               </div>
 
@@ -195,8 +261,8 @@ export default function AssetForecastPage() {
                 <table className="w-full min-w-[620px] text-xs">
                   <tbody className="divide-y divide-border/40">
                     {[
-                      ["Thu nhập năm", formatVNDFull(annualIncome)],
-                      ["Chi tiêu năm", formatVNDFull(annualExpense)],
+                      ["Tổng income", formatVNDFull(annualIncome)],
+                      ["Tổng chi", formatVNDFull(annualExpense)],
                       ["Free cash trước phân bổ", formatVNDFull(freeCash)],
                       ["Free cash đưa vào tài sản", formatVNDFull(investableFreeCash)],
                       ["Tỷ suất tăng trưởng giả định", formatPercentValue(returnRate * 100)],
@@ -213,6 +279,64 @@ export default function AssetForecastPage() {
               </div>
             </Card>
           </div>
+        </section>
+
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Free cash từ sheet {CASHFLOW_SOURCE_SHEET}
+            </p>
+            <p className="text-[10px] text-muted-foreground">2026-2030</p>
+          </div>
+          <Card className="p-4 md:p-5">
+            {freeCashQuery.isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((row) => (
+                  <div key={row} className="h-8 rounded bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : freeCashRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Chưa đọc được dữ liệu free cash từ sheet {CASHFLOW_SOURCE_SHEET}.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[860px] text-xs">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                      <th className="py-2 pr-4 text-left font-medium">Year</th>
+                      <th className="py-2 px-4 text-right font-medium">Income</th>
+                      <th className="py-2 px-4 text-right font-medium">Other income</th>
+                      <th className="py-2 px-4 text-right font-medium">Expense</th>
+                      <th className="py-2 px-4 text-right font-medium">Other expense</th>
+                      <th className="py-2 px-4 text-right font-medium">Total interest</th>
+                      <th className="py-2 px-4 text-right font-medium">Tổng income</th>
+                      <th className="py-2 px-4 text-right font-medium">Tổng chi</th>
+                      <th className="py-2 pl-4 text-right font-medium">Free cash</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {freeCashRows.map((row) => {
+                      const isSelected = row.year === selectedYear;
+                      return (
+                        <tr key={row.year} className={isSelected ? "bg-primary/5" : undefined}>
+                          <td className="py-2 pr-4 font-medium whitespace-nowrap">{row.year}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(row.income)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(row.otherIncome)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(row.expense)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(row.otherExpense)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(row.totalInterest)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums font-medium whitespace-nowrap">{formatVNDFull(row.totalIncome)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums font-medium whitespace-nowrap">{formatVNDFull(row.totalExpense)}</td>
+                          <td className={`py-2 pl-4 text-right tabular-nums font-semibold whitespace-nowrap ${row.freeCash >= 0 ? "text-emerald-400" : "text-red-300"}`}>
+                            {formatVNDFull(row.freeCash)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
         </section>
 
         <section className="space-y-2">
