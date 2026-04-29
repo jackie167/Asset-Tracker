@@ -8,6 +8,7 @@ import { CURRENT_ASSET_SHEET, parseCurrentAssetRows } from "@/pages/wealthAlloca
 import type { HoldingItem } from "@/pages/assets/types";
 
 const FORECAST_YEARS = [2026, 2027, 2028, 2029, 2030];
+const INITIAL_2026_FREE_CASH = 7_370_845_000;
 const FREE_CASH_ALLOCATION = {
   cash: 0.1,
   gold: 0.3,
@@ -388,6 +389,19 @@ export default function AssetForecastPage() {
                       <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(FREE_CASH_ALLOCATION.fund * 100)}</td>
                       <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(FREE_CASH_ALLOCATION.crypto * 100)}</td>
                       <td className="py-2 pl-4 text-right tabular-nums whitespace-nowrap">{formatPercentValue(STOCK_FREE_CASH_RATIO * 100)}</td>
+                    </tr>
+                    <tr className={selectedYear === 2026 ? "bg-primary/5" : undefined}>
+                      <td className="py-2 pr-4 whitespace-nowrap">
+                        <span className="font-medium">2026</span>
+                        <span className="ml-3 tabular-nums text-emerald-400">
+                          {formatVNDFull(INITIAL_2026_FREE_CASH)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(INITIAL_2026_FREE_CASH * FREE_CASH_ALLOCATION.cash)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(INITIAL_2026_FREE_CASH * FREE_CASH_ALLOCATION.gold)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(INITIAL_2026_FREE_CASH * FREE_CASH_ALLOCATION.fund)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums whitespace-nowrap">{formatVNDFull(INITIAL_2026_FREE_CASH * FREE_CASH_ALLOCATION.crypto)}</td>
+                      <td className="py-2 pl-4 text-right tabular-nums font-semibold whitespace-nowrap">{formatVNDFull(INITIAL_2026_FREE_CASH * STOCK_FREE_CASH_RATIO)}</td>
                     </tr>
                     {freeCashRows.map((row) => {
                       const allocationYear = row.year + 1;
